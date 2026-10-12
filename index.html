@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CAIIT Cisco Initiative — Application</title>
+  <style>
+    :root {
+      --navy: #0f6b3f;
+      --navy-dark: #0a4e2d;
+      --cyan: #34a86d;
+      --bg: #f4f7f5;
+      --card: #fff;
+      --text: #1c2b23;
+      --muted: #5c6b63;
+      --border: #d9e2dc;
+      --err: #b3261e;
+      --ok: #146c43;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 6px 18px rgba(15,107,63,.06);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: var(--bg);
+      color: var(--text); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+
+    #loadingOverlay { position: fixed; inset: 0; background: rgba(255,255,255,.88);
+      display: flex; align-items: center; justify-content: center; z-index: 9999;
+      flex-direction: column; gap: 14px; }
+    #loadingOverlay.hidden { display: none; }
+    .spinner { width: 42px; height: 42px; border-radius: 50%;
+      border: 4px solid #d6e8f5; border-top-color: var(--navy); animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loadingText { color: var(--navy); font-weight: 600; font-size: 14px; }
+
+    .topbar { background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%);
+      color: #fff; padding: 22px 20px; text-align: center; }
+    .topbar .logo { max-width: 60px; width: 24vw; height: auto; display: block;
+      margin: 0 auto 12px; background: #fff; border-radius: 12px; padding: 6px; }
+    .topbar h1 { margin: 0 0 4px; font-size: clamp(17px, 3.4vw, 22px); font-weight: 700; }
+    .topbar .sub { margin: 2px 0 0; font-size: 15.5px; opacity: .9; }
+    .topbar .inst { margin: 4px 0 0; font-size: 17.5px; }
+    .deadline { display: inline-block; margin-top: 12px; padding: 6px 14px;
+      background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28);
+      border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+
+    .wrap { max-width: 880px; margin: 0 auto; padding: 22px 16px 120px; }
+
+    .callout { background: #e4f1fa; border-left: 5px solid var(--navy); padding: 14px 16px;
+      border-radius: 6px; margin-bottom: 14px; font-size: 14px; color: var(--navy-dark); }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .purpose { font-size: 14.5px; color: var(--muted); margin: 0 0 20px; }
+
+    .progress-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+      justify-content: center; }
+    .progress-nav button { background: #fff; border: 1.5px solid var(--border); color: var(--muted);
+      border-radius: 999px; padding: 10px 20px; font-size: 13.5px; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: all .18s; }
+    .progress-nav button:hover { border-color: var(--navy); color: var(--navy-dark); }
+    .progress-nav button.active { background: var(--navy); border-color: var(--navy);
+      color: #fff; box-shadow: 0 3px 10px rgba(11,61,107,.28); }
+    .progress-nav button.done { background: #e4f1fa; border-color: #c4def0; color: var(--navy-dark); }
+    .progress-nav button .num { display: inline-block; width: 18px; height: 18px;
+      line-height: 18px; text-align: center; border-radius: 50%;
+      background: rgba(0,0,0,.08); font-size: 11px; margin-right: 7px; }
+    .progress-nav button.active .num { background: rgba(255,255,255,.24); }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; box-shadow: var(--shadow); margin-bottom: 18px; animation: fadeIn .35s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .card.hidden { display: none; }
+    .card-header { display: flex; gap: 10px; border-bottom: 1px solid var(--border);
+      padding-bottom: 12px; margin-bottom: 20px; }
+    .card-header .badge { width: 30px; height: 30px; border-radius: 50%;
+      background: var(--navy); color: #fff; display: flex; align-items: center;
+      justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+    .card-header h2 { margin: 0; font-size: 16.5px; color: var(--navy-dark); }
+    .card-header p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+    .card-header .titles { flex: 1; }
+
+    /* Sub-sections inside the combined tab */
+    .sub-section { padding-top: 26px; margin-top: 26px; border-top: 2px dashed #e5ebe7; }
+    .sub-section:first-of-type { padding-top: 0; margin-top: 0; border-top: none; }
+    .sub-head { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+    .sub-head .letter { width: 28px; height: 28px; border-radius: 50%; background: var(--navy);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
+    .sub-head h3 { margin: 0; font-size: 15px; color: var(--navy-dark); }
+    .sub-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+    .sub-head .titles { flex: 1; }
+
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 620px) {
+      .grid.two { grid-template-columns: 1fr 1fr; }
+      .grid.two .span-2 { grid-column: 1 / -1; }
+    }
+
+    .field { display: flex; flex-direction: column; }
+    .field label { font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+    .field .req { color: var(--err); margin-left: 2px; }
+    .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .field .error { font-size: 12.5px; color: var(--err); margin-top: 4px;
+      display: none; font-weight: 500; }
+    .field.invalid .error { display: block; }
+    .field.invalid input, .field.invalid select, .field.invalid textarea {
+      border-color: var(--err) !important; background: #fdecea; }
+
+    input[type=text], input[type=email], input[type=tel], input[type=number],
+    select, textarea {
+      width: 100%; padding: 10px 12px; font-size: 14.5px; font-family: inherit;
+      color: var(--text); background: #fff; border: 1.5px solid var(--border);
+      border-radius: 8px; outline: none; transition: border-color .18s; }
+    input:focus, select:focus, textarea:focus { border-color: var(--navy); }
+    textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+    select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%235c6b63' d='M6 8L0 0h12z'/></svg>");
+      background-repeat: no-repeat; background-position: right 12px center;
+      background-size: 11px; padding-right: 34px; }
+
+    .radio-row { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 4px 0; }
+    .radio-row label { display: inline-flex; align-items: center; gap: 6px;
+      font-weight: 500; font-size: 14px; cursor: pointer; margin: 0; }
+    .radio-row input, .check-list input { accent-color: var(--navy); width: 16px; height: 16px; }
+
+    .check-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+    .check-list label { display: flex; align-items: flex-start; gap: 8px;
+      font-weight: 500; font-size: 14px; cursor: pointer; margin: 0; line-height: 1.4; }
+
+    .declaration-box { background: #fffaf0; border: 1px solid #f0dba8;
+      border-left: 5px solid #d4a017; padding: 14px 16px; border-radius: 6px;
+      font-size: 14px; color: #6b4e00; margin-bottom: 16px; line-height: 1.6; }
+    .declaration-check { display: flex; align-items: flex-start; gap: 10px;
+      font-size: 14px; font-weight: 600; padding: 12px 14px; background: #e4f1fa;
+      border-radius: 8px; border: 1px solid #c4def0; cursor: pointer; }
+    .declaration-check input { margin-top: 3px; flex-shrink: 0; accent-color: var(--navy); }
+
+    .nav-bar { position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(255,255,255,.97); backdrop-filter: blur(6px);
+      border-top: 1px solid var(--border); padding: 12px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; z-index: 100; box-shadow: 0 -4px 14px rgba(0,0,0,.05); }
+    .nav-bar.hidden { display: none; }
+    .step-indicator { font-size: 12.5px; color: var(--muted); font-weight: 600;
+      text-align: center; flex: 1; }
+
+    .btn { font-family: inherit; font-size: 14px; font-weight: 600;
+      padding: 10px 20px; border-radius: 8px; border: 1.5px solid transparent;
+      cursor: pointer; transition: all .18s; white-space: nowrap; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary { background: var(--navy); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--navy-dark); }
+    .btn-secondary { background: #fff; color: var(--text); border-color: var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--navy); color: var(--navy-dark); }
+
+    #previewPanel, #successPanel { background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 26px 24px; box-shadow: var(--shadow); }
+    #previewPanel.hidden, #successPanel.hidden { display: none; }
+    #previewPanel h2, #successPanel h2 { margin: 0 0 6px; color: var(--navy-dark); font-size: 20px; }
+    .lead { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+    .preview-section { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+    .preview-section h3 { margin: 0; padding: 10px 14px; font-size: 13px; font-weight: 700;
+      background: #e4f1fa; color: var(--navy-dark); }
+    .preview-section dl { margin: 0; padding: 6px 14px 12px; }
+    .preview-section dt { font-size: 11.5px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .4px; margin-top: 10px; }
+    .preview-section dd { margin: 2px 0 0; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+    .preview-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px;
+      padding-top: 20px; border-top: 1px solid var(--border); justify-content: flex-end; }
+
+    .success-badge { width: 60px; height: 60px; border-radius: 50%; background: #e8f5ee;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+    .success-badge svg { width: 34px; height: 34px; }
+    .submission-number { display: inline-block; background: #e4f1fa; color: var(--navy-dark);
+      font-size: 20px; font-weight: 700; letter-spacing: 1.2px; padding: 12px 22px;
+      border-radius: 8px; margin: 8px 0 18px; border: 1.5px dashed var(--navy); }
+    .success-summary { font-size: 14px; color: var(--muted); margin: 0 0 14px; line-height: 1.6; }
+
+    .brand-footer { text-align: center; padding: 16px 16px calc(100px + env(safe-area-inset-bottom, 0px));
+      color: var(--navy-dark); }
+    .brand-footer .footer-logo { max-height: 44px; width: auto; margin: 0 auto 10px; display: block; }
+    .brand-footer p { margin: 4px 0 0; font-size: 12.5px; color: var(--navy-dark); }
+    body:has(.nav-bar.hidden) .brand-footer { padding-bottom: 24px; }
+
+    #toast { position: fixed; top: 18px; left: 50%;
+      transform: translateX(-50%) translateY(-150%); background: var(--err); color: #fff;
+      padding: 12px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,.22); z-index: 10000; max-width: 92vw; text-align: center;
+      visibility: hidden; opacity: 0; pointer-events: none;
+      transition: transform .3s, opacity .25s, visibility 0s .3s; }
+    #toast.show { transform: translateX(-50%) translateY(0); visibility: visible;
+      opacity: 1; pointer-events: auto; transition: transform .3s, opacity .25s, visibility 0s; }
+    #toast.ok { background: var(--ok); }
+
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 480px) {
+      .card { padding: 18px 15px 20px; }
+      .btn { padding: 10px 15px; font-size: 13.5px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div id="loadingText">Loading application form…</div>
+</div>
+<div id="toast" role="alert"></div>
+
+<header class="topbar">
+  <img src="https://drive.google.com/thumbnail?id=1LDjsF_70W2BpttMyLxfmltABCyUSPeHl"
+       alt="University of Abuja Logo" class="logo">
+  <h1>Cisco Networking Academic Capacity-Building Initiative</h1>
+  <p class="sub">Centre for Artificial Intelligence &amp; Innovative Technology (CAIIT)</p>
+  <p class="inst">University of Abuja (Yakubu Gowon University)</p>
+  <div class="deadline" id="deadlineText">Applications close 30 September 2026</div>
+</header>
+
+<main class="wrap">
+
+  <div class="callout">
+    <strong>PRE-TRAINING APPLICATION &amp; SELECTION ASSESSMENT</strong>
+    Five-day intensive practical IT, networking and AI training programme. 48 faculty participants will be selected.
+  </div>
+
+  <p class="purpose">
+    This form collects information from academic staff applying to participate in the CAIIT Cisco
+    Networking Academic Capacity-Building Initiative and to help the selection committee identify
+    applicants ready to incorporate practical IT and AI teaching into student learning.
+  </p>
+
+  <nav class="progress-nav" id="progressNav"></nav>
+
+  <form id="form" novalidate autocomplete="on">
+
+    <!-- =========================================================
+         TAB 1 — PERSONAL
+    ========================================================== -->
+    <section class="card" data-step="0">
+      <div class="card-header">
+        <div class="badge">A</div>
+        <div class="titles"><h2>Personal and Contact Information</h2>
+          <p>Your identity and contact details.</p></div>
+      </div>
+      <div class="grid two">
+        <div class="field" data-field="staffId">
+          <label for="staffId">Staff ID <span class="req">*</span></label>
+          <input type="text" id="staffId" maxlength="7" placeholder="e.g. ACA1234">
+          <small class="hint">Format: ACA + 2 to 4 digits.</small>
+          <small class="error" data-error-for="staffId"></small>
+        </div>
+        <div class="field" data-field="title">
+          <label for="title">Title <span class="req">*</span></label>
+          <select id="title"><option value="">— Select —</option></select>
+          <small class="error" data-error-for="title"></small>
+        </div>
+        <div class="field hidden" data-field="otherTitle">
+          <label for="otherTitle">Specify Title <span class="req">*</span></label>
+          <input type="text" id="otherTitle" maxlength="40" placeholder="e.g. Chief">
+          <small class="error" data-error-for="otherTitle"></small>
+        </div>
+        <div class="field" data-field="surname">
+          <label for="surname">Surname <span class="req">*</span></label>
+          <input type="text" id="surname" style="text-transform:uppercase">
+          <small class="error" data-error-for="surname"></small>
+        </div>
+        <div class="field" data-field="firstName">
+          <label for="firstName">First Name <span class="req">*</span></label>
+          <input type="text" id="firstName">
+          <small class="error" data-error-for="firstName"></small>
+        </div>
+        <div class="field" data-field="otherNames">
+          <label for="otherNames">Other Names</label>
+          <input type="text" id="otherNames" placeholder="Optional">
+          <small class="error" data-error-for="otherNames"></small>
+        </div>
+        <div class="field" data-field="sex">
+          <label>Sex <span class="req">*</span></label>
+          <div class="radio-row">
+            <label><input type="radio" name="sex" value="Male"> Male</label>
+            <label><input type="radio" name="sex" value="Female"> Female</label>
+          </div>
+          <small class="error" data-error-for="sex"></small>
+        </div>
+        <div class="field" data-field="email">
+          <label for="email">Email Address <span class="req">*</span></label>
+          <input type="email" id="email" autocomplete="email">
+          <small class="error" data-error-for="email"></small>
+        </div>
+        <div class="field" data-field="phone">
+          <label for="phone">Phone Number <span class="req">*</span></label>
+          <input type="tel" id="phone" maxlength="11" inputmode="numeric" autocomplete="tel">
+          <small class="hint">11 digits, starting with 0.</small>
+          <small class="error" data-error-for="phone"></small>
+        </div>
+        <div class="field" data-field="faculty">
+          <label for="faculty">Faculty <span class="req">*</span></label>
+          <select id="faculty"><option value="">— Select Faculty —</option></select>
+          <small class="error" data-error-for="faculty"></small>
+        </div>
+        <div class="field" data-field="department">
+          <label for="department">Department <span class="req">*</span></label>
+          <select id="department" disabled><option value="">— Select Faculty first —</option></select>
+          <small class="error" data-error-for="department"></small>
+        </div>
+        <div class="field" data-field="rank">
+          <label for="rank">Rank <span class="req">*</span></label>
+          <select id="rank"><option value="">— Select —</option></select>
+          <small class="error" data-error-for="rank"></small>
+        </div>
+        <div class="field hidden" data-field="otherRank">
+          <label for="otherRank">Specify Rank <span class="req">*</span></label>
+          <input type="text" id="otherRank">
+          <small class="error" data-error-for="otherRank"></small>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         TAB 2 — EVERYTHING ELSE (B → Declaration)
+    ========================================================== -->
+    <section class="card hidden" data-step="1">
+
+      <!-- ---------- B: ICT & NETWORKING ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">B</div>
+          <div class="titles"><h3>ICT and Technical Proficiency</h3>
+            <p>Your current ICT and networking foundation.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="overallIctProficiency">
+            <label>Overall ICT proficiency <span class="req">*</span></label>
+            <div class="radio-row" id="ictGroup"></div>
+            <small class="error" data-error-for="overallIctProficiency"></small>
+          </div>
+          <div class="field span-2" data-field="computerTasks">
+            <label>Computer tasks you are comfortable with <span class="req">*</span></label>
+            <div class="check-list" id="computerTasksList"></div>
+            <small class="error" data-error-for="computerTasks"></small>
+          </div>
+          <div class="field span-2" data-field="networkingKnowledge">
+            <label>Networking knowledge <span class="req">*</span></label>
+            <div class="radio-row" id="netKnowGroup"></div>
+            <small class="error" data-error-for="networkingKnowledge"></small>
+          </div>
+          <div class="field span-2" data-field="networkingTools">
+            <label>Networking/simulation tools you have used <span class="req">*</span></label>
+            <div class="check-list" id="netToolsList"></div>
+            <small class="error" data-error-for="networkingTools"></small>
+          </div>
+          <div class="field span-2 hidden" data-field="networkingToolsDescription">
+            <label for="networkingToolsDescription">Describe the other networking tools</label>
+            <textarea id="networkingToolsDescription" rows="2"></textarea>
+            <small class="error" data-error-for="networkingToolsDescription"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- C: TEACHING ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">C</div>
+          <div class="titles"><h3>Application to Teaching and Learning</h3>
+            <p>How you would use practical IT skills in your discipline.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="teachingApplications">
+            <label>How could practical IT skills be applied to teaching or learning in your discipline? <span class="req">*</span></label>
+            <div class="check-list" id="teachingAppsList"></div>
+            <small class="error" data-error-for="teachingApplications"></small>
+          </div>
+          <div class="field span-2" data-field="practicalFrequency">
+            <label>Expected frequency of practical IT use <span class="req">*</span></label>
+            <div class="radio-row" id="freqGroup"></div>
+            <small class="error" data-error-for="practicalFrequency"></small>
+          </div>
+          <div class="field span-2" data-field="studentGroups">
+            <label>Student groups you would target <span class="req">*</span></label>
+            <div class="check-list" id="studentGroupsList"></div>
+            <small class="error" data-error-for="studentGroups"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- D: MOTIVATION ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">D</div>
+          <div class="titles"><h3>Motivation and Commitment</h3>
+            <p>Why you want to participate and what you intend to accomplish.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="motivationSelections">
+            <label>Why do you want to participate? (select up to 3) <span class="req">*</span></label>
+            <div class="check-list" id="motivationList"></div>
+            <small class="hint">You may select at most three options.</small>
+            <small class="error" data-error-for="motivationSelections"></small>
+          </div>
+          <div class="field span-2" data-field="desiredOutcome">
+            <label for="desiredOutcome">Desired outcome <span class="req">*</span></label>
+            <small class="hint">What specifically do you hope to accomplish with the skills acquired from this training?</small>
+            <textarea id="desiredOutcome" rows="3"></textarea>
+            <small class="error" data-error-for="desiredOutcome"></small>
+          </div>
+          <div class="field span-2" data-field="implementationCommitment">
+            <label>Implementation commitment <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">"If selected for this programme, I intend to apply the skills acquired from the training in my teaching or student-learning activities."</p>
+            <div class="radio-row" id="commitmentGroup"></div>
+            <small class="error" data-error-for="implementationCommitment"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- E: READINESS ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">E</div>
+          <div class="titles"><h3>Training Commitment and Readiness</h3>
+            <p>The training is an intensive five-day programme.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="fullAttendance">
+            <label>Full attendance <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">If selected, can you commit to participating fully throughout the five-day programme?</p>
+            <div class="radio-row" id="attendanceGroup"></div>
+            <small class="error" data-error-for="fullAttendance"></small>
+          </div>
+          <div class="field span-2" data-field="handsOnComfort">
+            <label>Hands-on learning comfort <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">How comfortable are you with intensive hands-on learning involving unfamiliar technologies?</p>
+            <div class="radio-row" id="handsOnGroup"></div>
+            <small class="error" data-error-for="handsOnComfort"></small>
+          </div>
+          <div class="field span-2" data-field="problemSolvingApproach">
+            <label>Problem-solving behaviour <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">If you encounter difficulties during practical exercises, which approach best describes how you are likely to respond?</p>
+            <div class="radio-row" id="problemGroup" style="flex-direction:column;gap:8px;"></div>
+            <small class="error" data-error-for="problemSolvingApproach"></small>
+          </div>
+          <div class="field span-2" data-field="practiceOutsideSessions">
+            <label>Practice outside sessions <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">Are you willing to continue practising the skills outside scheduled training sessions where necessary?</p>
+            <div class="radio-row" id="practiceGroup"></div>
+            <small class="error" data-error-for="practiceOutsideSessions"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- F: IMPACT ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">F</div>
+          <div class="titles"><h3>Multiplier and Institutional Impact</h3>
+            <p>How your participation could benefit others.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="knowledgeSharing">
+            <label>Knowledge sharing <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">After completing the training, would you be willing to share the knowledge and practical skills gained with other colleagues or students?</p>
+            <div class="radio-row" id="shareGroup"></div>
+            <small class="error" data-error-for="knowledgeSharing"></small>
+          </div>
+          <div class="field span-2" data-field="possibleContributions">
+            <label>Possible contributions <span class="req">*</span></label>
+            <div class="check-list" id="contribList"></div>
+            <small class="error" data-error-for="possibleContributions"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- G: TECHNICAL READINESS ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">G</div>
+          <div class="titles"><h3>Technical Readiness</h3>
+            <p>Your access to infrastructure and software.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="computerAccess">
+            <label>Computer access <span class="req">*</span></label>
+            <div class="radio-row" id="pcGroup"></div>
+            <small class="error" data-error-for="computerAccess"></small>
+          </div>
+          <div class="field span-2" data-field="internetAccess">
+            <label>Internet access <span class="req">*</span></label>
+            <div class="radio-row" id="netGroup"></div>
+            <small class="error" data-error-for="internetAccess"></small>
+          </div>
+          <div class="field span-2" data-field="softwareConfidence">
+            <label>Software installation confidence <span class="req">*</span></label>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 8px;">How confident are you in installing and using new software when provided with instructions?</p>
+            <div class="radio-row" id="softGroup"></div>
+            <small class="error" data-error-for="softwareConfidence"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- AI: ARTIFICIAL INTELLIGENCE READINESS ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">AI</div>
+          <div class="titles"><h3>Artificial Intelligence Readiness</h3>
+            <p>AI will form part of the training. Please tell us about your current AI familiarity and interest.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field span-2" data-field="aiFamiliarity">
+            <label>Your current familiarity with AI tools <span class="req">*</span></label>
+            <div class="radio-row" id="aiFamGroup"></div>
+            <small class="error" data-error-for="aiFamiliarity"></small>
+          </div>
+          <div class="field span-2" data-field="aiTools">
+            <label>Which AI tools or platforms have you used? <span class="req">*</span></label>
+            <div class="check-list" id="aiToolsList"></div>
+            <small class="hint">Select all that apply. If you have not used any, choose "None of the above".</small>
+            <small class="error" data-error-for="aiTools"></small>
+          </div>
+          <div class="field span-2" data-field="aiInterest">
+            <label>Interest in applying AI to your teaching or research <span class="req">*</span></label>
+            <div class="radio-row" id="aiInterestGroup"></div>
+            <small class="error" data-error-for="aiInterest"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- H: FINAL ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">H</div>
+          <div class="titles"><h3>Final Selection Questions</h3>
+            <p>Help the committee understand your priorities.</p></div>
+        </div>
+        <div class="grid two">
+          <div class="field" data-field="skill1">
+            <label for="skill1">Desired skill 1</label>
+            <input type="text" id="skill1" maxlength="100" placeholder="Optional">
+            <small class="error" data-error-for="skill1"></small>
+          </div>
+          <div class="field" data-field="skill2">
+            <label for="skill2">Desired skill 2</label>
+            <input type="text" id="skill2" maxlength="100" placeholder="Optional">
+            <small class="error" data-error-for="skill2"></small>
+          </div>
+          <div class="field span-2" data-field="mainMotivationStatement">
+            <label for="mainMotivationStatement">Main motivation statement <span class="req">*</span></label>
+            <small class="hint">In one or two paragraphs, explain why you should be selected for this training and how you intend to use the skills acquired to improve student learning.</small>
+            <textarea id="mainMotivationStatement" rows="6"></textarea>
+            <small class="error" data-error-for="mainMotivationStatement"></small>
+          </div>
+          <div class="field span-2" data-field="additionalInformation">
+            <label for="additionalInformation">Additional information</label>
+            <textarea id="additionalInformation" rows="3" placeholder="Optional"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- DECLARATION ---------- -->
+      <div class="sub-section">
+        <div class="sub-head">
+          <div class="letter">&#10003;</div>
+          <div class="titles"><h3>Declaration</h3>
+            <p>Please read carefully and confirm.</p></div>
+        </div>
+        <div class="declaration-box">
+          I confirm that the information provided in this application is accurate to the best of my
+          knowledge. If selected, I commit to participating fully in the five-day training programme
+          and making reasonable efforts to apply the knowledge and practical skills acquired to
+          support student learning.
+        </div>
+        <div class="field" data-field="declarationAccepted">
+          <label class="declaration-check">
+            <input type="checkbox" id="declarationAccepted">
+            <span>I agree to the declaration above. <span class="req">*</span></span>
+          </label>
+          <small class="error" data-error-for="declarationAccepted"></small>
+        </div>
+      </div>
+
+    </section>
+
+  </form>
+
+  <!-- ============ PREVIEW ============ -->
+  <section id="previewPanel" class="hidden">
+    <h2>Preview Your Application</h2>
+    <p class="lead">Please review carefully. Use <strong>Back to Edit</strong> to make changes, or <strong>Submit</strong> to finalise.</p>
+    <div id="previewContent"></div>
+    <div class="preview-actions">
+      <button type="button" class="btn btn-secondary" id="btnBackToEdit">← Back to Edit</button>
+      <button type="button" class="btn btn-primary" id="btnFinalSubmit">Submit Application</button>
+    </div>
+  </section>
+
+  <!-- ============ SUCCESS ============ -->
+  <section id="successPanel" class="hidden">
+    <div class="success-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#146c43" stroke-width="2.6"
+           stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+    <h2>Application Submitted Successfully</h2>
+    <p class="lead">Your application has been received by CAIIT.</p>
+    <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#5c6b63;text-transform:uppercase;letter-spacing:.5px;">Your Submission Number</p>
+    <div class="submission-number" id="successNumber">—</div>
+    <p class="success-summary" id="successSummary"></p>
+    <p class="success-summary">A confirmation email has been sent to the address you provided (if valid). Please keep your submission number for future correspondence with CAIIT.</p>
+    <p class="success-summary" style="font-size:13px;color:#7c8a82;">This is an application only — submission does not guarantee selection. The CAIIT selection committee will review all applications.</p>
+  </section>
+
+</main>
+
+<div class="nav-bar" id="navBar">
+  <button type="button" class="btn btn-secondary" id="btnBack">← Back</button>
+  <span class="step-indicator" id="stepIndicator">Step 1 of 2</span>
+  <button type="button" class="btn btn-primary" id="btnNext">Next →</button>
+</div>
+
+<footer class="brand-footer">
+  <img src="https://drive.google.com/thumbnail?id=1rovoohmsc10VxMnig2NbrDv5_aaH9ukJ"
+       alt="CBS Logo" class="footer-logo">
+  <p>© 2026 Capacity Building and Support (CBS). All rights reserved</p>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = { config: null, faculties: [], facultyMap: {}, step: 0, submitting: false,
+                completed: {} };
+  var SECTIONS = [
+    { key: 'A', label: 'Personal' },
+    { key: 'B', label: 'ICT, Teaching, Motivation, Readiness & Declaration' }
+  ];
+  var FIELD_SECTIONS = {
+    A: ['staffId','title','otherTitle','surname','firstName','otherNames','sex','email','phone',
+        'faculty','department','rank','otherRank'],
+    REST: [
+      // B
+      'overallIctProficiency','computerTasks','networkingKnowledge',
+      'networkingTools','networkingToolsDescription',
+      // C
+      'teachingApplications','practicalFrequency','studentGroups',
+      // D
+      'motivationSelections','desiredOutcome','implementationCommitment',
+      // E
+      'fullAttendance','handsOnComfort','problemSolvingApproach','practiceOutsideSessions',
+      // F
+      'knowledgeSharing','possibleContributions',
+      // G
+      'computerAccess','internetAccess','softwareConfidence',
+      // AI
+      'aiFamiliarity','aiTools','aiInterest',
+      // H
+      'skill1','skill2','mainMotivationStatement','additionalInformation',
+      // Declaration
+      'declarationAccepted'
+    ]
+  };
+  var STEP_FIELDS = [FIELD_SECTIONS.A, FIELD_SECTIONS.REST];
+
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  function setVal(id, v) { var el = document.getElementById(id); if (el) el.value = v == null ? '' : v; }
+  function radio(name) { var el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ''; }
+  function checks(name) { return $$('input[name="' + name + '"]:checked').map(function (c) { return c.value; }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function titleCase(s) { return String(s||'').trim().toLowerCase().replace(/(^|[\s'\-])([a-z])/g,function(m,a,b){return a+b.toUpperCase();}); }
+
+  function showLoading(t) { $('#loadingText').textContent = t || 'Working…'; $('#loadingOverlay').classList.remove('hidden'); }
+  function hideLoading() { $('#loadingOverlay').classList.add('hidden'); }
+  function toast(msg, ok) {
+    var t = $('#toast'); t.textContent = msg; t.className = ok ? 'ok show' : 'show';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.className = ''; }, 5000);
+  }
+
+  function bootstrap() {
+    showLoading('Loading application form…');
+    google.script.run.withSuccessHandler(onBoot).withFailureHandler(onBootFail).getFormBootstrapData();
+  }
+
+  function onBoot(resp) {
+    state.config = resp.config;
+    state.faculties = resp.facultyData.faculties || [];
+    state.facultyMap = {};
+    state.faculties.forEach(function (f) { state.facultyMap[f.faculty] = f.departments.slice(); });
+    if (state.config.applicationsClose) $('#deadlineText').textContent = state.config.applicationsClose;
+
+    if (state.config.applicationsCloseIso) {
+      var now = new Date();
+      var todayIso = now.getFullYear() + '-' +
+                     String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                     String(now.getDate()).padStart(2, '0');
+      if (todayIso > state.config.applicationsCloseIso) {
+        showClosedState(state.config.applicationsCloseIso);
+        hideLoading();
+        return;
+      }
+    }
+
+    fillSelect('title', state.config.options.titles, '— Select —');
+    fillSelect('rank', state.config.options.ranks, '— Select —');
+    populateFaculty();
+    buildRadios('ictGroup', 'overallIctProficiency', state.config.options.ictProficiency);
+    buildChecks('computerTasksList', 'computerTasks', state.config.options.computerTasks);
+    buildRadios('netKnowGroup', 'networkingKnowledge', state.config.options.networkingKnowledge);
+    buildChecks('netToolsList', 'networkingTools', state.config.options.networkingTools);
+    buildChecks('teachingAppsList', 'teachingApplications', state.config.options.teachingApplications);
+    buildRadios('freqGroup', 'practicalFrequency', state.config.options.practicalFrequency);
+    buildChecks('studentGroupsList', 'studentGroups', state.config.options.studentGroups);
+    buildChecks('motivationList', 'motivationSelections', state.config.options.motivationSelections, 3);
+    buildRadios('commitmentGroup', 'implementationCommitment', state.config.options.likert5);
+    buildRadios('attendanceGroup', 'fullAttendance', state.config.options.attendance);
+    buildRadios('handsOnGroup', 'handsOnComfort', state.config.options.handsOnComfort);
+    buildRadios('problemGroup', 'problemSolvingApproach', state.config.options.problemSolving, true);
+    buildRadios('practiceGroup', 'practiceOutsideSessions', state.config.options.practiceOutside);
+    buildRadios('shareGroup', 'knowledgeSharing', state.config.options.knowledgeSharing);
+    buildChecks('contribList', 'possibleContributions', state.config.options.contributions);
+    buildRadios('pcGroup', 'computerAccess', state.config.options.computerAccess);
+    buildRadios('netGroup', 'internetAccess', state.config.options.internetAccess);
+    buildRadios('softGroup', 'softwareConfidence', state.config.options.softwareConfidence);
+    buildRadios('aiFamGroup', 'aiFamiliarity', state.config.options.aiFamiliarity);
+    buildChecks('aiToolsList', 'aiTools', state.config.options.aiTools);
+    buildRadios('aiInterestGroup', 'aiInterest', state.config.options.aiInterest);
+
+    renderProgressNav();
+    wireEvents();
+    showStep(0);
+    hideLoading();
+  }
+
+  function onBootFail(err) {
+    hideLoading(); toast('Could not load the form. Please refresh.', false); console.error(err);
+  }
+
+  function showClosedState(iso) {
+    var pretty = iso || '';
+    try {
+      var d = new Date(String(iso) + 'T12:00:00Z');
+      if (!isNaN(d.getTime())) {
+        var months = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+        pretty = d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+      }
+    } catch (e) {}
+    var wrap = document.querySelector('.wrap') || document.body;
+    wrap.innerHTML =
+      '<div style="max-width:720px;margin:60px auto;background:#fff;border:1px solid #d9e2dc;' +
+      'border-radius:12px;padding:36px 32px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.06);">' +
+        '<div style="width:64px;height:64px;border-radius:50%;background:#fdecea;margin:0 auto 18px;' +
+        'display:flex;align-items:center;justify-content:center;">' +
+          '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#b3261e" ' +
+          'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+            '<circle cx="12" cy="12" r="10"></circle>' +
+            '<line x1="12" y1="8" x2="12" y2="12"></line>' +
+            '<line x1="12" y1="16" x2="12.01" y2="16"></line>' +
+          '</svg>' +
+        '</div>' +
+        '<h2 style="margin:0 0 8px;color:#0a4e2d;font-size:20px;">Applications Closed</h2>' +
+        '<p style="margin:0 0 8px;color:#5c6b63;font-size:15px;line-height:1.6;">' +
+          'The application window for the <strong>Cisco Networking Academic Capacity-Building Initiative</strong> ' +
+          'closed on <strong>' + pretty + '</strong>.' +
+        '</p>' +
+        '<p style="margin:0;color:#5c6b63;font-size:14px;line-height:1.6;">' +
+          'For enquiries, contact <a href="mailto:caiit@uniabuja.edu.ng" ' +
+          'style="color:#0f6b3f;font-weight:600;text-decoration:none;">caiit@uniabuja.edu.ng</a>.' +
+        '</p>' +
+      '</div>';
+    var nav = document.getElementById('navBar');
+    if (nav) nav.classList.add('hidden');
+  }
+
+  function fillSelect(id, list, ph) {
+    var sel = document.getElementById(id); if (!sel) return;
+    sel.innerHTML = '<option value="">' + esc(ph) + '</option>' +
+      list.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+  }
+  function populateFaculty() {
+    var sel = $('#faculty'); sel.innerHTML = '<option value="">— Select Faculty —</option>';
+    state.faculties.forEach(function (f) {
+      var o = document.createElement('option'); o.value = f.faculty; o.textContent = f.faculty;
+      sel.appendChild(o);
+    });
+  }
+  function populateDepartment(f) {
+    var sel = $('#department'); sel.innerHTML = '';
+    if (!f || !state.facultyMap[f]) {
+      sel.disabled = true;
+      sel.innerHTML = '<option value="">— Select Faculty first —</option>';
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— Select Department —</option>' +
+      state.facultyMap[f].map(function (d) { return '<option value="' + esc(d) + '">' + esc(d) + '</option>'; }).join('');
+  }
+
+  function buildRadios(containerId, name, opts, stack) {
+    var c = document.getElementById(containerId); if (!c) return;
+    c.style.flexDirection = stack ? 'column' : '';
+    c.innerHTML = opts.map(function (o) {
+      return '<label><input type="radio" name="' + name + '" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+    }).join('');
+  }
+
+  function buildChecks(containerId, name, opts, max) {
+    var c = document.getElementById(containerId); if (!c) return;
+    c.innerHTML = opts.map(function (o) {
+      return '<label><input type="checkbox" name="' + name + '" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+    }).join('');
+    if (max) {
+      c.addEventListener('change', function (e) {
+        var sel = checks(name);
+        if (sel.length > max) {
+          e.target.checked = false;
+          toast('You may select at most ' + max + ' options.', false);
+        }
+        validateField(name);
+      });
+    }
+  }
+
+  function renderProgressNav() {
+    var nav = $('#progressNav'); nav.innerHTML = '';
+    SECTIONS.forEach(function (s, i) {
+      var b = document.createElement('button'); b.type = 'button';
+      b.innerHTML = '<span class="num">' + s.key + '</span>' + s.label;
+      b.addEventListener('click', function () {
+        if (i > state.step && !validateStep(state.step)) return;
+        showStep(i);
+      });
+      nav.appendChild(b);
+    });
+    updateProgressNav();
+  }
+  function updateProgressNav() {
+    $$('#progressNav button').forEach(function (b, i) {
+      b.classList.toggle('active', i === state.step);
+      b.classList.toggle('done', state.completed[i] === true && i !== state.step);
+    });
+  }
+
+  function showStep(i) {
+    state.step = i;
+    $$('form#form section.card').forEach(function (sec, idx) { sec.classList.toggle('hidden', idx !== i); });
+    updateProgressNav();
+    $('#btnBack').disabled = i === 0;
+    $('#stepIndicator').textContent = 'Step ' + (i + 1) + ' of ' + SECTIONS.length;
+    $('#btnNext').textContent = (i === SECTIONS.length - 1) ? 'Preview →' : 'Next →';
+    var card = document.querySelector('form#form section.card[data-step="' + i + '"]');
+    if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.pageYOffset - 90, behavior: 'smooth' });
+  }
+
+  function wireEvents() {
+    $('#title').addEventListener('change', function () {
+      var isOther = this.value === 'Other';
+      toggle('otherTitle', isOther);
+      if (!isOther) setVal('otherTitle', '');
+      validateField('title');
+      validateField('otherTitle');
+    });
+    $('#rank').addEventListener('change', function () {
+      var isOther = this.value === 'Other';
+      toggle('otherRank', isOther); if (!isOther) setVal('otherRank', '');
+      validateField('rank');
+    });
+    $('#faculty').addEventListener('change', function () {
+      populateDepartment(this.value); validateField('faculty'); validateField('department');
+    });
+    $('#department').addEventListener('change', function () { validateField('department'); });
+
+    var toolCbs = $$('input[name="networkingTools"]');
+    toolCbs.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var other = document.querySelector('input[name="networkingTools"][value="Other networking tools"]');
+        toggle('networkingToolsDescription', other && other.checked);
+        validateField('networkingTools');
+      });
+    });
+
+    var sid = $('#staffId');
+    sid.addEventListener('input', function () { this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+    $('#surname').addEventListener('input', function () { this.value = this.value.toUpperCase(); });
+    ['firstName','otherNames'].forEach(function (id) {
+      var el = document.getElementById(id); if (!el) return;
+      el.addEventListener('blur', function () { this.value = titleCase(this.value); });
+    });
+    $('#phone').addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 11);
+    });
+
+    $$('input[type=text], input[type=email], input[type=tel], textarea, select').forEach(function (el) {
+      if (el.id) el.addEventListener('blur', function () { validateField(el.id); });
+    });
+    $$('input[type=radio], input[type=checkbox]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var n = el.name;
+        if (n) validateField(n);
+      });
+    });
+    var decl = $('#declarationAccepted');
+    decl.addEventListener('change', function () { validateField('declarationAccepted'); });
+
+    $('#btnBack').addEventListener('click', function () { if (state.step > 0) showStep(state.step - 1); });
+    $('#btnNext').addEventListener('click', function () {
+      if (!validateStep(state.step)) { toast('Please correct the highlighted fields.', false); return; }
+      if (state.step < SECTIONS.length - 1) showStep(state.step + 1);
+      else openPreview();
+    });
+    $('#btnBackToEdit').addEventListener('click', function () {
+      $('#previewPanel').classList.add('hidden'); $('#navBar').classList.remove('hidden');
+      showStep(state.step);
+    });
+    $('#btnFinalSubmit').addEventListener('click', doFinalSubmit);
+  }
+
+  function toggle(id, show) { var el = document.getElementById(id); if (!el) return;
+    el.classList.toggle('hidden', !show); }
+
+  function showError(f, msg) {
+    var wrap = document.querySelector('[data-field="' + f + '"]'); if (!wrap) return;
+    wrap.classList.add('invalid');
+    var e = wrap.querySelector('[data-error-for="' + f + '"]'); if (e) e.textContent = msg;
+  }
+  function clearError(f) {
+    var wrap = document.querySelector('[data-field="' + f + '"]'); if (!wrap) return;
+    wrap.classList.remove('invalid');
+    var e = wrap.querySelector('[data-error-for="' + f + '"]'); if (e) e.textContent = '';
+  }
+  function computeErrors() {
+    var e = {};
+    var staffId = val('staffId').toUpperCase();
+    if (!staffId) e.staffId = 'Staff ID is required.';
+    else if (!/^ACA\d{2,4}$/.test(staffId)) e.staffId = 'Must be ACA followed by 2-4 digits.';
+    if (!val('title')) e.title = 'Title is required.';
+    else if (val('title') === 'Other' && !val('otherTitle').trim())
+      e.otherTitle = 'Please specify your title.';
+    if (!val('surname').trim()) e.surname = 'Surname is required.';
+    if (!val('firstName').trim()) e.firstName = 'First name is required.';
+    if (!radio('sex')) e.sex = 'Sex is required.';
+    if (!val('email').trim()) e.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(val('email').trim())) e.email = 'Invalid email.';
+    var ph = val('phone').replace(/\D/g, '');
+    if (!ph) e.phone = 'Phone is required.';
+    else if (ph.length !== 11) e.phone = 'Must be 11 digits.';
+    else if (ph.charAt(0) !== '0') e.phone = 'Must start with 0.';
+    if (!val('faculty')) e.faculty = 'Faculty is required.';
+    if (!val('department')) e.department = 'Department is required.';
+    var rank = val('rank');
+    if (!rank) e.rank = 'Rank is required.';
+    else if (rank === 'Other' && !val('otherRank').trim()) e.otherRank = 'Please specify your rank.';
+
+    if (!radio('overallIctProficiency')) e.overallIctProficiency = 'Required.';
+    if (!checks('computerTasks').length) e.computerTasks = 'Select at least one.';
+    if (!radio('networkingKnowledge')) e.networkingKnowledge = 'Required.';
+    if (!checks('networkingTools').length) e.networkingTools = 'Select at least one.';
+
+    if (!checks('teachingApplications').length) e.teachingApplications = 'Select at least one.';
+    if (!radio('practicalFrequency')) e.practicalFrequency = 'Required.';
+    if (!checks('studentGroups').length) e.studentGroups = 'Select at least one.';
+
+    var mot = checks('motivationSelections');
+    if (!mot.length) e.motivationSelections = 'Select at least one.';
+    else if (mot.length > 3) e.motivationSelections = 'Select at most 3.';
+    if (!val('desiredOutcome').trim()) e.desiredOutcome = 'Required.';
+    if (!radio('implementationCommitment')) e.implementationCommitment = 'Required.';
+
+    if (!radio('fullAttendance')) e.fullAttendance = 'Required.';
+    if (!radio('handsOnComfort')) e.handsOnComfort = 'Required.';
+    if (!radio('problemSolvingApproach')) e.problemSolvingApproach = 'Required.';
+    if (!radio('practiceOutsideSessions')) e.practiceOutsideSessions = 'Required.';
+
+    if (!radio('knowledgeSharing')) e.knowledgeSharing = 'Required.';
+    if (!checks('possibleContributions').length) e.possibleContributions = 'Select at least one.';
+
+    if (!radio('computerAccess')) e.computerAccess = 'Required.';
+    if (!radio('internetAccess')) e.internetAccess = 'Required.';
+    if (!radio('softwareConfidence')) e.softwareConfidence = 'Required.';
+
+    if (!radio('aiFamiliarity')) e.aiFamiliarity = 'Required.';
+    if (!checks('aiTools').length) e.aiTools = 'Select at least one.';
+    if (!radio('aiInterest')) e.aiInterest = 'Required.';
+
+    if (!val('mainMotivationStatement').trim()) e.mainMotivationStatement = 'Motivation statement is required.';
+
+    if (!$('#declarationAccepted').checked) e.declarationAccepted = 'You must accept the declaration.';
+
+    return e;
+  }
+
+  function validateField(f) {
+    var errors = computeErrors();
+    if (errors[f]) { showError(f, errors[f]); return false; }
+    clearError(f);
+    return true;
+  }
+
+  function validateStep(idx) {
+    var fields = STEP_FIELDS[idx] || [];
+    var ok = true;
+    var errs = computeErrors();
+    fields.forEach(function (f) { if (errs[f]) { showError(f, errs[f]); ok = false; } });
+    if (ok) state.completed[idx] = true;
+    updateProgressNav();
+    return ok;
+  }
+
+  function buildPayload() {
+    return {
+      staffId: val('staffId').toUpperCase(),
+      title: val('title'), otherTitle: val('otherTitle').trim(),
+      surname: val('surname').toUpperCase(),
+      firstName: titleCase(val('firstName')), otherNames: titleCase(val('otherNames')),
+      sex: radio('sex'), email: val('email').trim(), phone: val('phone').replace(/\D/g, ''),
+      faculty: val('faculty'), department: val('department'),
+      rank: val('rank'), otherRank: val('otherRank').trim(),
+
+      overallIctProficiency: radio('overallIctProficiency'),
+      computerTasks: checks('computerTasks'),
+      networkingKnowledge: radio('networkingKnowledge'),
+      networkingTools: checks('networkingTools'),
+      networkingToolsDescription: val('networkingToolsDescription').trim(),
+
+      teachingApplications: checks('teachingApplications'),
+      practicalFrequency: radio('practicalFrequency'),
+      studentGroups: checks('studentGroups'),
+
+      motivationSelections: checks('motivationSelections'),
+      desiredOutcome: val('desiredOutcome').trim(),
+      implementationCommitment: radio('implementationCommitment'),
+
+      fullAttendance: radio('fullAttendance'),
+      handsOnComfort: radio('handsOnComfort'),
+      problemSolvingApproach: radio('problemSolvingApproach'),
+      practiceOutsideSessions: radio('practiceOutsideSessions'),
+
+      knowledgeSharing: radio('knowledgeSharing'),
+      possibleContributions: checks('possibleContributions'),
+
+      computerAccess: radio('computerAccess'),
+      internetAccess: radio('internetAccess'),
+      softwareConfidence: radio('softwareConfidence'),
+
+      aiFamiliarity: radio('aiFamiliarity'),
+      aiTools: checks('aiTools'),
+      aiInterest: radio('aiInterest'),
+
+      skill1: val('skill1').trim(),
+      skill2: val('skill2').trim(),
+      mainMotivationStatement: val('mainMotivationStatement').trim(),
+      additionalInformation: val('additionalInformation').trim(),
+      declarationAccepted: $('#declarationAccepted').checked
+    };
+  }
+
+  function previewSection(title, rows) {
+    var h = '<div class="preview-section"><h3>' + esc(title) + '</h3><dl>';
+    rows.forEach(function (r) {
+      var v = r[1];
+      var out = (v === null || v === undefined || String(v).trim() === '')
+        ? '<span style="color:#8c948e;">—</span>' : esc(String(v));
+      h += '<dt>' + esc(r[0]) + '</dt><dd>' + out + '</dd>';
+    });
+    h += '</dl></div>';
+    return h;
+  }
+
+  function openPreview() {
+    var errs = computeErrors();
+    if (Object.keys(errs).length) {
+      for (var i = 0; i < STEP_FIELDS.length; i++) {
+        var has = STEP_FIELDS[i].some(function (f) { return errs[f]; });
+        if (has) { showStep(i); STEP_FIELDS[i].forEach(function (f) { if (errs[f]) showError(f, errs[f]); }); break; }
+      }
+      toast('Please correct the highlighted fields before previewing.', false);
+      return;
+    }
+    var p = buildPayload();
+    var html = '';
+    html += previewSection('A — Personal and Contact Information', [
+      ['Staff ID', p.staffId],
+      ['Title', p.title === 'Other' ? p.otherTitle : p.title],
+      ['Surname', p.surname],
+      ['First Name', p.firstName], ['Other Names', p.otherNames], ['Sex', p.sex],
+      ['Email', p.email], ['Phone', p.phone], ['Faculty', p.faculty],
+      ['Department', p.department], ['Rank', p.rank === 'Other' ? p.otherRank : p.rank]
+    ]);
+    html += previewSection('B — ICT and Technical Proficiency', [
+      ['Overall ICT proficiency', p.overallIctProficiency],
+      ['Computer tasks', p.computerTasks.join(', ')],
+      ['Networking knowledge', p.networkingKnowledge],
+      ['Networking tools', p.networkingTools.join(', ')],
+      ['Other tools described', p.networkingToolsDescription]
+    ]);
+    html += previewSection('C — Application to Teaching and Learning', [
+      ['Teaching applications', p.teachingApplications.join(', ')],
+      ['Practical IT frequency', p.practicalFrequency],
+      ['Student groups', p.studentGroups.join(', ')]
+    ]);
+    html += previewSection('D — Motivation and Commitment', [
+      ['Motivation selections', p.motivationSelections.join(', ')],
+      ['Desired outcome', p.desiredOutcome],
+      ['Implementation commitment', p.implementationCommitment]
+    ]);
+    html += previewSection('E — Training Commitment and Readiness', [
+      ['Full attendance', p.fullAttendance],
+      ['Hands-on comfort', p.handsOnComfort],
+      ['Problem-solving approach', p.problemSolvingApproach],
+      ['Practice outside sessions', p.practiceOutsideSessions]
+    ]);
+    html += previewSection('F — Multiplier and Institutional Impact', [
+      ['Knowledge sharing', p.knowledgeSharing],
+      ['Possible contributions', p.possibleContributions.join(', ')]
+    ]);
+    html += previewSection('G — Technical Readiness', [
+      ['Computer access', p.computerAccess],
+      ['Internet access', p.internetAccess],
+      ['Software confidence', p.softwareConfidence]
+    ]);
+    html += previewSection('AI — Artificial Intelligence Readiness', [
+      ['AI familiarity', p.aiFamiliarity],
+      ['AI tools used', p.aiTools.join(', ')],
+      ['AI interest', p.aiInterest]
+    ]);
+    html += previewSection('H — Final Selection Questions', [
+      ['Desired skill 1', p.skill1 || '(not provided)'],
+      ['Desired skill 2', p.skill2 || '(not provided)'],
+      ['Main motivation statement', p.mainMotivationStatement],
+      ['Additional information', p.additionalInformation]
+    ]);
+    html += previewSection('Declaration', [['Accepted', p.declarationAccepted ? 'Yes' : 'No']]);
+
+    $('#previewContent').innerHTML = html;
+    $('#previewPanel').classList.remove('hidden');
+    $('#navBar').classList.add('hidden');
+    $$('form#form section.card').forEach(function (s) { s.classList.add('hidden'); });
+    $('#progressNav').classList.add('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function doFinalSubmit() {
+    if (state.submitting) return;
+    state.submitting = true;
+    var btn = $('#btnFinalSubmit'); btn.disabled = true; btn.textContent = 'Submitting…';
+    showLoading('Submitting your application…');
+    google.script.run
+      .withSuccessHandler(onSubmitOk)
+      .withFailureHandler(onSubmitFail)
+      .processSubmission(buildPayload());
+  }
+
+  function onSubmitOk(resp) {
+    hideLoading(); state.submitting = false;
+    var btn = $('#btnFinalSubmit'); btn.disabled = false; btn.textContent = 'Submit Application';
+    if (!resp || !resp.success) {
+      if (resp && resp.type === 'VALIDATION' && resp.errors) {
+        if (resp.errors._form) {
+          toast(resp.errors._form, false);
+          showClosedState((state.config && state.config.applicationsCloseIso) || '');
+          return;
+        }
+        $('#previewPanel').classList.add('hidden'); $('#navBar').classList.remove('hidden');
+        $('#progressNav').classList.remove('hidden');
+        for (var i = 0; i < STEP_FIELDS.length; i++) {
+          var has = STEP_FIELDS[i].some(function (f) { return resp.errors[f]; });
+          if (has) { showStep(i); STEP_FIELDS[i].forEach(function (f) { if (resp.errors[f]) showError(f, resp.errors[f]); }); break; }
+        }
+        toast('Some details were rejected. Please review.', false);
+      } else {
+        toast((resp && resp.message) || 'Could not submit. Please try again.', false);
+      }
+      return;
+    }
+    $('#previewPanel').classList.add('hidden');
+    $('#navBar').classList.add('hidden');
+    $('#progressNav').classList.add('hidden');
+    $$('form#form section.card').forEach(function (s) { s.classList.add('hidden'); });
+    $('#successNumber').textContent = resp.submissionNumber || '—';
+    $('#successSummary').innerHTML =
+      'Dear ' + esc(resp.applicantName || '') + ', your application to the CAIIT Cisco Networking ' +
+      'Academic Capacity-Building Initiative has been received.<br><br>' +
+      'Faculty: ' + esc(resp.faculty || '') + '<br>Department: ' + esc(resp.department || '');
+    $('#successPanel').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('Application submitted successfully.', true);
+  }
+
+  function onSubmitFail(err) {
+    hideLoading(); state.submitting = false;
+    var btn = $('#btnFinalSubmit'); btn.disabled = false; btn.textContent = 'Submit Application';
+    console.error(err);
+    var d = err && err.message ? err.message : 'Unknown error';
+    toast('Submission failed: ' + d, false);
+  }
+
+  document.addEventListener('DOMContentLoaded', bootstrap);
+})();
+</script>
+
+</body>
+</html>

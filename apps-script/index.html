@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kings Metro School — Portal</title>
+  <style>
+    :root {
+      --emerald: #059669; --emerald-dark: #047857; --emerald-light: #d1fae5;
+      --slate-900: #0f172a; --slate-800: #1e293b; --slate-700: #334155; --slate-500: #64748b;
+      --slate-400: #94a3b8; --slate-300: #cbd5e1; --slate-200: #e2e8f0; --slate-100: #f1f5f9;
+      --slate-50: #f8fafc; --red: #dc2626; --amber: #d97706;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--slate-900); background: var(--slate-100); font-size: 14px; }
+    a { color: var(--emerald-dark); text-decoration: none; } a:hover { text-decoration: underline; }
+    button { font: inherit; cursor: pointer; } input, select, textarea { font: inherit; }
+    .layout { display: flex; min-height: 100vh; min-height: 100dvh; }
+    .sidebar { width: 256px; background: var(--slate-900); color: var(--slate-100); display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--slate-800); }
+    .sidebar-brand img { width: 44px; height: 44px; border-radius: 999px; background: #fff; object-fit: contain; padding: 2px; }
+    .logo-fallback { width: 44px; height: 44px; border-radius: 999px; background: var(--emerald); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; }
+    .sidebar-brand .name { color: #34d399; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; font-size: 13px; }
+    .sidebar-brand .sub { color: var(--slate-400); font-size: 12px; }
+    .nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .nav button { text-align: left; background: transparent; border: 0; color: var(--slate-300); padding: 9px 12px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+    .nav button:hover { background: var(--slate-800); }
+    .nav button.active { background: var(--emerald); color: #fff; }
+    .sidebar-foot { border-top: 1px solid var(--slate-800); padding: 14px 20px; color: var(--slate-400); font-size: 12px; }
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid var(--slate-200); padding: 12px 24px; }
+    .topbar .who { font-weight: 600; } .topbar .mail { color: var(--slate-500); font-size: 12px; }
+    .content { flex: 1; padding: 24px; } .content-inner { max-width: 1200px; margin: 0 auto; }
+    .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--slate-200); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+    .footer img { height: 30px; width: auto; object-fit: contain; } .footer .text { color: var(--slate-500); font-size: 12px; }
+    .footer.dark { border-color: var(--slate-700); } .footer.dark .text { color: var(--slate-400); }
+    .card { background: #fff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 20px; } .card + .card { margin-top: 20px; }
+    .grid { display: grid; gap: 16px; }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--slate-700); margin-bottom: 4px; }
+    .field { margin-bottom: 14px; }
+    input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--slate-300); border-radius: 8px; background: #fff; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--emerald); box-shadow: 0 0 0 3px rgba(5,150,105,.15); }
+    textarea { min-height: 90px; resize: vertical; }
+    input[type=file] { padding: 6px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 8px; padding: 9px 14px; font-weight: 600; font-size: 14px; }
+    .btn-primary { background: var(--emerald); color: #fff; } .btn-primary:hover { background: var(--emerald-dark); }
+    .btn-outline { background: #fff; border-color: var(--slate-300); color: var(--slate-700); } .btn-outline:hover { background: var(--slate-100); }
+    .btn-danger { background: #fff; border-color: #fecaca; color: var(--red); } .btn-danger:hover { background: #fef2f2; }
+    .btn-ghost { background: transparent; color: var(--emerald-dark); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; } .btn-sm { padding: 5px 10px; font-size: 13px; }
+    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+    .toolbar .field { margin-bottom: 0; } .spacer { flex: 1; }
+    .muted { color: var(--slate-500); } .small { font-size: 12px; } .row { display: flex; align-items: center; gap: 10px; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; background: var(--slate-100); color: var(--slate-700); }
+    .badge.ok { background: var(--emerald-light); color: var(--emerald-dark); } .badge.warn { background: #fef3c7; color: var(--amber); }
+    .badge.bad { background: #fee2e2; color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th { text-align: left; background: var(--slate-50); color: var(--slate-500); text-transform: uppercase; font-size: 11px; letter-spacing: .04em; padding: 9px 12px; border-bottom: 1px solid var(--slate-200); }
+    tbody td { padding: 9px 12px; border-bottom: 1px solid var(--slate-100); } tbody tr:hover { background: var(--slate-50); }
+    .table-wrap { overflow: hidden; border: 1px solid var(--slate-200); border-radius: 12px; background: #fff; } .table-wrap table { border: 0; }
+    .alert { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .alert.success { background: var(--emerald-light); border: 1px solid #6ee7b7; color: var(--emerald-dark); }
+    .empty { padding: 40px 16px; text-align: center; color: var(--slate-500); border: 1px dashed var(--slate-300); border-radius: 12px; }
+    .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--slate-200); margin-bottom: 16px; flex-wrap: wrap; }
+    .tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 9px 14px; color: var(--slate-500); font-weight: 600; }
+    .tabs button.active { color: var(--emerald-dark); border-bottom-color: var(--emerald); }
+    .stat { background: #fff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 18px; }
+    .stat .label { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    .login-wrap { min-height: 100vh; min-height: 100dvh; background: var(--slate-900); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .login-card { width: 100%; max-width: 420px; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,.25); }
+    .login-card .head { text-align: center; margin-bottom: 20px; } .login-card .head img { height: 84px; width: 84px; object-fit: contain; margin-bottom: 10px; }
+    .login-card .kicker { color: var(--emerald); text-transform: uppercase; letter-spacing: .18em; font-size: 11px; font-weight: 700; }
+    .login-card h1 { font-size: 22px; margin: 4px 0; }
+    .login-footer { width: 100%; max-width: 420px; margin-top: 16px; }
+    .report-head { display: flex; align-items: center; justify-content: center; gap: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 16px; margin-bottom: 16px; }
+    .report-head img { height: 64px; width: 64px; object-fit: contain; }
+    .report-head .school { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: center; }
+    .report-head .subtitle { text-align: center; color: var(--slate-500); font-size: 12px; }
+    .report-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+    .report-meta .kv .k { color: var(--slate-500); font-size: 12px; } .report-meta .kv .v { font-weight: 600; }
+    .report-summary { display: flex; gap: 28px; flex-wrap: wrap; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--slate-300); border-top-color: var(--emerald); border-radius: 999px; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .page-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 60px; color: var(--slate-500); }
+    .seg { display: inline-flex; border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden; }
+    .seg button { border: 0; background: #fff; padding: 6px 10px; font-size: 12px; color: var(--slate-600); border-right: 1px solid var(--slate-200); }
+    .seg button:last-child { border-right: 0; } .seg button.on { background: var(--emerald); color: #fff; }
+    .seg button.on[data-status=ABSENT] { background: var(--red); } .seg button.on[data-status=LATE] { background: var(--amber); }
+    .thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--slate-100); }
+    .ph { width: 40px; height: 40px; border-radius: 6px; background: var(--slate-200); display: inline-block; }
+    /* ---- dashboard ---- */
+    .dash-hero { background: linear-gradient(135deg, #064e3b 0%, #059669 100%); color: #fff; border-radius: 16px; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; box-shadow: 0 8px 24px rgba(5,150,105,.25); }
+    .dash-hero h2 { margin: 0; font-size: 22px; }
+    .dash-hero .sub { opacity: .9; font-size: 13px; margin-top: 2px; }
+    .dash-hero .scope { background: rgba(255,255,255,.18); padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .cards { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0,1fr)); margin-top: 20px; }
+    @media (max-width: 1100px) { .cards { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+    .stat-card { background: #fff; border: 1px solid var(--slate-200); border-radius: 14px; padding: 16px; display: flex; gap: 14px; align-items: center; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .stat-card .ico { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--emerald-light); color: var(--emerald-dark); flex-shrink: 0; }
+    .stat-card .lbl { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .stat-card .val { font-size: 26px; font-weight: 700; line-height: 1.15; }
+    .stat-card .sub { color: var(--slate-500); font-size: 12px; }
+    .bars { display: flex; flex-direction: column; gap: 14px; }
+    .bar-row .top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+    .bar { height: 10px; background: var(--slate-100); border-radius: 999px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: 999px; background: var(--emerald); transition: width .3s ease; }
+    .bar.kg > span { background: #7c3aed; } .bar.primary > span { background: #2563eb; } .bar.secondary > span { background: #059669; } .bar.plain > span { background: var(--slate-400); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--slate-100); color: var(--slate-700); }
+    .pill.present { background: var(--emerald-light); color: var(--emerald-dark); } .pill.absent { background: #fee2e2; color: var(--red); } .pill.late { background: #fef3c7; color: var(--amber); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
+    .section-head h3 { margin: 0; font-size: 15px; }
+    .search-wrap input { padding: 11px 14px; }
+    .dir-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--slate-100); }
+    .dir-item:last-child { border-bottom: 0; }
+    .dir-head { margin-top: 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--slate-500); }
+    .kv-big .k { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .kv-big .v { font-size: 22px; font-weight: 700; }
+    body.embed .footer { display: none; } body.embed .content { padding: 16px; }
+    /* ---- mobile nav ---- */
+    .nav-toggle { display: none; background: transparent; border: 1px solid var(--slate-300); border-radius: 8px; padding: 7px 11px; font-size: 18px; line-height: 1; color: var(--slate-700); }
+    .sidebar-backdrop { display: none; }
+    .topbar .tb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .topbar .tb-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    @media (max-width: 860px) {
+      .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; max-width: 85vw; z-index: 70; transform: translateX(-100%); transition: transform .2s ease; overflow-y: auto; }
+      body.nav-open .sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.5); }
+      .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 65; }
+      body.nav-open .sidebar-backdrop { display: block; }
+      .nav-toggle { display: inline-flex; }
+      .topbar { padding: 10px 14px; gap: 10px; align-items: flex-start; }
+      .topbar .who { font-size: 14px; }
+      .topbar .mail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+      .content { padding: 14px; }
+      .toolbar { gap: 8px; }
+      .dash-hero { padding: 16px; }
+      .table-wrap { overflow-x: auto; }
+      .table-wrap table { min-width: 560px; }
+      .report-meta { gap: 10px; }
+    }
+    @media (max-width: 560px) {
+      body.embed .content { padding: 10px; }
+      .login-wrap { padding: 16px; }
+      .login-card { padding: 24px; }
+      .toolbar .field, .toolbar input, .toolbar select { width: 100%; }
+      .toolbar .spacer { display: none; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .toolbar .btn { width: 100%; justify-content: center; }
+      .section-head { flex-direction: column; align-items: stretch; }
+      .report-head { gap: 10px; }
+      .report-head .school { font-size: 16px; }
+    }
+    @media print { .sidebar, .topbar, .toolbar, .no-print, .tabs, .dash-hero, .cards, .search-wrap, .nav-toggle, .sidebar-backdrop { display: none !important; } body { background: #fff; } .content { padding: 0; } .card { border: 0; padding: 0; } .footer { border-top: 1px solid #ccc; } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    var BRAND = <?!= brandJson ?>;
+    var INITIAL_VIEW = <?!= initialViewJson ?>;
+    var EMBED = <?!= embedJson ?>;
+    BRAND = BRAND || { schoolName: 'Kings Metro School', subtitle: '', footerText: '', logoUrl: '', cbsLogoUrl: '' };
+    if (INITIAL_VIEW === null || INITIAL_VIEW === undefined) INITIAL_VIEW = '';
+    window.addEventListener('error', function (ev) {
+      var app = document.getElementById('app');
+      if (app && !app.innerHTML) app.innerHTML = '<div style="max-width:560px;margin:60px auto;padding:22px;border:1px solid #e2e8e4;border-radius:12px;font-family:Segoe UI,Arial,sans-serif;color:#1b2a26"><h3>Could not start the portal</h3><p style="color:#66756f">A script error occurred while loading. Details:</p><pre style="white-space:pre-wrap;background:#f4f7f5;padding:12px;border-radius:8px;font-size:12px">' + (ev && ev.message ? ev.message : 'unknown error') + '</pre></div>';
+    });
+    /* global google */
+    var ROLE_LABELS = { ADMIN: 'Administrator', PRINCIPAL: 'Principal', HEADMASTER: 'Headmaster', BURSAR: 'Bursar', ACCOUNT_OFFICER: 'Account Officer', TEACHER: 'Teacher', PARENT: 'Parent' };
+    var TERM_LABELS = { FIRST: 'First Term', SECOND: 'Second Term', THIRD: 'Third Term' };
+    var SECTIONS = ['KG', 'PRIMARY', 'SECONDARY'];
+    var SECTION_LABELS = { KG: 'Kindergarten & Creche', PRIMARY: 'Primary', SECONDARY: 'Secondary' };
+    var ICONS = {
+      students: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+      staff: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+      classes: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
+      term: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+      money: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+      attendance: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>'
+    };
+    var NAV = [
+      { key: 'dashboard', label: 'Dashboard', roles: 'ALL' },
+      { key: 'announcements', label: 'Announcements', roles: 'ALL' },
+      { key: 'students', label: 'Students', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+      { key: 'attendance', label: 'Attendance', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+      { key: 'results', label: 'Results', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+      { key: 'teachers', label: 'Teachers', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
+      { key: 'applications', label: 'Applications', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
+      { key: 'staff', label: 'Staff', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
+      { key: 'my-wards', label: 'My Wards', roles: ['PARENT'] },
+      { key: 'payments', label: 'Payments', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'PARENT'] },
+      { key: 'users', label: 'Users', roles: ['ADMIN'] },
+      { key: 'admin', label: 'Setup & Users', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] }
+    ];
+    var ADMIN_TABS = [
+      { key: 'ClassLevels', label: 'Class levels' }, { key: 'ClassArms', label: 'Class arms' },
+      { key: 'Subjects', label: 'Subjects' }, { key: 'SubjectClass', label: 'Subject → class' },
+      { key: 'Terms', label: 'Terms' }, { key: 'GradeScale', label: 'Grade scale' },
+      { key: 'ParentStudents', label: 'Parent → ward' }
+    ];
+
+    var state = {
+      token: sessionStorage.getItem('kms_token') || '', user: null, boot: null, view: 'dashboard',
+      error: null, notice: null, busy: false, dashboard: null,
+      dashboardSearch: { q: '', students: [], staff: [], ran: false, loading: false },
+      students: { classArmId: '', search: '', list: [], form: null },
+      attendance: { classArmId: '', date: todayISO(), roster: null },
+      results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [] },
+      report: { studentId: '', termId: '', data: null },
+      staff: { search: '', list: [], form: null },
+      teachers: { list: [], form: null, flash: null },
+      applications: { list: [], detail: null },
+      payments: { list: [], status: '', form: null, options: [] },
+      wards: { list: [], payments: [] },
+      admin: { tab: 'ClassLevels', rows: [], form: null, parentUsers: [], studentsList: [] },
+      users: { list: [], form: null, audit: [], flash: null },
+      pwForm: false,
+      announcements: { list: [], form: false }
+    };
+
+    /* ---------------- helpers ---------------- */
+    function esc(v) { if (v === null || v === undefined) return ''; return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function todayISO() { var d = new Date(), m = String(d.getMonth() + 1), day = String(d.getDate()); if (m.length < 2) m = '0' + m; if (day.length < 2) day = '0' + day; return d.getFullYear() + '-' + m + '-' + day; }
+    function call(fn) { var args = Array.prototype.slice.call(arguments, 1); return new Promise(function (resolve, reject) { var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) { reject(new Error(e && e.message ? e.message : String(e))); }); r[fn].apply(r, args); }); }
+    function authed(fn) { var args = Array.prototype.slice.call(arguments, 1); return call.apply(null, [fn, state.token].concat(args)); }
+    function setError(err) { state.error = err && err.message ? err.message : String(err); state.notice = null; render(); }
+    function roleAllowed(roles) { if (roles === 'ALL') return true; if (!state.user) return false; if (state.user.role === 'ADMIN') return true; return roles.indexOf(state.user.role) !== -1; }
+    function fullName(rec) { return [rec.lastName, rec.firstName, rec.middleName].filter(Boolean).join(' '); }
+    function findIn(list, id) { for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i]; return null; }
+    function termText(t) { return (TERM_LABELS[t.termName] || t.termName) + ' · ' + t.sessionName; }
+    function armLabel(arm) { return (!arm || !arm.classLevel) ? '—' : arm.classLevel.section + ' · ' + arm.classLevel.name + ' ' + arm.name; }
+    function findArm(armId) { return state.boot ? findIn(state.boot.classArms, armId) : null; }
+    function subjectsForArm(armId) { var arm = findArm(armId); if (!arm) return []; var ids = state.boot.subjectClass.filter(function (sc) { return String(sc.classLevelId) === String(arm.classLevelId); }).map(function (sc) { return sc.subjectId; }); return state.boot.subjects.filter(function (s) { return ids.indexOf(s.id) !== -1; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }); }
+    function optionsHtml(list, valueFn, selected, labelFn) { return list.map(function (x) { var v = valueFn(x); return '<option value="' + esc(v) + '"' + (String(v) === String(selected) ? ' selected' : '') + '>' + esc(labelFn(x)) + '</option>'; }).join(''); }
+    function armOptions(sel) { return '<option value="">Select class…</option>' + optionsHtml(state.boot.classArms, function (a) { return a.id; }, sel, armLabel); }
+    function termOptions(sel) { return optionsHtml(state.boot.terms, function (t) { return t.id; }, sel, termText); }
+    function photoImg(fileId) { return fileId ? '<img class="thumb" src="https://drive.google.com/uc?export=view&id=' + esc(fileId) + '" alt="">' : '<span class="ph"></span>'; }
+    function readFileInput(input) { return new Promise(function (resolve, reject) { var f = input && input.files && input.files[0]; if (!f) return resolve(null); if (f.size > 8 * 1024 * 1024) return reject(new Error('File too large (max 8 MB).')); var reader = new FileReader(); reader.onload = function () { resolve({ name: f.name, mimeType: f.type, dataUrl: reader.result }); }; reader.onerror = function () { reject(new Error('Could not read file.')); }; reader.readAsDataURL(f); }); }
+
+    /* ---------------- boot ---------------- */
+    function bootstrapTo(url) { state.token = url.token; state.user = url.user; return authed('api_bootstrap'); }
+    function start() { if (!state.token) { render(); return; } authed('api_bootstrap').then(afterBoot).catch(function () { state.token = ''; sessionStorage.removeItem('kms_token'); render(); }); }
+    function viewAllowed(key) { for (var i = 0; i < NAV.length; i++) if (NAV[i].key === key) return roleAllowed(NAV[i].roles); return false; }
+    function afterBoot(boot) {
+      state.boot = boot; state.user = boot.user; state.results.termId = boot.currentTermId || '';
+      if (boot.classArms && boot.classArms.length) { state.students.classArmId = boot.classArms[0].id; state.attendance.classArmId = boot.classArms[0].id; state.results.classArmId = boot.classArms[0].id; }
+      navigate(INITIAL_VIEW && viewAllowed(INITIAL_VIEW) ? INITIAL_VIEW : 'dashboard');
+    }
+
+    /* ---------------- login / shell ---------------- */
+    function renderLogin() {
+      document.getElementById('app').innerHTML = '<div class="login-wrap"><div class="login-card"><div class="head">' +
+        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KM</div>') +
+        '<div class="kicker">' + esc(BRAND.schoolName) + '</div><h1>Portal Sign In</h1><div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div></div>' +
+        (state.error ? '<div class="alert error">' + esc(state.error) + '</div>' : '') +
+        (state.notice ? '<div class="alert success">' + esc(state.notice) + '</div>' : '') +
+        '<form id="login-form"><div class="field"><label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" required></div>' +
+        '<div class="field"><label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>' +
+        '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Sign in</button></form></div>' +
+        '<div class="login-footer">' + footerHtml(true) + '</div></div>';
+    }
+    function footerHtml(dark) { return '<div class="footer' + (dark ? ' dark' : '') + '">' + (BRAND.cbsLogoUrl ? '<img src="' + esc(BRAND.cbsLogoUrl) + '" alt="CBS">' : '') + '<span class="text">' + esc(BRAND.footerText) + '</span></div>'; }
+    function shellHtml() {
+      var nav = NAV.filter(function (n) { return roleAllowed(n.roles); });
+      return '<div class="layout"><div class="sidebar-backdrop" data-action="close-nav"></div><aside class="sidebar"><div class="sidebar-brand">' +
+        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') +
+        '<div><div class="name">Kings Metro</div><div class="sub">School Management</div></div></div>' +
+        '<nav class="nav">' + nav.map(function (n) { return '<button data-nav="' + n.key + '" class="' + (state.view === n.key ? 'active' : '') + '">' + esc(n.label) + '</button>'; }).join('') + '</nav>' +
+        '<div class="sidebar-foot">v1.0 · Apps Script</div></aside><div class="main">' +
+        '<header class="topbar"><div class="tb-left"><button class="nav-toggle" data-action="toggle-nav" type="button" aria-label="Open menu">&#9776;</button>' +
+        '<div><div class="who">' + esc(ROLE_LABELS[state.user.role] || state.user.role) + '</div><div class="mail">' + esc(state.user.fullName || state.user.username) + '</div></div></div>' +
+        '<div class="tb-actions"><button class="btn btn-outline btn-sm" data-action="change-pw">Change password</button> <button class="btn btn-outline btn-sm" data-action="signout">Sign out</button></div></header>' +
+        '<main class="content"><div class="content-inner" id="ci"></div></main></div></div>';
+    }
+    function render() { document.body.classList.toggle('embed', !!EMBED); if (!state.user) { document.body.classList.remove('nav-open'); renderLogin(); return; } document.getElementById('app').innerHTML = shellHtml(); document.getElementById('ci').innerHTML = contentHtml(); }
+    function headerHtml() { var h = ''; if (state.error) h += '<div class="alert error">' + esc(state.error) + '</div>'; if (state.notice) h += '<div class="alert success">' + esc(state.notice) + '</div>'; return h; }
+    function contentHtml() {
+      var v = state.view, body = '';
+      if (v === 'dashboard') body = viewDashboard();
+      else if (v === 'announcements') body = viewAnnouncements();
+      else if (v === 'students') body = viewStudents();
+      else if (v === 'attendance') body = viewAttendance();
+      else if (v === 'results') body = viewResults();
+      else if (v === 'reportcard') body = viewReport();
+      else if (v === 'staff') body = viewStaff();
+      else if (v === 'teachers') body = viewTeachers();
+      else if (v === 'applications') body = viewApplications();
+      else if (v === 'payments') body = viewPayments();
+      else if (v === 'my-wards') body = viewWards();
+      else if (v === 'users') body = viewUsers();
+      else if (v === 'admin') body = viewAdmin();
+      if (state.pwForm) body = pwFormHtml() + body;
+      return headerHtml() + body + footerHtml(false);
+    }
+    function clearMessages() { state.error = null; state.notice = null; }
+    function navigate(view) {
+      state.view = view; clearMessages(); state.users.flash = null; state.teachers.flash = null;
+      if (view === 'dashboard') return loadDashboard();
+      if (view === 'announcements') return loadAnnouncements();
+      if (view === 'students') return loadStudents();
+      if (view === 'attendance') return loadRoster();
+      if (view === 'results') return loadResults();
+      if (view === 'staff') return loadStaff();
+      if (view === 'teachers') return loadTeachers();
+      if (view === 'applications') return loadApplications();
+      if (view === 'payments') return loadPayments();
+      if (view === 'my-wards') return loadWards();
+      if (view === 'users') return loadUsers();
+      if (view === 'admin') return loadAdmin();
+      render();
+    }
+
+    /* ---------------- dashboard ---------------- */
+    var dashSearchTimer = null;
+    function loadDashboard() {
+      state.busy = true;
+      state.dashboardSearch = { q: '', students: [], staff: [], ran: false, loading: false };
+      render();
+      if (state.user.role === 'PARENT') {
+        Promise.all([authed('api_myWards'), authed('api_listPayments', {}), authed('api_listAnnouncements')])
+          .then(function (res) { state.dashboard = { role: 'PARENT', wards: res[0] || [], payments: res[1] || [], announcements: res[2] || [] }; state.busy = false; render(); })
+          .catch(function (err) { state.busy = false; setError(err); });
+        return;
+      }
+      authed('api_dashboard').then(function (d) { state.dashboard = d; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewDashboard() {
+      if (state.busy || !state.dashboard) return '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      var d = state.dashboard;
+      if (d.role === 'PARENT') return parentDashboard(d);
+      if (d.role === 'BURSAR' || d.role === 'ACCOUNT_OFFICER') return financeDashboard(d);
+      return staffDashboard(d);
+    }
+    function fmtMoney(n) { n = Number(n) || 0; var parts = (Math.round(n * 100) / 100).toString().split('.'); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); return parts.join('.'); }
+    function statCard(label, value, sub, icon) {
+      return '<div class="stat-card"><div class="ico">' + (icon || '') + '</div><div><div class="lbl">' + esc(label) + '</div><div class="val">' + esc(value) + '</div>' + (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '</div></div>';
+    }
+    function barRow(label, count, total, cls) {
+      var pct = total ? Math.round((Number(count) || 0) / total * 100) : 0;
+      return '<div class="bar-row"><div class="top"><span>' + esc(label) + '</span><span>' + esc(count) + '</span></div><div class="bar ' + (cls || '') + '"><span style="width:' + pct + '%"></span></div></div>';
+    }
+    function grid2(cards) { cards = (cards || []).filter(Boolean); if (!cards.length) return ''; return '<div class="' + (cards.length === 1 ? 'grid' : 'grid cols-2') + '" style="margin-top:20px">' + cards.join('') + '</div>'; }
+    function attCard(d) {
+      var a = d.attendance;
+      return '<div class="card"><div class="section-head"><h3>Attendance today</h3><span class="muted small">' + esc(a.date) + '</span></div>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap"><span class="pill present">Present ' + a.PRESENT + '</span><span class="pill absent">Absent ' + a.ABSENT + '</span><span class="pill late">Late ' + a.LATE + '</span><span class="pill">Excused ' + a.EXCUSED + '</span></div>' +
+        '<div class="muted small" style="margin-top:12px">' + a.total + ' record(s) captured today.</div></div>';
+    }
+    function payCard(d) {
+      var p = d.payments;
+      return '<div class="card"><div class="section-head"><h3>Payments</h3><span class="muted small">' + p.count + ' total</span></div>' +
+        '<div class="grid cols-2" style="gap:16px"><div class="kv-big"><div class="k">Pending</div><div class="v">' + p.pending + '</div><div class="muted small">₦' + fmtMoney(p.pendingAmount) + '</div></div>' +
+        '<div class="kv-big"><div class="k">Verified</div><div class="v">' + p.verified + '</div><div class="muted small">₦' + fmtMoney(p.verifiedAmount) + '</div></div></div>' +
+        (p.rejected ? '<div class="muted small" style="margin-top:10px">' + p.rejected + ' rejected.</div>' : '') + '</div>';
+    }
+    function searchPanel() {
+      return '<div class="card"><div class="section-head"><h3>Search directory</h3><span class="muted small">' + esc(state.user.role === 'ADMIN' ? 'Whole school' : 'Your section') + '</span></div>' +
+        '<div class="search-wrap"><input type="text" id="dash-search" data-field="dash-search" autocomplete="off" placeholder="Search students and staff by name, admission / staff no…" value="' + esc(state.dashboardSearch.q) + '"></div>' +
+        '<div id="dash-results">' + dirResultsHtml() + '</div></div>';
+    }
+    function dirResultsHtml() {
+      var sr = state.dashboardSearch;
+      if (sr.loading) return '<div class="page-loading" style="padding:20px"><span class="spinner"></span> Searching…</div>';
+      if (!sr.ran) return '<div class="muted small" style="margin-top:10px">Type at least 2 characters to search.</div>';
+      if (!sr.students.length && !sr.staff.length) return '<div class="empty" style="margin-top:12px">No matches found.</div>';
+      var html = '';
+      if (sr.students.length) {
+        html += '<div class="dir-head">Students (' + sr.students.length + ')</div>' + sr.students.map(function (s) {
+          return '<div class="dir-item">' + photoImg(s.photoFileId) + '<div><strong>' + esc(fullName(s)) + '</strong><div class="muted small">' + esc(s.admissionNo) + (s.classArm ? ' · ' + esc(armLabel(s.classArm)) : '') + '</div></div><div class="spacer"></div>' + (s.guardianPhone ? '<span class="muted small">' + esc(s.guardianPhone) + '</span>' : '') + '</div>';
+        }).join('');
+      }
+      if (sr.staff.length) {
+        html += '<div class="dir-head">Staff (' + sr.staff.length + ')</div>' + sr.staff.map(function (s) {
+          return '<div class="dir-item">' + photoImg(s.photoFileId) + '<div><strong>' + esc(fullName(s)) + '</strong><div class="muted small">' + esc(s.staffNo) + (s.designation ? ' · ' + esc(s.designation) : '') + (s.section ? ' · ' + esc(s.section) : '') + '</div></div><div class="spacer"></div>' + (s.phone ? '<span class="muted small">' + esc(s.phone) + '</span>' : '') + '</div>';
+        }).join('');
+      }
+      return html;
+    }
+    function scheduleDashSearch(q) {
+      state.dashboardSearch.q = q;
+      if (dashSearchTimer) { clearTimeout(dashSearchTimer); dashSearchTimer = null; }
+      var query = String(q || '').trim();
+      var box = document.getElementById('dash-results');
+      if (query.length < 2) {
+        state.dashboardSearch.students = []; state.dashboardSearch.staff = []; state.dashboardSearch.ran = false; state.dashboardSearch.loading = false;
+        if (box) box.innerHTML = dirResultsHtml();
+        return;
+      }
+      state.dashboardSearch.loading = true;
+      if (box) box.innerHTML = dirResultsHtml();
+      dashSearchTimer = setTimeout(function () {
+        authed('api_searchDirectory', query).then(function (r) {
+          state.dashboardSearch.students = r.students || []; state.dashboardSearch.staff = r.staff || [];
+          state.dashboardSearch.loading = false; state.dashboardSearch.ran = true;
+          var b = document.getElementById('dash-results'); if (b) b.innerHTML = dirResultsHtml();
+        }).catch(function (err) {
+          state.dashboardSearch.students = []; state.dashboardSearch.staff = []; state.dashboardSearch.ran = true; state.dashboardSearch.loading = false;
+          var b2 = document.getElementById('dash-results'); if (b2) b2.innerHTML = '<div class="alert error">' + esc(err && err.message ? err.message : String(err)) + '</div>';
+        });
+      }, 300);
+    }
+    function latestAnnouncementsFrom(list) {
+      list = (list || []).slice(0, 3);
+      return '<div class="card" style="margin-top:20px"><div class="section-head"><h3>Latest announcements</h3></div>' + (list.length ? list.map(function (a) { return '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9"><div style="font-weight:600">' + esc(a.title) + '</div><div class="muted small">' + esc(a.body) + '</div></div>'; }).join('') : '<div class="muted small">No announcements yet.</div>') + '</div>';
+    }
+    function heroHtml(subtitle, badge) {
+      var first = state.user.fullName ? state.user.fullName.split(' ')[0] : '';
+      return '<div class="dash-hero"><div><h2>Welcome back' + (first ? ', ' + esc(first) : '') + '</h2><div class="sub">' + esc(subtitle) + '</div></div><span class="scope">' + esc(badge) + '</span></div>';
+    }
+    function staffDashboard(d) {
+      var s = d.students, st = d.staff;
+      var html = heroHtml((ROLE_LABELS[d.role] || d.role) + ' dashboard', d.scopeLabel);
+      html += '<div class="cards">' +
+        statCard('Students', s.total, s.active + ' active · ' + s.inactive + ' inactive', ICONS.students) +
+        (st.available ? statCard('Staff', st.total, st.active + ' active', ICONS.staff) : statCard('Subjects', state.boot.subjects.length, 'In curriculum', ICONS.classes)) +
+        statCard('Classes', d.classes.arms, 'Arms in scope', ICONS.classes) +
+        statCard('Current term', d.currentTerm ? d.currentTerm.label : '—', 'Academic session', ICONS.term) +
+        '</div>';
+      var secCard = '<div class="card"><div class="section-head"><h3>Students by section</h3></div><div class="bars">' +
+        d.sections.map(function (sec) { return barRow(SECTION_LABELS[sec] || sec, s.bySection[sec] || 0, s.total || 1, String(sec).toLowerCase()); }).join('') +
+        '</div><div class="muted small" style="margin-top:14px">Male ' + s.byGender.Male + ' · Female ' + s.byGender.Female + '</div></div>';
+      var staffCard = st.available
+        ? '<div class="card"><div class="section-head"><h3>Staff by section</h3></div><div class="bars">' +
+            d.sections.map(function (sec) { return barRow(SECTION_LABELS[sec] || sec, st.bySection[sec] || 0, st.total || 1, String(sec).toLowerCase()); }).join('') +
+            (d.role === 'ADMIN' && st.bySection.Unassigned ? barRow('Unassigned', st.bySection.Unassigned, st.total || 1, 'plain') : '') +
+          '</div></div>'
+        : attCard(d);
+      html += grid2([secCard, staffCard]);
+      html += '<div style="margin-top:20px"><div class="card"><div class="section-head"><h3>Enrollment by class</h3></div><div class="table-wrap"><table><thead><tr><th>Section</th><th>Class</th><th>Students</th></tr></thead><tbody>' +
+        (s.byLevel.length ? s.byLevel.map(function (r) { return '<tr><td>' + esc(SECTION_LABELS[r.section] || r.section) + '</td><td>' + esc(r.level) + '</td><td><strong>' + r.count + '</strong></td></tr>'; }).join('') : '<tr><td colspan="3" class="muted" style="text-align:center">No students yet.</td></tr>') +
+        '</tbody></table></div></div></div>';
+      var row2 = [];
+      if (st.available) row2.push(attCard(d));
+      if (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER'])) row2.push(payCard(d));
+      html += grid2(row2);
+      html += '<div style="margin-top:20px">' + searchPanel() + '</div>';
+      html += latestAnnouncementsFrom(d.announcements);
+      return html;
+    }
+    function financeDashboard(d) {
+      var p = d.payments;
+      var html = heroHtml((ROLE_LABELS[d.role] || d.role) + ' dashboard', 'Finance');
+      html += '<div class="cards">' +
+        statCard('Pending', p.pending, '₦' + fmtMoney(p.pendingAmount), ICONS.money) +
+        statCard('Verified', p.verified, '₦' + fmtMoney(p.verifiedAmount), ICONS.money) +
+        statCard('Rejected', p.rejected, 'Declined claims', ICONS.money) +
+        statCard('Total entries', p.count, 'All payments', ICONS.money) + '</div>';
+      html += grid2([attCard(d), payCard(d)]);
+      html += '<div style="margin-top:20px">' + searchPanel() + '</div>';
+      html += latestAnnouncementsFrom(d.announcements);
+      return html;
+    }
+    function parentDashboard(d) {
+      var pending = d.payments.filter(function (p) { return p.status === 'PENDING'; }).length;
+      var verified = d.payments.filter(function (p) { return p.status === 'VERIFIED'; }).length;
+      var html = heroHtml('Parent portal', d.wards.length + ' ward(s)');
+      html += '<div class="cards">' +
+        statCard('My wards', d.wards.length, 'Linked students', ICONS.students) +
+        statCard('Payments', d.payments.length, 'Submitted', ICONS.money) +
+        statCard('Pending', pending, 'Awaiting verification', ICONS.attendance) +
+        statCard('Verified', verified, 'Confirmed', ICONS.attendance) + '</div>';
+      if (d.wards.length) {
+        html += '<div style="margin-top:20px"><div class="card"><div class="section-head"><h3>My wards</h3></div>' + d.wards.map(function (w) {
+          return '<div class="dir-item">' + photoImg(w.photoFileId) + '<div><strong>' + esc(fullName(w)) + '</strong><div class="muted small">' + esc(w.admissionNo) + (w.classArm ? ' · ' + esc(armLabel(w.classArm)) : '') + '</div></div><div class="spacer"></div><button class="btn btn-outline btn-sm" data-action="open-report-ward" data-id="' + esc(w.id) + '">Report card</button></div>';
+        }).join('') + '</div></div>';
+      }
+      html += latestAnnouncementsFrom(d.announcements);
+      return html;
+    }
+
+    /* ---------------- students ---------------- */
+    function loadStudents() { state.busy = true; render(); authed('api_listStudents', { classArmId: state.students.classArmId, search: state.students.search }).then(function (list) { state.students.list = list; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewStudents() {
+      var s = state.students;
+      var body = '<div class="toolbar no-print"><div class="field" style="min-width:240px"><label>Class</label><select data-field="students-class">' + armOptions(s.classArmId) + '</select></div>' +
+        '<div class="field" style="min-width:220px"><label>Search</label><input type="text" data-field="students-search" value="' + esc(s.search) + '" placeholder="Name or admission no."></div>' +
+        '<div class="spacer"></div><button class="btn btn-primary" data-action="student-new">+ Add student</button></div>';
+      if (s.form) body += studentFormHtml(s.form);
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!s.list.length) return body + '<div class="empty">No students found for this class.</div>';
+      body += '<div class="table-wrap"><table><thead><tr><th></th><th>Admission No.</th><th>Name</th><th>Gender</th><th>Guardian</th><th>Phone</th><th></th></tr></thead><tbody>' +
+        s.list.map(function (st) { return '<tr><td>' + photoImg(st.photoFileId) + '</td><td>' + esc(st.admissionNo) + '</td><td><strong>' + esc(fullName(st)) + '</strong></td><td>' + esc(st.gender || '—') + '</td><td>' + esc(st.guardianName || '—') + '</td><td>' + esc(st.guardianPhone || '—') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="student-edit" data-id="' + esc(st.id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="student-delete" data-id="' + esc(st.id) + '">Delete</button></td></tr>'; }).join('') + '</tbody></table></div>';
+      return body;
+    }
+    function studentFormHtml(f) {
+      var isNew = !f.id;
+      return '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add student' : 'Edit student') + '</h3><form id="student-form" data-id="' + esc(f.id || '') + '">' +
+        '<div class="grid cols-3">' +
+        inputField('First name', 'firstName', f.firstName, true) + inputField('Middle name', 'middleName', f.middleName, true) + inputField('Last name', 'lastName', f.lastName, true) +
+        selField('Gender', 'gender', ['', 'Male', 'Female'], f.gender, true) + inputField('Date of birth', 'dateOfBirth', f.dateOfBirth, true, 'date') +
+        '<div class="field"><label>Class</label><select name="classArmId" required>' + armOptions(f.classArmId) + '</select></div>' +
+        inputField('Guardian name', 'guardianName', f.guardianName, true) + inputField('Guardian phone', 'guardianPhone', f.guardianPhone, true) +
+        selField('Status', 'status', ['ACTIVE', 'INACTIVE'], f.status || 'ACTIVE') + '</div>' +
+        '<div class="field"><label>Home address</label><textarea name="address" required>' + esc(f.address || '') + '</textarea></div>' +
+        '<div class="field"><label>Passport photo ' + (isNew ? '(required)' : '(required until one is on file)') + ', stored in Drive</label><input type="file" name="photo" accept="image/*"' + (isNew ? ' required' : '') + '></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Save student</button><button class="btn btn-outline" type="button" data-action="cancel-student">Cancel</button></div></form></div>';
+    }
+    function inputField(label, name, value, required, type) { return '<div class="field"><label>' + esc(label) + '</label><input name="' + name + '" type="' + (type || 'text') + '" value="' + esc(value || '') + '"' + (required ? ' required' : '') + '></div>'; }
+    function selField(label, name, list, value, required) { return '<div class="field"><label>' + esc(label) + '</label><select name="' + name + '"' + (required ? ' required' : '') + '>' + list.map(function (o) { return '<option value="' + esc(o) + '"' + (String(o) === String(value) ? ' selected' : '') + '>' + esc(o || '—') + '</option>'; }).join('') + '</select></div>'; }
+
+    /* ---------------- attendance ---------------- */
+    function loadRoster() { state.busy = true; render(); authed('api_getRoster', state.attendance.classArmId, state.attendance.date).then(function (r) { state.attendance.roster = r; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewAttendance() {
+      var a = state.attendance;
+      var body = '<div class="toolbar no-print"><div class="field" style="min-width:240px"><label>Class</label><select data-field="att-class">' + armOptions(a.classArmId) + '</select></div>' +
+        '<div class="field"><label>Date</label><input type="date" data-field="att-date" value="' + esc(a.date) + '"></div>' +
+        '<div class="spacer"></div><button class="btn btn-primary" data-action="attendance-save">Save attendance</button></div>';
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading roster…</div>';
+      if (!a.roster || !a.roster.students.length) return body + '<div class="empty">No students in this class yet.</div>';
+      body += '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th>Note</th></tr></thead><tbody>' +
+        a.roster.students.map(function (r) { return '<tr data-sid="' + esc(r.studentId) + '"><td><strong>' + esc(fullName(r.student)) + '</strong><div class="muted small">' + esc(r.student.admissionNo) + '</div></td>' +
+          '<td><div class="seg">' + ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map(function (st) { return '<button type="button" data-action="att-status" data-sid="' + esc(r.studentId) + '" data-status="' + st + '" class="' + (r.status === st ? 'on' : '') + '">' + st.charAt(0) + st.slice(1).toLowerCase() + '</button>'; }).join('') + '</div></td>' +
+          '<td><input type="text" data-action="att-note" data-sid="' + esc(r.studentId) + '" value="' + esc(r.note) + '" placeholder="Optional"></td></tr>'; }).join('') + '</tbody></table></div>';
+      return body;
+    }
+
+    /* ---------------- results ---------------- */
+    function loadResults() {
+      state.busy = true; render();
+      var r = state.results, subs = subjectsForArm(r.classArmId);
+      if (!r.subjectId && subs.length) r.subjectId = subs[0].id;
+      var task = r.tab === 'entry' ? authed('api_getScoreSheet', r.classArmId, r.termId, r.subjectId).then(function (sh) { r.sheet = sh; }) : authed('api_listResultSheets', r.classArmId, r.termId).then(function (sh) { r.sheets = sh; });
+      task.then(function () { state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewResults() {
+      var r = state.results, subs = subjectsForArm(r.classArmId);
+      var body = '<div class="toolbar no-print"><div class="field" style="min-width:220px"><label>Class</label><select data-field="res-class">' + armOptions(r.classArmId) + '</select></div>' +
+        '<div class="field" style="min-width:200px"><label>Term</label><select data-field="res-term">' + termOptions(r.termId) + '</select></div>' +
+        (r.tab === 'entry' ? '<div class="field" style="min-width:220px"><label>Subject</label><select data-field="res-subject"><option value="">Select subject…</option>' + optionsHtml(subs, function (s) { return s.id; }, r.subjectId, function (s) { return s.name; }) + '</select></div>' : '') +
+        '<div class="spacer"></div>' + (r.tab === 'entry' ? '<button class="btn btn-primary" data-action="scores-save">Save scores</button>' : '') + '</div>' +
+        '<div class="tabs no-print"><button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button><button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button></div>';
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (r.tab === 'entry') {
+        if (!r.subjectId) return body + '<div class="empty">Select a subject to enter scores.</div>';
+        if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
+        return body + '<div class="table-wrap"><table><thead><tr><th>Student</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>' +
+          r.sheet.rows.map(function (row) { return '<tr><td><strong>' + esc(fullName(row.student)) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(row.studentId) + '" value="' + esc(row[k]) + '"></td>'; }).join('') + '<td data-total-for="' + esc(row.studentId) + '">' + esc(row.total === '' ? '—' : row.total) + '</td><td>' + esc(row.grade || '—') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="muted small">CA1–CA3 out of 10 each; Exam out of 70.</p>';
+      }
+      body += '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-outline" data-action="results-compute">Compute</button><button class="btn btn-primary" data-action="results-publish">Publish</button></div>';
+      if (!r.sheets.length) return body + '<div class="empty">No result sheets yet. Compute first.</div>';
+      return body + '<div class="table-wrap"><table><thead><tr><th>#</th><th>Student</th><th>Total</th><th>Average</th><th>Status</th><th></th></tr></thead><tbody>' +
+        r.sheets.map(function (row) { return '<tr><td>' + esc(row.position || '—') + '</td><td><strong>' + esc(fullName(row.student)) + '</strong></td><td>' + esc(row.totalScore) + '</td><td>' + esc(row.average) + '</td><td>' + (row.status ? '<span class="badge ' + (row.status === 'PUBLISHED' ? 'ok' : 'warn') + '">' + esc(row.status) + '</span>' : '—') + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(row.student.id) + '">Report card</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+
+    /* ---------------- report card ---------------- */
+    function loadReport() { state.busy = true; render(); authed('api_getReportCard', state.report.studentId, state.report.termId || state.results.termId).then(function (d) { state.report.data = d; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewReport() {
+      if (state.busy || !state.report.data) return '<div class="page-loading"><span class="spinner"></span> Loading report card…</div>';
+      var d = state.report.data, canEdit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']);
+      var body = '<div class="toolbar no-print"><button class="btn btn-outline" data-action="back-results">← Back</button><div class="spacer"></div><button class="btn btn-primary" data-action="print-report">Print report card</button></div>' +
+        '<div class="card"><div class="report-head">' + (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '') + '<div><div class="school">' + esc(BRAND.schoolName) + '</div><div class="subtitle">' + esc(BRAND.subtitle) + ' — Terminal Report Sheet</div></div></div>' +
+        '<div class="report-meta"><div class="kv"><div class="k">Student</div><div class="v">' + esc(fullName(d.student)) + '</div><div class="k small">' + esc(d.student.admissionNo) + (d.student.classArm ? ' · ' + esc(armLabel(d.student.classArm)) : '') + '</div></div>' +
+        '<div class="kv"><div class="k">Term</div><div class="v">' + esc(d.term.label) + '</div></div>' +
+        '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(d.sheet.status) + '</div></div></div></div>' +
+        '<div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' +
+        (d.scores.length ? d.scores.map(function (s) { return '<tr><td>' + esc(s.subject.name) + '</td><td>' + esc(s.ca1 || '—') + '</td><td>' + esc(s.ca2 || '—') + '</td><td>' + esc(s.ca3 || '—') + '</td><td>' + esc(s.exam || '—') + '</td><td><strong>' + esc(s.total || '—') + '</strong></td><td>' + esc(s.grade || '—') + '</td><td>' + esc(s.remark || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No scores captured for this term.</td></tr>') + '</tbody></table></div>' +
+        '<div class="grid cols-2" style="margin-top:18px"><div><div class="muted small">Teacher\u2019s remark</div><div>' + esc(d.sheet.teacherRemark || '—') + '</div></div><div><div class="muted small">Principal\u2019s remark</div><div>' + esc(d.sheet.principalRemark || '—') + '</div></div></div>' +
+        '<div style="margin-top:18px"><div class="muted small" style="margin-bottom:6px">Grading scale</div>' + d.gradeScale.map(function (g) { return '<span class="badge" style="margin-right:6px">' + esc(g.grade) + ': ' + esc(g.minScore) + '–' + esc(g.maxScore) + ' (' + esc(g.remark) + ')</span>'; }).join('') + '</div>' + footerHtml(false) + '</div>';
+      if (canEdit) body += '<div class="card no-print"><h3 style="margin-top:0">Remarks</h3><form id="remarks-form"><div class="field"><label>Teacher\u2019s remark</label><textarea name="teacherRemark">' + esc(d.sheet.teacherRemark) + '</textarea></div><div class="field"><label>Principal\u2019s remark</label><textarea name="principalRemark">' + esc(d.sheet.principalRemark) + '</textarea></div><button class="btn btn-primary" type="submit">Save remarks</button></form></div>';
+      return body;
+    }
+
+    /* ---------------- staff ---------------- */
+    function loadStaff() { state.busy = true; render(); authed('api_listStaff', { search: state.staff.search }).then(function (list) { state.staff.list = list; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewStaff() {
+      var s = state.staff;
+      var body = '<div class="toolbar no-print"><div class="field" style="min-width:260px"><label>Search</label><input type="text" data-field="staff-search" value="' + esc(s.search) + '" placeholder="Name, staff no. or email"></div><div class="spacer"></div><button class="btn btn-primary" data-action="staff-new">+ Add staff</button></div>';
+      if (s.form) body += staffFormHtml(s.form);
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!s.list.length) return body + '<div class="empty">No staff records yet.</div>';
+      return body + '<div class="table-wrap"><table><thead><tr><th></th><th>Staff No.</th><th>Name</th><th>Designation</th><th>Section</th><th>Phone</th><th></th></tr></thead><tbody>' +
+        s.list.map(function (st) { return '<tr><td>' + photoImg(st.photoFileId) + '</td><td>' + esc(st.staffNo) + '</td><td><strong>' + esc(fullName(st)) + '</strong></td><td>' + esc(st.designation || '—') + '</td><td>' + esc(st.section || '—') + '</td><td>' + esc(st.phone || '—') + '</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="staff-edit" data-id="' + esc(st.id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="staff-delete" data-id="' + esc(st.id) + '">Delete</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+    function staffFormHtml(f) {
+      var isNew = !f.id;
+      return '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add staff' : 'Edit staff') + '</h3><form id="staff-form" data-id="' + esc(f.id || '') + '"><div class="grid cols-3">' +
+        inputField('First name', 'firstName', f.firstName, true) + inputField('Middle name', 'middleName', f.middleName) + inputField('Last name', 'lastName', f.lastName, true) +
+        selField('Gender', 'gender', ['', 'Male', 'Female'], f.gender) + inputField('Date of birth', 'dateOfBirth', f.dateOfBirth, false, 'date') + inputField('Date joined', 'dateJoined', f.dateJoined, false, 'date') +
+        inputField('Email', 'email', f.email, false, 'email') + inputField('Phone', 'phone', f.phone) + inputField('Designation', 'designation', f.designation) +
+        selField('Section', 'section', ['', 'KG', 'PRIMARY', 'SECONDARY'], f.section) + selField('Status', 'status', ['ACTIVE', 'INACTIVE'], f.status || 'ACTIVE') + '</div>' +
+        '<div class="field"><label>Address</label><textarea name="address">' + esc(f.address) + '</textarea></div>' +
+        '<div class="field"><label>Photo / document (optional, stored in Drive)</label><input type="file" name="photo" accept="image/*,.pdf"></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Save staff</button><button class="btn btn-outline" type="button" data-action="cancel-staff">Cancel</button></div></form></div>';
+    }
+
+    /* ---------------- teachers (role-scoped assignment) ---------------- */
+    function loadTeachers() { state.busy = true; render(); authed('api_listTeachers').then(function (list) { state.teachers.list = list; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewTeachers() {
+      var t = state.teachers;
+      var scopeNote = roleAllowed(['ADMIN']) ? 'You can manage teachers across all sections.' : (state.user.role === 'PRINCIPAL' ? 'You can only assign secondary-school teachers.' : 'You can only assign primary, nursery and creche teachers.');
+      var body = '<div class="section-head"><h3>Assign teachers</h3><span class="muted small">Set which classes each teacher owns. ' + scopeNote + '</span></div>' +
+        '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-primary" data-action="teacher-new">+ Add teacher</button></div>';
+      if (t.flash) body += '<div class="alert success">' + esc(t.flash.message) + (t.flash.password ? ' <strong>Temporary password (shows once):</strong> <code>' + esc(t.flash.password) + '</code>' : '') + '</div>';
+      if (t.form) body += teacherFormHtml();
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!t.list.length) return body + '<div class="empty">No teachers yet. Use “+ Add teacher” to create one.</div>';
+      body += '<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Username</th><th>Classes</th><th>Status</th><th></th></tr></thead><tbody>' +
+        t.list.map(function (x) {
+          var classes = (x.arms && x.arms.length) ? x.arms.map(function (a) { return esc(a.label); }).join('<br>') : '<span class="muted">All classes</span>';
+          return '<tr><td><strong>' + esc(x.fullName || x.username) + '</strong></td><td>' + esc(x.username) + '</td><td>' + classes + '</td><td>' + (x.active ? '<span class="badge ok">Active</span>' : '<span class="badge bad">Inactive</span>') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="teacher-edit" data-id="' + esc(x.id) + '">Assign classes</button> ' +
+            (x.active ? '<button class="btn btn-danger btn-sm" data-action="teacher-deactivate" data-id="' + esc(x.id) + '">Deactivate</button>' : '<button class="btn btn-outline btn-sm" data-action="teacher-activate" data-id="' + esc(x.id) + '">Activate</button>') +
+            ' <button class="btn btn-outline btn-sm" data-action="teacher-reset" data-id="' + esc(x.id) + '">Reset pw</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+      return body;
+    }
+    function teacherFormHtml() {
+      var f = state.teachers.form || {};
+      var isNew = !f.id;
+      var armIds = [];
+      if (f.arms && f.arms.length) armIds = f.arms.map(function (a) { return a.id; });
+      else armIds = String(f.classArmScope || '').split(',').filter(Boolean);
+      var groups = {};
+      state.boot.classArms.forEach(function (a) { var sec = a.classLevel ? a.classLevel.section : '?'; (groups[sec] = groups[sec] || []).push(a); });
+      var chips = '';
+      ['KG', 'PRIMARY', 'SECONDARY'].forEach(function (sec) {
+        if (!groups[sec]) return;
+        chips += '<div class="field" style="margin:2px 0 6px"><label>' + sec + ' (' + groups[sec].length + ' class' + (groups[sec].length > 1 ? 'es' : '') + ')</label><div>' +
+          groups[sec].map(function (a) { return '<label style="display:inline-flex;align-items:center;gap:6px;margin:2px 14px 2px 0;font-weight:500"><input type="checkbox" name="arm" value="' + esc(a.id) + '"' + (armIds.indexOf(a.id) !== -1 ? ' checked' : '') + '> ' + esc(a.classLevel.name + ' ' + a.name) + '</label>'; }).join('') + '</div></div>';
+      });
+      return '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add teacher' : 'Assign classes · ' + esc(f.username)) + '</h3><form id="teacher-form" data-id="' + esc(f.id || '') + '">' +
+        '<div class="grid cols-3">' + inputField('Username *', 'username', f.username || '', true) + inputField('Full name *', 'fullName', f.fullName || '', true) + inputField('Email (for credentials)', 'email', f.email || '', false, 'email') + '</div>' +
+        (isNew ? '<p class="muted small">A random password is generated and emailed to the address above; if no email is given it is shown once on screen.</p>' : '<p class="muted small">Tick the classes this teacher owns. Unticked classes are removed.</p>') +
+        chips +
+        '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">' + (isNew ? 'Create teacher' : 'Save assignment') + '</button><button class="btn btn-outline" type="button" data-action="teacher-cancel">Cancel</button></div></form></div>';
+    }
+
+    /* ---------------- admission applications ---------------- */
+    function loadApplications() { state.busy = true; render(); authed('api_listApplications').then(function (list) { state.applications.list = list; state.applications.detail = null; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function applyBadge(s) { var cls = s === 'ADMITTED' ? 'ok' : (s === 'REJECTED' ? 'bad' : 'warn'); return '<span class="badge ' + cls + '">' + esc(s) + '</span>'; }
+    function viewApplications() {
+      var app = state.applications;
+      var counts = { PENDING: 0, REVIEWED: 0, OFFERED: 0, ADMITTED: 0, REJECTED: 0 };
+      app.list.forEach(function (x) { if (counts[x.status] != null) counts[x.status]++; });
+      var scopeNote = state.user.role === 'PRINCIPAL' ? 'You see secondary-school applications only.' : (state.user.role === 'HEADMASTER' ? 'You see creche, nursery and primary applications only.' : 'You see applications for all sections.');
+      var body = '<div class="section-head"><h3>Admission applications</h3><span class="muted small">Submitted from the website. ' + scopeNote + '</span></div>';
+      var sum = '<div class="grid cols-5" style="margin-bottom:18px">' + ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED'].map(function (s) {
+        return '<div class="card" style="padding:14px;text-align:center"><div class="stat-num">' + counts[s] + '</div><div class="muted small">' + s + '</div></div>';
+      }).join('') + '</div>';
+      body += sum;
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (app.detail) {
+        var d = state.applications.list.filter(function (x) { return x.id === app.detail; })[0];
+        if (d) body += applicationDetailHtml(d) + '<div style="height:18px"></div>';
+      }
+      if (!app.list.length) return body + '<div class="empty">No applications yet.</div>';
+      body += '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Child</th><th>Applying for</th><th>Guardian</th><th>Phone</th><th>Submitted</th><th>Status</th><th></th></tr></thead><tbody>' +
+        app.list.map(function (x) {
+          return '<tr><td><code>' + esc(x.ref) + '</code></td><td><strong>' + esc([x.childFirstName, x.childMiddleName, x.childLastName].filter(Boolean).join(' ')) + '</strong></td><td>' + esc(x.applyingClass) + '</td><td>' + esc(x.guardianName) + '</td><td>' + esc(x.guardianPhone) + '</td><td>' + esc(String(x.submittedAt).slice(0, 10)) + '</td><td>' + applyBadge(x.status) + '</td>' +
+            '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="application-open" data-id="' + esc(x.id) + '">' + (app.detail === x.id ? 'Close' : 'Review') + '</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+      return body;
+    }
+    function applicationDetailHtml(d) {
+      var reviewCols = '<div class="grid cols-3">' + inputField('Child first name', 'f', d.childFirstName, false) + inputField('Child middle name', 'f', d.childMiddleName, false) + inputField('Child last name', 'f', d.childLastName, false) + '</div>' +
+        '<div class="grid cols-3">' + inputField('Gender', 'f', d.gender, false) + inputField('Date of birth', 'f', d.dateOfBirth, false) + inputField('Applying for', 'f', d.applyingClass + ' (' + (d.classLevelId || '') + ')', false) + '</div>' +
+        '<div class="grid cols-3">' + inputField('Guardian name', 'f', d.guardianName, false) + inputField('Guardian phone', 'f', d.guardianPhone, false) + inputField('Guardian email', 'f', d.guardianEmail || '—', false) + '</div>' +
+        '<div class="field"><label>Home address</label><div>' + esc(d.address || '—') + '</div></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Previous school</label><div>' + esc(d.previousSchool || '—') + '</div></div><div class="field"><label>Submitted</label><div>' + esc(d.submittedAt) + (d.reviewedBy ? '<div class="muted small">Last reviewed by ' + esc(d.reviewedBy) + (d.reviewedAt ? ' on ' + esc(String(d.reviewedAt).slice(0, 10)) : '') + '</div>' : '') + '</div></div></div>' +
+        (d.notes ? '<div class="field"><label>Notes</label><div>' + esc(d.notes) + '</div></div>' : '') +
+        '<div class="grid cols-2"><div class="field"><label>Passport photo</label><div>' + (d.photoUrl ? '<a href="' + esc(d.photoUrl) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div><div class="field"><label>Document (birth cert etc.)</label><div>' + (d.documentUrl ? '<a href="' + esc(d.documentUrl) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div></div>';
+      var statusOptions = (state.boot.admissionStatuses || ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED']).map(function (s) {
+        return '<option value="' + esc(s) + '"' + (String(s) === String(d.status) ? ' selected' : '') + '>' + esc(s) + '</option>';
+      }).join('');
+      return '<div class="card"><div class="row"><div><h3 style="margin:0">' + esc(d.ref) + '</h3><div class="muted small">' + esc([d.childFirstName, d.childLastName].filter(Boolean).join(' ')) + '</div></div><div class="spacer"></div>' + applyBadge(d.status) + '</div>' +
+        reviewCols +
+        '<form id="application-form" data-id="' + esc(d.id) + '"><div class="grid cols-3">' +
+        '<div class="field"><label>Status</label><select name="status">' + statusOptions + '</select></div>' +
+        '<div class="field" style="grid-column:span 2"><label>Remarks</label><textarea name="remarks" placeholder="e.g. documents verified, interview scheduled…">' + esc(d.remarks || '') + '</textarea></div></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Save review</button></div></form></div>';
+    }
+
+    /* ---------------- payments ---------------- */
+    function loadPayments() {
+      state.busy = true; render();
+      var tasks = [authed('api_listPayments', { status: state.payments.status })];
+      if (state.user.role === 'PARENT') tasks.push(authed('api_myWards'));
+      else tasks.push(authed('api_listStudents', {}));
+      Promise.all(tasks).then(function (res) { state.payments.list = res[0] || []; state.payments.options = res[1] || []; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewPayments() {
+      var p = state.payments, isParent = state.user.role === 'PARENT', canVerify = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER']);
+      var body = '<div class="toolbar no-print">' + (canVerify ? '<div class="field" style="min-width:180px"><label>Status</label><select data-field="pay-status">' + ['', 'PENDING', 'VERIFIED', 'REJECTED'].map(function (s) { return '<option value="' + s + '"' + (String(s) === String(p.status) ? ' selected' : '') + '>' + (s || 'All') + '</option>'; }).join('') + '</select></div>' : '') +
+        '<div class="spacer"></div><button class="btn btn-primary" data-action="pay-new">+ ' + (isParent ? 'Submit payment' : 'Record payment') + '</button></div>';
+      if (p.form) body += paymentFormHtml(p.form, p.options, isParent);
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!p.list.length) return body + '<div class="empty">No payments recorded yet.</div>';
+      return body + '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Amount</th><th>Method</th><th>Ref</th><th>Evidence</th><th>Status</th><th></th></tr></thead><tbody>' +
+        p.list.map(function (x) { return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><strong>' + esc(x.studentName) + '</strong><div class="muted small">' + esc(x.admissionNo) + '</div></td><td>' + esc(x.category) + '</td><td>' + esc(x.amount) + '</td><td>' + esc(x.method || '—') + '</td><td>' + esc(x.reference || '—') + '</td><td>' + (x.evidenceUrl ? '<a href="' + esc(x.evidenceUrl) + '" target="_blank">View</a>' : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap">' + (canVerify && x.status === 'PENDING' ? '<button class="btn btn-outline btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="VERIFIED">Verify</button> <button class="btn btn-danger btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="REJECTED">Reject</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+    function badgeStatus(s) { var cls = s === 'VERIFIED' ? 'ok' : (s === 'REJECTED' ? 'bad' : 'warn'); return '<span class="badge ' + cls + '">' + esc(s) + '</span>'; }
+    function paymentFormHtml(f, options, isParent) {
+      return '<div class="card"><h3 style="margin-top:0">' + (isParent ? 'Submit payment / evidence' : 'Record payment') + '</h3><form id="payment-form">' +
+        '<div class="grid cols-3"><div class="field"><label>' + (isParent ? 'Ward' : 'Student') + '</label><select name="studentId" required><option value="">Select…</option>' + optionsHtml(options, function (o) { return o.id; }, '', function (o) { return fullName(o) + ' — ' + (o.admissionNo || ''); }) + '</select></div>' +
+        '<div class="field"><label>Purpose</label><select name="category">' + state.boot.paymentCategories.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Amount (₦)</label><input name="amount" type="number" min="0" step="0.01" required></div>' +
+        '<div class="field"><label>Term</label><select name="termId">' + termOptions(state.boot.currentTermId) + '</select></div>' +
+        '<div class="field"><label>Method</label><input name="method" type="text" placeholder="Transfer / Cash / POS"></div>' +
+        '<div class="field"><label>Reference</label><input name="reference" type="text" placeholder="Teller / transaction no."></div></div>' +
+        '<div class="field"><label>Note</label><textarea name="note" placeholder="Items paid for: fees, uniform, books…"></textarea></div>' +
+        '<div class="field"><label>Evidence (receipt / teller — stored in Drive)</label><input type="file" name="evidence" accept="image/*,.pdf"></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Submit</button><button class="btn btn-outline" type="button" data-action="cancel-payment">Cancel</button></div></form></div>';
+    }
+
+    /* ---------------- parent wards ---------------- */
+    function loadWards() { state.busy = true; render(); Promise.all([authed('api_myWards'), authed('api_listPayments', {})]).then(function (res) { state.wards.list = res[0] || []; state.wards.payments = res[1] || []; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewWards() {
+      if (state.busy) return '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!state.wards.list.length) return '<div class="empty">No wards are linked to your account yet. Please contact the school office.</div>';
+      return state.wards.list.map(function (w) {
+        var pays = state.wards.payments.filter(function (p) { return String(p.studentId) === String(w.id); });
+        return '<div class="card" style="margin-bottom:16px"><div class="row">' + photoImg(w.photoFileId) + '<div><strong>' + esc(fullName(w)) + '</strong><div class="muted small">' + esc(w.admissionNo) + (w.classArm ? ' · ' + esc(armLabel(w.classArm)) : '') + '</div></div>' +
+          '<div class="spacer"></div><button class="btn btn-outline btn-sm" data-action="open-report-ward" data-id="' + esc(w.id) + '">Report card</button></div>' +
+          '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Purpose</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>' +
+          (pays.length ? pays.map(function (p) { return '<tr><td>' + esc(String(p.createdAt).slice(0, 10)) + '</td><td>' + esc(p.category) + '</td><td>' + esc(p.amount) + '</td><td>' + badgeStatus(p.status) + '</td><td>' + (p.evidenceUrl ? '<a href="' + esc(p.evidenceUrl) + '" target="_blank">Evidence</a>' : '') + '</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted" style="text-align:center">No payments yet.</td></tr>') + '</tbody></table></div></div>';
+      }).join('');
+    }
+
+    /* ---------------- admin ---------------- */
+    function loadAdmin() {
+      state.busy = true; render();
+      if (state.admin.tab === 'ParentStudents') {
+        Promise.all([authed('api_listRef', 'ParentStudents'), authed('api_listRef', 'Users'), authed('api_listStudents', {})]).then(function (res) {
+          state.admin.rows = res[0] || []; state.admin.parentUsers = (res[1] || []).filter(function (u) { return u.role === 'PARENT'; }); state.admin.studentsList = res[2] || []; state.busy = false; render();
+        }).catch(function (err) { state.busy = false; setError(err); });
+        return;
+      }
+      authed('api_listRef', state.admin.tab).then(function (rows) { state.admin.rows = rows; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewAdmin() {
+      var a = state.admin;
+      var tabsList = ADMIN_TABS;
+      var body = '<div class="tabs no-print">' + tabsList.map(function (t) { return '<button data-action="admin-tab" data-tab="' + t.key + '" class="' + (a.tab === t.key ? 'active' : '') + '">' + esc(t.label) + '</button>'; }).join('') + '</div>' +
+        '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-primary" data-action="admin-new">+ Add</button></div>';
+      if (a.form) body += adminFormHtml(a.tab, a.form);
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      body += adminTableHtml(a.tab);
+      return body;
+    }
+    function adminTableHtml(tab) {
+      var rows = state.admin.rows;
+      if (!rows.length) return '<div class="empty">No records yet.</div>';
+      if (tab === 'ClassLevels') return wrap(['Section', 'Name', 'Order', ''], rows.map(function (r) { return row([esc(r.section), esc(r.name), esc(r.orderIndex), actions(r.id)]); }));
+      if (tab === 'ClassArms') return wrap(['Class level', 'Arm', ''], rows.map(function (r) { return row([esc(levelName(r.classLevelId)), esc(r.name), actions(r.id)]); }));
+      if (tab === 'Subjects') return wrap(['Section', 'Subject', ''], rows.map(function (r) { return row([esc(r.section), esc(r.name), actions(r.id)]); }));
+      if (tab === 'SubjectClass') return wrap(['Subject', 'Class level', ''], rows.map(function (r) { return row([esc(subjectName(r.subjectId)), esc(levelName(r.classLevelId)), actions(r.id)]); }));
+      if (tab === 'Terms') return wrap(['Session', 'Term', 'Current', ''], rows.map(function (r) { return row([esc(r.sessionName), esc(TERM_LABELS[r.termName] || r.termName), ((r.isCurrent === true || String(r.isCurrent) === 'true') ? '<span class="badge ok">Current</span>' : '—'), actions(r.id)]); }));
+      if (tab === 'GradeScale') return wrap(['Section', 'Grade', 'Min', 'Max', 'Remark', ''], rows.map(function (r) { return row([esc(r.section), esc(r.grade), esc(r.minScore), esc(r.maxScore), esc(r.remark), actions(r.id)]); }));
+      if (tab === 'ParentStudents') return wrap(['Parent', 'Ward', 'Relationship', ''], rows.map(function (r) { return row([esc(r.parentName), esc(r.studentName), esc(r.relationship || '—'), actions(r.id)]); }));
+      return '';
+    }
+    function wrap(headers, rows) { return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>'; }
+    function row(cells) { return '<tr>' + cells.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }
+    function actions(id) { return '<div style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="admin-edit" data-id="' + esc(id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="admin-delete" data-id="' + esc(id) + '">Delete</button></div>'; }
+    function levelName(id) { var l = findIn(state.boot.classLevelsAll, id); return l ? l.name : '—'; }
+    function subjectName(id) { var s = findIn(state.boot.subjects, id); return s ? s.name : '—'; }
+    function adminFormHtml(tab, f) {
+      var isNew = !f.id, s = '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add' : 'Edit') + '</h3><form id="admin-form" data-id="' + esc(f.id || '') + '">';
+      if (tab === 'ClassLevels') s += '<div class="grid cols-3">' + selField('Section', 'section', state.boot.sections, f.section) + inputField('Name', 'name', f.name, true) + inputField('Order', 'orderIndex', f.orderIndex || 0, false, 'number') + '</div>';
+      else if (tab === 'ClassArms') s += '<div class="grid cols-2"><div class="field"><label>Class level</label><select name="classLevelId">' + optionsHtml(state.boot.classLevelsAll, function (o) { return o.id; }, f.classLevelId, function (o) { return o.name; }) + '</select></div>' + inputField('Arm name', 'name', f.name, true) + '</div>';
+      else if (tab === 'Subjects') s += '<div class="grid cols-2">' + selField('Section', 'section', state.boot.sections, f.section) + inputField('Subject name', 'name', f.name, true) + '</div>';
+      else if (tab === 'SubjectClass') s += '<div class="grid cols-2"><div class="field"><label>Subject</label><select name="subjectId">' + optionsHtml(state.boot.subjects, function (o) { return o.id; }, f.subjectId, function (o) { return o.name; }) + '</select></div><div class="field"><label>Class level</label><select name="classLevelId">' + optionsHtml(state.boot.classLevelsAll, function (o) { return o.id; }, f.classLevelId, function (o) { return o.name; }) + '</select></div></div>';
+      else if (tab === 'Terms') s += '<div class="grid cols-3">' + inputField('Session', 'sessionName', f.sessionName, true) + selField('Term', 'termName', ['FIRST', 'SECOND', 'THIRD'], f.termName) + selField('Current', 'isCurrent', ['false', 'true'], String(f.isCurrent === true)) + '</div>';
+      else if (tab === 'GradeScale') s += '<div class="grid cols-4">' + selField('Section', 'section', state.boot.sections, f.section) + inputField('Grade', 'grade', f.grade, true) + inputField('Min', 'minScore', f.minScore || 0, false, 'number') + inputField('Max', 'maxScore', f.maxScore || 0, false, 'number') + '</div><div class="grid cols-2">' + inputField('Remark', 'remark', f.remark) + inputField('Order', 'orderIndex', f.orderIndex || 0, false, 'number') + '</div>';
+      else if (tab === 'ParentStudents') s += '<div class="grid cols-3"><div class="field"><label>Parent</label><select name="parentUserId">' + optionsHtml(state.admin.parentUsers, function (o) { return o.id; }, f.parentUserId, function (o) { return o.fullName || o.username; }) + '</select></div><div class="field"><label>Ward (student)</label><select name="studentId">' + optionsHtml(state.admin.studentsList, function (o) { return o.id; }, f.studentId, function (o) { return fullName(o) + ' — ' + (o.admissionNo || ''); }) + '</select></div>' + inputField('Relationship', 'relationship', f.relationship) + '</div>';
+      s += '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Save</button><button class="btn btn-outline" type="button" data-action="admin-cancel">Cancel</button></div></form></div>';
+      return s;
+    }
+
+    /* ---------------- users (admin panel) ---------------- */
+    function loadUsers() {
+      state.busy = true; render();
+      Promise.all([authed('api_listUsers'), authed('api_listAudit')]).then(function (res) {
+        state.users.list = res[0] || []; state.users.audit = res[1] || [];
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewUsers() {
+      var u = state.users;
+      var body = '<div class="section-head"><h3>Manage users</h3><span class="muted small">Account holders across the school. Passwords are never stored in plain text and cannot be viewed here.</span></div>' +
+        '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-primary" data-action="user-new">+ Add user</button></div>';
+      if (u.flash) body += '<div class="alert success">' + esc(u.flash.message) + (u.flash.password ? ' <strong>Temporary password (shows once):</strong> <code>' + esc(u.flash.password) + '</code>' : '') + '</div>';
+      if (u.form) body += userFormHtml();
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      body += userTableHtml();
+      body += '<div class="section-head" style="margin-top:28px"><h3>Audit log</h3></div>' + auditTableHtml();
+      return body;
+    }
+    function userFormHtml() {
+      var f = state.users.form || {};
+      return '<div class="card"><h3 style="margin-top:0">Add user</h3><form id="user-form">' +
+        '<div class="grid cols-3">' + inputField('Username *', 'username', f.username || '', true) + inputField('Full name', 'fullName', f.fullName || '') + selField('Role *', 'role', state.boot.roles, f.role || 'TEACHER') + '</div>' +
+        '<div class="grid cols-3">' + inputField('Email (for credentials)', 'email', f.email || '', false, 'email') + inputField('Section scope (blank = all)', 'sectionScope', f.sectionScope || '') + inputField('Class-arm ids (blank = all)', 'classArmScope', f.classArmScope || '') + '</div>' +
+        '<p class="muted small">A random password is generated and emailed to the address above. If no email is given, the password is shown once on screen.</p>' +
+        '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Create user</button><button class="btn btn-outline" type="button" data-action="user-cancel">Cancel</button></div></form></div>';
+    }
+    function userTableHtml() {
+      var rowsHtml = state.users.list.map(function (u) {
+        var toggle = u.active ? '<button class="btn btn-outline btn-sm" data-action="user-deactivate" data-id="' + esc(u.id) + '">Deactivate</button>' : '<button class="btn btn-primary btn-sm" data-action="user-activate" data-id="' + esc(u.id) + '">Activate</button>';
+        var scope = u.sectionScope || 'All';
+        var cell = '<div style="text-align:right;white-space:nowrap">' + toggle + ' <button class="btn btn-outline btn-sm" data-action="user-reset" data-id="' + esc(u.id) + '">Reset password</button></div>';
+        return row([esc(u.username), esc(u.fullName || '—'), esc(ROLE_LABELS[u.role] || u.role), esc(u.email || '—'), esc(scope), (u.active ? '<span class="badge ok">Yes</span>' : '<span class="badge warn">No</span>'), cell]);
+      }).join('');
+      return '<div class="table-wrap"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Email</th><th>Sections</th><th>Active</th><th></th></tr></thead><tbody>' +
+        (rowsHtml || '<tr><td colspan="7" class="muted" style="text-align:center">No users yet.</td></tr>') + '</tbody></table></div>';
+    }
+    function auditTableHtml() {
+      var rowsHtml = state.users.audit.map(function (a) {
+        return row([esc(String(a.at).replace('T', ' ').slice(0, 16)), esc(a.actorUsername || '—'), esc(a.action), esc(a.target || '—'), esc(a.detail || '')]);
+      }).join('');
+      return '<div class="table-wrap"><table><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead><tbody>' +
+        (rowsHtml || '<tr><td colspan="5" class="muted" style="text-align:center">No activity yet.</td></tr>') + '</tbody></table></div>';
+    }
+    function pwFormHtml() {
+      return '<div class="card" style="margin-bottom:16px"><h3 style="margin-top:0">Change my password</h3><form id="pw-form">' +
+        '<div class="grid cols-3">' + inputField('Current password', 'oldPassword', '', true, 'password') + inputField('New password (min 8 characters)', 'newPassword', '', true, 'password') + inputField('Confirm new password', 'confirmPassword', '', true, 'password') + '</div>' +
+        '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Change password</button><button class="btn btn-outline" type="button" data-action="cancel-pw">Cancel</button></div></form></div>';
+    }
+    function addUserSubmit(form) {
+      var data = collect(form);
+      state.busy = true; clearMessages(); render();
+      authed('api_addUser', data).then(function (r) {
+        state.users.form = null;
+        if (r.password) state.users.flash = { message: r.message, password: r.password };
+        else state.notice = r.message;
+        state.busy = false;
+        loadUsers();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function changePwSubmit(form) {
+      var oldP = form.oldPassword.value, newP = form.newPassword.value, conf = form.confirmPassword.value;
+      if (!newP || newP.length < 8) return setError(new Error('New password must be at least 8 characters.'));
+      if (newP !== conf) return setError(new Error('New passwords do not match.'));
+      state.busy = true; clearMessages(); render();
+      authed('api_changeOwnPassword', oldP, newP).then(function () {
+        authed('api_logout').catch(function () {});
+        state.token = ''; state.user = null; state.boot = null; state.pwForm = false;
+        sessionStorage.removeItem('kms_token');
+        state.notice = 'Password changed. Please sign in again.';
+        render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+
+    /* ---------------- announcements ---------------- */
+    function loadAnnouncements() { state.busy = true; render(); authed('api_listAnnouncements').then(function (list) { state.announcements.list = list; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function viewAnnouncements() {
+      var a = state.announcements, canPost = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'TEACHER']), body = '';
+      if (canPost) {
+        body += '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-primary" data-action="ann-new">+ New announcement</button></div>';
+        if (a.form) body += '<div class="card"><form id="ann-form"><div class="field"><label>Title</label><input name="title" type="text" required></div>' +
+          '<div class="grid cols-2"><div class="field"><label>Audience</label><select name="audience">' + state.boot.audiences.map(function (x) { return '<option value="' + x + '">' + x + '</option>'; }).join('') + '</select><div class="muted small" style="margin-top:4px">Choose <strong>WEBSITE</strong> to show this on the public site marquee.</div></div>' +
+          '<div class="field"><label>Label <span class="muted small">(optional badge)</span></label><input name="category" type="text" placeholder="Announcement"></div></div>' +
+          '<div class="field"><label>Message</label><textarea name="body" required></textarea></div>' +
+          '<div class="field"><label>Link <span class="muted small">(optional)</span></label><input name="link" type="url" placeholder="https://"></div>' +
+          '<div class="row"><button class="btn btn-primary" type="submit">Post</button><button class="btn btn-outline" type="button" data-action="cancel-ann">Cancel</button></div></form></div>';
+      }
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!a.list.length) return body + '<div class="empty">No announcements yet.</div>';
+      return body + a.list.map(function (item) { return '<div class="card" style="margin-bottom:14px"><div class="row"><strong>' + esc(item.title) + '</strong><span class="badge">' + esc(item.audience) + '</span>' + (item.category ? ' <span class="badge">' + esc(item.category) + '</span>' : '') + '<div class="spacer"></div><span class="muted small">' + esc(String(item.createdAt).slice(0, 10)) + '</span>' + (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER']) ? ' <button class="btn btn-danger btn-sm" data-action="ann-delete" data-id="' + esc(item.id) + '">Delete</button>' : '') + '</div><p style="margin:10px 0 0">' + esc(item.body) + '</p>' + (item.link ? '<p style="margin:8px 0 0"><a href="' + esc(item.link) + '" target="_blank" rel="noreferrer">' + esc(item.link) + '</a></p>' : '') + '</div>'; }).join('');
+    }
+
+    /* ---------------- events ---------------- */
+    document.addEventListener('click', function (e) {
+      var nav = e.target.closest('[data-nav]');
+      if (nav) { document.body.classList.remove('nav-open'); navigate(nav.getAttribute('data-nav')); return; }
+      var el = e.target.closest('[data-action]'); if (!el) return;
+      var a = el.getAttribute('data-action'), id = el.getAttribute('data-id');
+      switch (a) {
+        case 'toggle-nav': document.body.classList.toggle('nav-open'); return;
+        case 'close-nav': document.body.classList.remove('nav-open'); return;
+        case 'signout': authed('api_logout').catch(function () {}); state.token = ''; state.user = null; state.boot = null; sessionStorage.removeItem('kms_token'); clearMessages(); document.body.classList.remove('nav-open'); render(); return;
+        case 'student-new': state.students.form = { classArmId: state.students.classArmId, status: 'ACTIVE' }; clearMessages(); render(); return;
+        case 'cancel-student': state.students.form = null; render(); return;
+        case 'student-edit': var st = findIn(state.students.list, id); if (st) { state.students.form = JSON.parse(JSON.stringify(st)); clearMessages(); render(); } return;
+        case 'student-delete': if (confirm('Delete this student?')) act(authed('api_deleteStudent', id), 'Student deleted.', loadStudents); return;
+        case 'att-status': setAttStatus(el.getAttribute('data-sid'), el.getAttribute('data-status')); return;
+        case 'attendance-save': saveAttendance(); return;
+        case 'res-tab': state.results.tab = el.getAttribute('data-tab'); clearMessages(); loadResults(); return;
+        case 'scores-save': saveScores(); return;
+        case 'results-compute': act(authed('api_computeResults', state.results.classArmId, state.results.termId), 'Results computed.', function () { state.results.tab = 'sheets'; loadResults(); }); return;
+        case 'results-publish': if (confirm('Publish results for this class/term?')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, true), 'Results published.', loadResults); return;
+        case 'open-report': case 'open-report-ward': state.report.studentId = id; state.report.termId = state.results.termId; navigate('reportcard'); return;
+        case 'back-results': navigate(state.user.role === 'PARENT' ? 'my-wards' : 'results'); return;
+        case 'print-report': window.print(); return;
+        case 'staff-new': state.staff.form = { status: 'ACTIVE' }; clearMessages(); render(); return;
+        case 'cancel-staff': state.staff.form = null; render(); return;
+        case 'staff-edit': var sf = findIn(state.staff.list, id); if (sf) { state.staff.form = JSON.parse(JSON.stringify(sf)); clearMessages(); render(); } return;
+        case 'staff-delete': if (confirm('Delete this staff record?')) act(authed('api_deleteStaff', id), 'Staff deleted.', loadStaff); return;
+        case 'teacher-new': state.teachers.form = {}; state.teachers.flash = null; clearMessages(); render(); return;
+        case 'teacher-cancel': state.teachers.form = null; render(); return;
+        case 'teacher-edit': var te = findIn(state.teachers.list, id); if (te) { state.teachers.form = JSON.parse(JSON.stringify(te)); state.teachers.flash = null; clearMessages(); render(); } return;
+        case 'teacher-activate': act(authed('api_setTeacherActive', id, true), 'Teacher activated.', loadTeachers); return;
+        case 'teacher-deactivate': var td = findIn(state.teachers.list, id); if (td && confirm('Deactivate ' + td.username + '? They will be signed out and unable to sign in.')) act(authed('api_setTeacherActive', id, false), 'Teacher deactivated.', loadTeachers); return;
+        case 'teacher-reset': var tr = findIn(state.teachers.list, id); if (tr && confirm('Send ' + tr.username + ' a new password? Their current sessions will be ended.')) { state.busy = true; clearMessages(); render(); authed('api_resetTeacherPassword', id).then(function (r) { state.teachers.flash = { message: r.message, password: r.password || '' }; state.busy = false; loadTeachers(); }).catch(function (err) { state.busy = false; setError(err); }); } return;
+        case 'application-open': state.applications.detail = state.applications.detail === id ? null : id; clearMessages(); render(); return;
+        case 'pay-new': state.payments.form = true; clearMessages(); render(); return;
+        case 'cancel-payment': state.payments.form = null; render(); return;
+        case 'pay-verify': act(authed('api_verifyPayment', id, el.getAttribute('data-decision')), 'Payment updated.', loadPayments); return;
+        case 'admin-tab': state.admin.tab = el.getAttribute('data-tab'); state.admin.form = null; clearMessages(); loadAdmin(); return;
+        case 'admin-new': state.admin.form = {}; clearMessages(); render(); return;
+        case 'admin-edit': var rec = findIn(state.admin.rows, id); if (rec) { state.admin.form = JSON.parse(JSON.stringify(rec)); clearMessages(); render(); } return;
+        case 'admin-delete': if (confirm('Delete this record?')) act(authed('api_deleteRef', state.admin.tab, id), 'Deleted.', loadAdmin); return;
+        case 'admin-cancel': state.admin.form = null; render(); return;
+        case 'change-pw': state.pwForm = true; clearMessages(); render(); return;
+        case 'cancel-pw': state.pwForm = false; render(); return;
+        case 'user-new': state.users.form = { role: 'TEACHER' }; state.users.flash = null; clearMessages(); render(); return;
+        case 'user-cancel': state.users.form = null; state.users.flash = null; render(); return;
+        case 'user-activate': act(authed('api_setUserActive', id, true), 'User activated.', loadUsers); return;
+        case 'user-deactivate': var ut = findIn(state.users.list, id); if (ut && (ut.active === false || confirm('Deactivate ' + ut.username + '? They will be signed out and unable to sign in.'))) act(authed('api_setUserActive', id, false), 'User deactivated.', loadUsers); return;
+        case 'user-reset': var ur = findIn(state.users.list, id); if (ur && confirm('Send ' + ur.username + ' a new password? Their current sessions will be ended.')) { state.busy = true; clearMessages(); render(); authed('api_resetUserPassword', id).then(function (r) { state.users.flash = { message: r.message, password: r.password || '' }; state.busy = false; loadUsers(); }).catch(function (err) { state.busy = false; setError(err); }); } return;
+        case 'ann-new': state.announcements.form = true; clearMessages(); render(); return;
+        case 'cancel-ann': state.announcements.form = false; render(); return;
+        case 'ann-delete': if (confirm('Delete this announcement?')) act(authed('api_deleteAnnouncement', id), 'Deleted.', loadAnnouncements); return;
+      }
+    });
+    function act(promise, notice, reload) { state.busy = true; clearMessages(); render(); promise.then(function () { state.notice = notice; state.busy = false; reload(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    document.addEventListener('change', function (e) {
+      var t = e.target, f = t.getAttribute && t.getAttribute('data-field');
+      if (f === 'students-class') { state.students.classArmId = t.value; clearMessages(); loadStudents(); }
+      else if (f === 'students-search') { state.students.search = t.value; loadStudents(); }
+      else if (f === 'staff-search') { state.staff.search = t.value; loadStaff(); }
+      else if (f === 'att-class') { state.attendance.classArmId = t.value; clearMessages(); loadRoster(); }
+      else if (f === 'att-date') { state.attendance.date = t.value; clearMessages(); loadRoster(); }
+      else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; clearMessages(); loadResults(); }
+      else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
+      else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
+      else if (f === 'pay-status') { state.payments.status = t.value; clearMessages(); loadPayments(); }
+      else if (t.getAttribute('data-action') === 'att-note') { setAttNote(t.getAttribute('data-sid'), t.value); }
+    });
+    document.addEventListener('input', function (e) {
+      var t = e.target;
+      if (t.getAttribute && t.getAttribute('data-field') === 'dash-search') { scheduleDashSearch(t.value); return; }
+      if (t.getAttribute('data-action') === 'att-note') setAttNote(t.getAttribute('data-sid'), t.value);
+      if (t.getAttribute('data-score')) { var rowEl = t.closest('tr'), sid = t.getAttribute('data-sid'), total = 0; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = rowEl.querySelector('[data-score="' + k + '"]'); total += inp && inp.value !== '' ? Number(inp.value) : 0; }); var cell = document.querySelector('[data-total-for="' + sid + '"]'); if (cell) cell.textContent = total; }
+    });
+    document.addEventListener('submit', function (e) {
+      var form = e.target; e.preventDefault();
+      if (form.id === 'login-form') doLogin(form);
+      else if (form.id === 'student-form') saveStudent(form);
+      else if (form.id === 'staff-form') saveStaff(form);
+      else if (form.id === 'teacher-form') saveTeacher(form);
+      else if (form.id === 'application-form') saveApplication(form);
+      else if (form.id === 'payment-form') savePayment(form);
+      else if (form.id === 'admin-form') saveAdmin(form);
+      else if (form.id === 'ann-form') saveAnnouncement(form);
+      else if (form.id === 'remarks-form') saveRemarks(form);
+      else if (form.id === 'user-form') addUserSubmit(form);
+      else if (form.id === 'pw-form') changePwSubmit(form);
+    });
+
+    /* ---------------- form actions ---------------- */
+    function doLogin(form) { state.busy = true; state.error = null; render(); call('api_login', form.username.value.trim(), form.password.value).then(function (r) { state.token = r.token; sessionStorage.setItem('kms_token', r.token); state.user = r.user; return authed('api_bootstrap'); }).then(afterBoot).catch(function (err) { state.busy = false; state.error = err.message; render(); }); }
+    function collect(form) { var data = {}; form.querySelectorAll('[name]').forEach(function (el) { if (el.type !== 'file') data[el.getAttribute('name')] = el.value; }); if (form.getAttribute('data-id')) data.id = form.getAttribute('data-id'); return data; }
+    function saveStudent(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=photo]')).then(function (file) { if (file) data.photo = file; return authed('api_saveStudent', data); }).then(function () { state.students.form = null; state.notice = 'Student saved.'; loadStudents(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveStaff(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=photo]')).then(function (file) { if (file) data.photo = file; return authed('api_saveStaff', data); }).then(function () { state.staff.form = null; state.notice = 'Staff saved.'; loadStaff(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveTeacher(form) {
+      var data = collect(form);
+      data.armIds = Array.prototype.slice.call(form.querySelectorAll('input[name="arm"]:checked')).map(function (c) { return c.value; });
+      state.busy = true; clearMessages(); render();
+      authed('api_saveTeacher', data).then(function (r) {
+        state.teachers.form = null;
+        if (r.password) state.teachers.flash = { message: r.message, password: r.password };
+        else state.notice = r.message || (data.id ? 'Assignment saved.' : 'Teacher created.');
+        state.busy = false; loadTeachers();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function saveApplication(form) {
+      var data = collect(form);
+      state.busy = true; clearMessages(); render();
+      authed('api_updateApplication', data.id, { status: data.status, remarks: data.remarks }).then(function () {
+        state.notice = 'Application updated.'; state.busy = false; loadApplications();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function savePayment(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=evidence]')).then(function (file) { if (file) data.evidence = file; return authed('api_savePayment', data); }).then(function () { state.payments.form = null; state.notice = 'Payment submitted.'; loadPayments(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveAdmin(form) { act(authed('api_saveRef', state.admin.tab, collect(form)), 'Saved.', function () { state.admin.form = null; loadAdmin(); }); }
+    function saveAnnouncement(form) { var data = collect(form); state.busy = true; clearMessages(); render(); authed('api_saveAnnouncement', data).then(function () { state.announcements.form = false; state.notice = 'Announcement posted.'; loadAnnouncements(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveRemarks(form) { state.busy = true; clearMessages(); render(); authed('api_saveRemarks', state.report.studentId, state.report.termId || state.results.termId, { teacherRemark: form.teacherRemark.value, principalRemark: form.principalRemark.value }).then(function () { state.notice = 'Remarks saved.'; loadReport(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function setAttStatus(sid, status) { var r = state.attendance.roster; if (!r) return; r.students.forEach(function (x) { if (x.studentId === sid) x.status = status; }); var tr = document.querySelector('tr[data-sid="' + sid + '"]'); if (tr) tr.querySelectorAll('[data-action="att-status"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-status') === status); }); }
+    function setAttNote(sid, note) { var r = state.attendance.roster; if (r) r.students.forEach(function (x) { if (x.studentId === sid) x.note = note; }); }
+    function saveAttendance() { var r = state.attendance.roster; if (!r) return; var records = r.students.map(function (x) { return { studentId: x.studentId, status: x.status, note: x.note }; }); act(authed('api_saveAttendance', state.attendance.classArmId, state.attendance.date, records), 'Attendance saved.', loadRoster); }
+    function saveScores() { var sh = state.results.sheet; if (!sh) return; var records = sh.rows.map(function (row) { var rec = { studentId: row.studentId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]'); rec[k] = inp ? inp.value : ''; }); return rec; }); act(authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records), 'Scores saved.', loadResults); }
+
+    start();
+  </script>
+</body>
+</html>

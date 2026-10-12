@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admissions</title>
+  <style>
+    :root { --green-dark: #14532d; --green: #2d6a4f; --green-light: #d7e9e2; --ink: #1b2a26; --muted: #66756f; --line: #e2e8e4; --bg: #f4f7f5; --card: #ffffff; --red: #b3261e; --emerald-light: #d1ecd8; --emerald-dark: #14532d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, Helvetica, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }
+    .page { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; }
+    .page-head { text-align: center; margin-bottom: 22px; }
+    .page-head img { max-height: 64px; margin-bottom: 8px; }
+    .page-head h1 { margin: 0; font-size: 24px; color: var(--green-dark); }
+    .page-head p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+    .notice { background: var(--green-light); color: var(--green-dark); border: 1px solid var(--green); border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 18px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; box-shadow: 0 1px 3px rgba(20,83,45,.06); }
+    .card h2 { margin: 0 0 4px; font-size: 18px; color: var(--green-dark); }
+    .card .sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid .full { grid-column: 1 / -1; }
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: 1fr; }
+      .page { padding: 18px 14px 44px; }
+      .page-head h1 { font-size: 21px; }
+      .card { padding: 18px; }
+      button.btn { width: 100%; }
+      .row { gap: 8px; }
+    }
+    .field { margin-bottom: 2px; }
+    .field.section { grid-column: 1 / -1; margin-top: 10px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: var(--green-dark); }
+    .field .hint { font-weight: 400; color: var(--muted); }
+    .field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 14px; font-family: inherit; background: #fff; color: var(--ink); }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(45,106,79,.15); }
+    .field textarea { min-height: 74px; resize: vertical; }
+    .row { display: flex; align-items: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    button.btn { background: var(--green); color: #fff; border: 0; border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    button.btn:hover { background: var(--green-dark); }
+    button.btn[disabled] { opacity: .65; cursor: not-allowed; }
+    .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .alert { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
+    .alert.err { background: #fdecea; color: var(--red); border: 1px solid #f5c2bd; }
+    .success { text-align: center; padding: 34px 20px; }
+    .success .tick { width: 54px; height: 54px; border-radius: 50%; background: var(--emerald-light); color: var(--emerald-dark); display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 14px; }
+    .success h2 { margin: 0 0 8px; color: var(--green-dark); }
+    .success .ref { font-weight: 700; color: var(--green-dark); }
+    .success p { color: var(--muted); }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .foot { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-head">
+      <img id="logo" src="" alt="">
+      <h1>Admission Application</h1>
+      <p id="subtitle">Kings Metro School Sokoto — apply to join for the new session</p>
+    </div>
+
+    <div class="notice">Complete the form below and click <strong>Submit application</strong>. The school office will contact the guardian to confirm your child's place.</div>
+
+    <div id="msg"></div>
+
+    <div class="card" id="form-card">
+      <h2>Application form</h2>
+      <p class="sub">Fields marked * are required.</p>
+      <form id="admission-form" novalidate>
+        <div class="grid">
+          <div class="field full">
+            <label for="level">Applying for class level *</label>
+            <select id="level" name="classLevelId" required></select>
+          </div>
+
+          <div class="field section"><label>Child's details</label></div>
+          <div class="field"><label for="firstName">First name *</label><input id="firstName" type="text" required></div>
+          <div class="field"><label for="middleName">Middle name</label><input id="middleName" type="text"></div>
+          <div class="field"><label for="lastName">Last name *</label><input id="lastName" type="text" required></div>
+          <div class="field"><label for="gender">Gender *</label>
+            <select id="gender" required><option value="">Select…</option><option>Male</option><option>Female</option></select>
+          </div>
+          <div class="field"><label for="dob">Date of birth *</label><input id="dob" type="date" required></div>
+
+          <div class="field section"><label>Guardian details</label></div>
+          <div class="field"><label for="guardianName">Full name *</label><input id="guardianName" type="text" required></div>
+          <div class="field"><label for="guardianPhone">Phone / WhatsApp *</label><input id="guardianPhone" type="tel" required placeholder="e.g. 0803 000 0000"></div>
+          <div class="field full"><label for="guardianEmail">Email <span class="hint">(for updates)</span></label><input id="guardianEmail" type="email"></div>
+          <div class="field full"><label for="address">Home address</label><textarea id="address"></textarea></div>
+          <div class="field full"><label for="prevSchool">Previous school <span class="hint">(if any)</span></label><input id="prevSchool" type="text"></div>
+          <div class="field full"><label for="notes">Anything the school should know</label><textarea id="notes"></textarea></div>
+
+          <div class="field section"><label>Attachments <span class="hint">(optional — resized photos upload quickly)</span></label></div>
+          <div class="field"><label for="photo">Passport photo</label><input id="photo" type="file" accept="image/*"></div>
+          <div class="field"><label for="document">Birth certificate / records <span class="hint">&lt; 7 MB</span></label><input id="document" type="file"></div>
+        </div>
+
+        <label class="hp" aria-hidden="true">Leave this empty<input id="website" type="text" tabindex="-1" autocomplete="off"></label>
+
+        <div class="row">
+          <button class="btn" id="submit-btn" type="submit">Submit application</button>
+          <span class="muted small" style="color:var(--muted);font-size:12px">We only use this information to process your application.</span>
+        </div>
+      </form>
+    </div>
+
+    <div class="card success" id="success-card" style="display:none">
+      <div class="tick">✓</div>
+      <h2>Application received</h2>
+      <p>Your application reference is<br><span class="ref" id="ref"></span>.</p>
+      <p>The school office will contact the guardian shortly to confirm the next steps.</p>
+    </div>
+
+    <div class="foot" id="embed-note">Powered by the King&rsquo;s Metro School portal</div>
+  </div>
+
+  <script>
+    var EMBED = <?!= embedJson ?>;
+    var LEVELS = <?!= levelOptionsJson ?>;
+    var BRAND = <?!= brandJson ?>;
+
+    var form = document.getElementById('admission-form');
+    var msg = document.getElementById('msg');
+    var btn = document.getElementById('submit-btn');
+    var successCard = document.getElementById('success-card');
+
+    (function init() {
+      if (BRAND && BRAND.schoolName) { document.getElementsByTagName('h1')[0].textContent = BRAND.schoolName + ' — Admission Application'; }
+      document.getElementById('subtitle').textContent = BRAND && BRAND.subtitle ? ('Applying to ' + BRAND.subtitle + ' for the new session') : 'Applying for the new school session';
+      var logo = document.getElementById('logo');
+      if (BRAND && BRAND.logoUrl) logo.src = BRAND.logoUrl; else logo.style.display = 'none';
+      if (EMBED) { document.getElementById('embed-note').style.display = 'none'; }
+
+      var sel = document.getElementById('level');
+      var sections = ['KG', 'PRIMARY', 'SECONDARY'];
+      sections.forEach(function (sec) {
+        var group = LEVELS.filter(function (l) { return l.section === sec; });
+        if (!group.length) return;
+        var opt = document.createElement('optgroup');
+        opt.label = sec + ' (' + group.length + ')';
+        group.forEach(function (l) {
+          var o = document.createElement('option');
+          o.value = l.id; o.textContent = l.name;
+          opt.appendChild(o);
+        });
+        sel.appendChild(opt);
+      });
+      var today = new Date(); var mm = String(today.getMonth() + 1).padStart(2, '0'), dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('dob').max = today.getFullYear() + '-' + mm + '-' + dd;
+    })();
+
+    function showMsg(kind, text) { msg.innerHTML = '<div class="alert ' + (kind === 'err' ? 'err' : '') + '">' + text + '</div>'; }
+    function setBusy(busy) { btn.disabled = busy; btn.innerHTML = busy ? '<span class="spinner"></span> Submitting…' : 'Submit application'; }
+    function val(id) { return document.getElementById(id).value.trim(); }
+
+    function readImage(file) {
+      return new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onerror = function () { reject(new Error('Could not read the photo file.')); };
+        fr.onload = function () {
+          var img = new Image();
+          img.onload = function () {
+            var MAX = 800, w = Math.min(img.width, MAX), h = Math.round(img.height * (w / img.width));
+            var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(img, 0, 0, w, h);
+            var dataUrl = cv.toDataURL('image/jpeg', 0.82);
+            resolve({ name: (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', mimeType: 'image/jpeg', size: Math.round(dataUrl.length * 0.75), dataUrl: dataUrl });
+          };
+          img.onerror = function () { reject(new Error('Could not load the photo image.')); };
+          img.src = fr.result;
+        };
+        fr.readAsDataURL(file);
+      });
+    }
+    function readFileRaw(file) {
+      return new Promise(function (resolve, reject) {
+        if (file.size > 7 * 1024 * 1024) { reject(new Error('Uploaded files must be smaller than 7 MB.')); return; }
+        var fr = new FileReader();
+        fr.onerror = function () { reject(new Error('Could not read the document file.')); };
+        fr.onload = function () { resolve({ name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, dataUrl: fr.result }); };
+        fr.readAsDataURL(file);
+      });
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault(); msg.innerHTML = '';
+      var level = val('level'), firstName = val('firstName'), lastName = val('lastName');
+      var gender = val('gender'), dob = val('dob'), gName = val('guardianName'), gPhone = val('guardianPhone'), gEmail = val('guardianEmail');
+      if (!level || !firstName || !lastName || !gender || !dob || !gName || !gPhone) { showMsg('err', 'Please fill in all required fields.'); return; }
+      if (gEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) { showMsg('err', 'Enter a valid guardian email or leave it blank.'); return; }
+      var photoInput = document.getElementById('photo'), docInput = document.getElementById('document');
+      var payload = {
+        website: document.getElementById('website').value,
+        firstName: firstName, middleName: val('middleName'), lastName: lastName, gender: gender, dateOfBirth: dob, classLevelId: level,
+        guardianName: gName, guardianPhone: gPhone, guardianEmail: gEmail, address: val('address'),
+        previousSchool: val('prevSchool'), notes: val('notes')
+      };
+      setBusy(true);
+      Promise.all([
+        photoInput.files.length ? readImage(photoInput.files[0]) : Promise.resolve(null),
+        docInput.files.length ? readFileRaw(docInput.files[0]) : Promise.resolve(null)
+      ]).then(function (files) {
+        payload.photo = files[0]; payload.document = files[1];
+        return new Promise(function (resolve, reject) {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); }).api_applyAdmission(payload);
+        });
+      }).then(function (res) {
+        setBusy(false);
+        document.getElementById('ref').textContent = res.ref;
+        form.style.display = 'none';
+        successCard.style.display = 'block';
+        window.scrollTo(0, 0);
+      }).catch(function (err) {
+        setBusy(false);
+        showMsg('err', (err && err.message ? err.message : String(err)));
+      });
+    });
+  </script>
+</body>
+</html>

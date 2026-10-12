@@ -1,0 +1,950 @@
+<script>
+/* global google, BRAND */
+
+var ROLE_LABELS = {
+  ADMIN: 'Administrator', PRINCIPAL: 'Principal', HEADMASTER: 'Headmaster',
+  BURSAR: 'Bursar', ACCOUNT_OFFICER: 'Account Officer', TEACHER: 'Teacher', PARENT: 'Parent'
+};
+
+var NAV = [
+  { key: 'dashboard', label: 'Dashboard', roles: 'ALL' },
+  { key: 'announcements', label: 'Announcements', roles: 'ALL' },
+  { key: 'students', label: 'Students', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+  { key: 'attendance', label: 'Attendance', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+  { key: 'results', label: 'Results', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+  { key: 'admin', label: 'Setup & Users', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] }
+];
+
+var TERM_LABELS = { FIRST: 'First Term', SECOND: 'Second Term', THIRD: 'Third Term' };
+
+var state = {
+  token: sessionStorage.getItem('kms_token') || '',
+  user: null,
+  boot: null,
+  view: 'dashboard',
+  error: null,
+  notice: null,
+  busy: false,
+  students: { classArmId: '', search: '', list: [], form: null },
+  attendance: { classArmId: '', date: todayISO(), roster: null },
+  results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [] },
+  report: { studentId: '', termId: '', data: null },
+  admin: { tab: 'ClassLevels', rows: [], form: null, users: [] },
+  announcements: { list: [], form: false }
+};
+
+/* ------------------------------- helpers ------------------------------- */
+
+function $(sel) { return document.querySelector(sel); }
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function todayISO() {
+  var d = new Date();
+  var m = String(d.getMonth() + 1); if (m.length < 2) m = '0' + m;
+  var day = String(d.getDate()); if (day.length < 2) day = '0' + day;
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) {
+      reject(new Error(err && err.message ? err.message : String(err)));
+    });
+    runner[fn].apply(runner, args);
+  });
+}
+function authed(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return call.apply(null, [fn, state.token].concat(args));
+}
+function setError(err) {
+  state.error = err && err.message ? err.message : String(err);
+  state.notice = null;
+  render();
+}
+function roleAllowed(roles) {
+  if (roles === 'ALL') return true;
+  if (!state.user) return false;
+  if (state.user.role === 'ADMIN') return true;
+  return roles.indexOf(state.user.role) !== -1;
+}
+function armLabel(arm) {
+  if (!arm || !arm.classLevel) return '—';
+  return arm.classLevel.section + ' · ' + arm.classLevel.name + ' ' + arm.name;
+}
+function subjectsForArm(armId) {
+  if (!armId || !state.boot) return [];
+  var arm = findArm(armId);
+  if (!arm) return [];
+  var levelId = arm.classLevelId;
+  var ids = state.boot.subjectClass.filter(function (sc) { return String(sc.classLevelId) === String(levelId); })
+    .map(function (sc) { return sc.subjectId; });
+  return state.boot.subjects.filter(function (s) { return ids.indexOf(s.id) !== -1; })
+    .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+}
+function findArm(armId) {
+  if (!state.boot) return null;
+  for (var i = 0; i < state.boot.classArms.length; i++) {
+    if (String(state.boot.classArms[i].id) === String(armId)) return state.boot.classArms[i];
+  }
+  return null;
+}
+function optionsHtml(list, value, selected, labelFn) {
+  return list.map(function (item) {
+    var v = value(item);
+    var on = String(v) === String(selected) ? ' selected' : '';
+    return '<option value="' + esc(v) + '"' + on + '>' + esc(labelFn(item)) + '</option>';
+  }).join('');
+}
+function armOptions(selected) {
+  return '<option value="">Select class…</option>' + optionsHtml(state.boot.classArms, function (a) { return a.id; }, selected, armLabel);
+}
+function termOptions(selected) {
+  return optionsHtml(state.boot.terms, function (t) { return t.id; }, selected, function (t) { return termText(t); });
+}
+function termText(t) { return (TERM_LABELS[t.termName] || t.termName) + ' · ' + t.sessionName; }
+
+/* ------------------------------- boot ------------------------------- */
+
+function start() {
+  if (!state.token) { render(); return; }
+  authed('api_bootstrap').then(function (boot) {
+    state.user = boot.user;
+    state.boot = boot;
+    state.results.termId = boot.currentTermId || (boot.terms[0] && boot.terms[0].id) || '';
+    if (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']) && boot.classArms.length) {
+      var firstArm = boot.classArms[0].id;
+      state.students.classArmId = firstArm;
+      state.attendance.classArmId = firstArm;
+      state.results.classArmId = firstArm;
+    }
+    navigate('dashboard');
+  }).catch(function () {
+    state.token = '';
+    sessionStorage.removeItem('kms_token');
+    render();
+  });
+}
+
+/* ------------------------------- login ------------------------------- */
+
+function renderLogin() {
+  var app = document.getElementById('app');
+  app.innerHTML =
+    '<div class="login-wrap">' +
+      '<div class="login-card">' +
+        '<div class="head">' +
+          (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="' + esc(BRAND.schoolName) + '">' : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;border-radius:999px;">KM</div>') +
+          '<div class="kicker">' + esc(BRAND.schoolName) + '</div>' +
+          '<h1>Portal Sign In</h1>' +
+          '<div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div>' +
+        '</div>' +
+        (state.error ? '<div class="alert error">' + esc(state.error) + '</div>' : '') +
+        '<form id="login-form">' +
+          '<div class="field"><label for="username">Username</label>' +
+            '<input id="username" name="username" type="text" autocomplete="username" required></div>' +
+          '<div class="field"><label for="password">Password</label>' +
+            '<input id="password" name="password" type="password" autocomplete="current-password" required></div>' +
+          '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit"' + (state.busy ? ' disabled' : '') + '>' +
+            (state.busy ? 'Signing in…' : 'Sign in') + '</button>' +
+        '</form>' +
+        '<p class="muted small" style="text-align:center;margin-top:18px">Default admin — admin / Admin@1234</p>' +
+      '</div>' +
+      '<div class="login-footer">' + footerHtml(true) + '</div>' +
+    '</div>';
+}
+
+/* ------------------------------- shell ------------------------------- */
+
+function footerHtml(dark) {
+  return '<div class="footer' + (dark ? ' dark' : '') + '">' +
+    (BRAND.cbsLogoUrl ? '<img src="' + esc(BRAND.cbsLogoUrl) + '" alt="Capacity Building and Support">' : '') +
+    '<span class="text">' + esc(BRAND.footerText) + '</span>' +
+  '</div>';
+}
+
+function shellHtml() {
+  var nav = NAV.filter(function (item) { return roleAllowed(item.roles); });
+  return '<div class="layout">' +
+    '<aside class="sidebar">' +
+      '<div class="sidebar-brand">' +
+        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="' + esc(BRAND.schoolName) + '">' : '<div class="logo-fallback">KM</div>') +
+        '<div><div class="name">Kings Metro</div><div class="sub">School Management</div></div>' +
+      '</div>' +
+      '<nav class="nav">' +
+        nav.map(function (item) {
+          return '<button data-nav="' + item.key + '" class="' + (state.view === item.key ? 'active' : '') + '">' + esc(item.label) + '</button>';
+        }).join('') +
+      '</nav>' +
+      '<div class="sidebar-foot">v1.0 · Apps Script</div>' +
+    '</aside>' +
+    '<div class="main">' +
+      '<header class="topbar">' +
+        '<div><div class="who">' + esc(ROLE_LABELS[state.user.role] || state.user.role) + '</div>' +
+          '<div class="mail">' + esc(state.user.fullName || state.user.username) + '</div></div>' +
+        '<button class="btn btn-outline btn-sm" data-action="signout">Sign out</button>' +
+      '</header>' +
+      '<main class="content"><div class="content-inner" id="content-inner"></div></main>' +
+    '</div>' +
+  '</div>';
+}
+
+function render() {
+  var app = document.getElementById('app');
+  if (!state.user) { renderLogin(); return; }
+  app.innerHTML = shellHtml();
+  var inner = document.getElementById('content-inner');
+  inner.innerHTML = contentHtml();
+}
+
+function contentHtml() {
+  var body = '';
+  var v = state.view;
+  if (v === 'dashboard') body = viewDashboard();
+  else if (v === 'announcements') body = viewAnnouncements();
+  else if (v === 'students') body = viewStudents();
+  else if (v === 'attendance') body = viewAttendance();
+  else if (v === 'results') body = viewResults();
+  else if (v === 'reportcard') body = viewReport();
+  else if (v === 'admin') body = viewAdmin();
+  return headerHtml() + body + footerHtml(false);
+}
+
+function headerHtml() {
+  var html = '';
+  if (state.error) html += '<div class="alert error">' + esc(state.error) + '</div>';
+  if (state.notice) html += '<div class="alert success">' + esc(state.notice) + '</div>';
+  return html;
+}
+
+/* ------------------------------- navigation ------------------------------- */
+
+function clearMessages() { state.error = null; state.notice = null; }
+
+function navigate(view) {
+  state.view = view;
+  clearMessages();
+  if (view === 'dashboard') return loadDashboard();
+  if (view === 'announcements') return loadAnnouncements();
+  if (view === 'students') return loadStudents();
+  if (view === 'attendance') return loadRoster();
+  if (view === 'results') return loadResults();
+  if (view === 'admin') return loadAdmin();
+  render();
+}
+
+/* ------------------------------- dashboard ------------------------------- */
+
+function loadDashboard() {
+  state.busy = true; render();
+  var tasks = [authed('api_listAnnouncements')];
+  if (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'])) tasks.push(authed('api_listStudents', {}));
+  Promise.all(tasks).then(function (res) {
+    state.announcements.list = res[0] || [];
+    state.dashboard = { students: res[1] || [] };
+    state.busy = false;
+    render();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewDashboard() {
+  if (state.busy || !state.dashboard) return '<div class="page-loading"><span class="spinner" style="border-color:#cbd5e1;border-top-color:#059669"></span> Loading…</div>';
+  var d = state.dashboard;
+  var currentTerm = state.boot.terms.filter(function (t) { return String(t.id) === String(state.boot.currentTermId); })[0];
+  return '<h2 style="margin-top:0">Welcome back' + (state.user.fullName ? ', ' + esc(state.user.fullName.split(' ')[0]) : '') + '.</h2>' +
+    '<div class="grid cols-4">' +
+      '<div class="stat"><div class="label">My classes</div><div class="value">' + state.boot.classArms.length + '</div></div>' +
+      '<div class="stat"><div class="label">Students</div><div class="value">' + d.students.length + '</div></div>' +
+      '<div class="stat"><div class="label">Subjects</div><div class="value">' + state.boot.subjects.length + '</div></div>' +
+      '<div class="stat"><div class="label">Current term</div><div class="value small" style="font-size:16px">' + esc(currentTerm ? termText(currentTerm) : '—') + '</div></div>' +
+    '</div>' +
+    '<div class="card" style="margin-top:20px"><h3 style="margin-top:0">Latest announcements</h3>' +
+      (state.announcements.list.length ? state.announcements.list.slice(0, 3).map(function (a) {
+        return '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9"><div style="font-weight:600">' + esc(a.title) + '</div><div class="muted small">' + esc(a.body) + '</div></div>';
+      }).join('') : '<div class="muted small">No announcements yet.</div>') +
+    '</div>';
+}
+
+/* ------------------------------- students ------------------------------- */
+
+function loadStudents() {
+  state.busy = true; render();
+  authed('api_listStudents', { classArmId: state.students.classArmId, search: state.students.search })
+    .then(function (list) { state.students.list = list; state.busy = false; render(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewStudents() {
+  var s = state.students;
+  var body = '<div class="toolbar no-print">' +
+      '<div class="field" style="min-width:240px"><label>Class</label>' +
+        '<select data-field="students-class">' + armOptions(s.classArmId) + '</select></div>' +
+      '<div class="field" style="min-width:220px"><label>Search</label>' +
+        '<input type="text" data-field="students-search" value="' + esc(s.search) + '" placeholder="Name or admission no."></div>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn btn-primary" data-action="student-new">+ Add student</button>' +
+    '</div>';
+
+  if (s.form) body += studentFormHtml(s.form);
+
+  if (state.busy) return body + '<div class="page-loading">Loading…</div>';
+  if (!s.list.length) return body + '<div class="empty">No students found for this class.</div>';
+
+  body += '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Admission No.</th><th>Name</th><th>Gender</th><th>Guardian</th><th>Phone</th><th></th>' +
+    '</tr></thead><tbody>' +
+    s.list.map(function (st) {
+      return '<tr>' +
+        '<td>' + esc(st.admissionNo) + '</td>' +
+        '<td><strong>' + esc(fullName(st)) + '</strong></td>' +
+        '<td>' + esc(st.gender || '—') + '</td>' +
+        '<td>' + esc(st.guardianName || '—') + '</td>' +
+        '<td>' + esc(st.guardianPhone || '—') + '</td>' +
+        '<td style="text-align:right;white-space:nowrap">' +
+          '<button class="btn btn-outline btn-sm" data-action="student-edit" data-id="' + esc(st.id) + '">Edit</button> ' +
+          '<button class="btn btn-danger btn-sm" data-action="student-delete" data-id="' + esc(st.id) + '">Delete</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+  return body;
+}
+
+function fullName(st) {
+  return [st.lastName, st.firstName, st.middleName].filter(Boolean).join(' ');
+}
+
+function studentFormHtml(form) {
+  var isNew = !form.id;
+  return '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add student' : 'Edit student') + '</h3>' +
+    '<form id="student-form" data-id="' + esc(form.id || '') + '">' +
+      '<div class="grid cols-3">' +
+        '<div class="field"><label>First name</label><input name="firstName" type="text" value="' + esc(form.firstName) + '" required></div>' +
+        '<div class="field"><label>Middle name</label><input name="middleName" type="text" value="' + esc(form.middleName) + '"></div>' +
+        '<div class="field"><label>Last name</label><input name="lastName" type="text" value="' + esc(form.lastName) + '" required></div>' +
+        '<div class="field"><label>Gender</label><select name="gender">' +
+          ['', 'Male', 'Female'].map(function (g) { return '<option value="' + g + '"' + (form.gender === g ? ' selected' : '') + '>' + (g || '—') + '</option>'; }).join('') +
+        '</select></div>' +
+        '<div class="field"><label>Date of birth</label><input name="dateOfBirth" type="date" value="' + esc(form.dateOfBirth || '') + '"></div>' +
+        '<div class="field"><label>Class</label><select name="classArmId">' + armOptions(form.classArmId) + '</select></div>' +
+        '<div class="field"><label>Guardian name</label><input name="guardianName" type="text" value="' + esc(form.guardianName) + '"></div>' +
+        '<div class="field"><label>Guardian phone</label><input name="guardianPhone" type="text" value="' + esc(form.guardianPhone) + '"></div>' +
+        '<div class="field"><label>Status</label><select name="status">' +
+          ['ACTIVE', 'INACTIVE'].map(function (s) { return '<option value="' + s + '"' + (form.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div class="field"><label>Address</label><textarea name="address">' + esc(form.address) + '</textarea></div>' +
+      '<div class="row"><button class="btn btn-primary" type="submit">Save student</button>' +
+        '<button class="btn btn-outline" type="button" data-action="student-cancel">Cancel</button></div>' +
+    '</form></div>';
+}
+
+/* ------------------------------- attendance ------------------------------- */
+
+function loadRoster() {
+  state.busy = true; render();
+  authed('api_getRoster', state.attendance.classArmId, state.attendance.date)
+    .then(function (roster) { state.attendance.roster = roster; state.busy = false; render(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewAttendance() {
+  var a = state.attendance;
+  var body = '<div class="toolbar no-print">' +
+      '<div class="field" style="min-width:240px"><label>Class</label><select data-field="att-class">' + armOptions(a.classArmId) + '</select></div>' +
+      '<div class="field"><label>Date</label><input type="date" data-field="att-date" value="' + esc(a.date) + '"></div>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn btn-primary" data-action="attendance-save">Save attendance</button>' +
+    '</div>';
+  if (state.busy) return body + '<div class="page-loading">Loading roster…</div>';
+  if (!a.roster || !a.roster.students.length) return body + '<div class="empty">No students in this class yet.</div>';
+
+  body += '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th>Note</th></tr></thead><tbody>' +
+    a.roster.students.map(function (row) {
+      return '<tr data-sid="' + esc(row.studentId) + '">' +
+        '<td><strong>' + esc(fullName(row.student)) + '</strong><div class="muted small">' + esc(row.student.admissionNo) + '</div></td>' +
+        '<td><div class="seg">' +
+          ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'].map(function (st) {
+            return '<button type="button" data-action="att-status" data-sid="' + esc(row.studentId) + '" data-status="' + st + '" class="' + (row.status === st ? 'on' : '') + '">' + st.charAt(0) + st.slice(1).toLowerCase() + '</button>';
+          }).join('') +
+        '</div></td>' +
+        '<td><input type="text" data-action="att-note" data-sid="' + esc(row.studentId) + '" value="' + esc(row.note) + '" placeholder="Optional"></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+  return body;
+}
+
+/* ------------------------------- results ------------------------------- */
+
+function loadResults() {
+  state.busy = true; render();
+  var r = state.results;
+  var subjectList = subjectsForArm(r.classArmId);
+  if (!r.subjectId && subjectList.length) r.subjectId = subjectList[0].id;
+
+  var task;
+  if (r.tab === 'entry') {
+    task = authed('api_getScoreSheet', r.classArmId, r.termId, r.subjectId).then(function (sheet) { r.sheet = sheet; });
+  } else {
+    task = authed('api_listResultSheets', r.classArmId, r.termId).then(function (sheets) { r.sheets = sheets; });
+  }
+  task.then(function () { state.busy = false; render(); })
+      .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewResults() {
+  var r = state.results;
+  var subjectList = subjectsForArm(r.classArmId);
+  var body = '<div class="toolbar no-print">' +
+      '<div class="field" style="min-width:220px"><label>Class</label><select data-field="res-class">' + armOptions(r.classArmId) + '</select></div>' +
+      '<div class="field" style="min-width:200px"><label>Term</label><select data-field="res-term">' + termOptions(r.termId) + '</select></div>' +
+      (r.tab === 'entry'
+        ? '<div class="field" style="min-width:220px"><label>Subject</label><select data-field="res-subject">' +
+            '<option value="">Select subject…</option>' +
+            optionsHtml(subjectList, function (s) { return s.id; }, r.subjectId, function (s) { return s.name; }) +
+          '</select></div>'
+        : '') +
+      '<div class="spacer"></div>' +
+      (r.tab === 'entry'
+        ? '<button class="btn btn-primary" data-action="scores-save">Save scores</button>'
+        : '') +
+    '</div>' +
+    '<div class="tabs no-print">' +
+      '<button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button>' +
+      '<button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button>' +
+    '</div>';
+
+  if (state.busy) return body + '<div class="page-loading">Loading…</div>';
+
+  if (r.tab === 'entry') {
+    if (!r.subjectId) return body + '<div class="empty">Select a subject to enter scores.</div>';
+    if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
+    body += '<div class="table-wrap"><table><thead><tr><th>Student</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>' +
+      r.sheet.rows.map(function (row) {
+        var sid = row.studentId;
+        return '<tr>' +
+          '<td><strong>' + esc(fullName(row.student)) + '</strong></td>' +
+          ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) {
+            return '<td><input style="width:70px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(sid) + '" value="' + esc(row[k]) + '"></td>';
+          }).join('') +
+          '<td data-total-for="' + esc(sid) + '">' + esc(row.total === '' ? '—' : row.total) + '</td>' +
+          '<td>' + esc(row.grade || '—') + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="muted small">CA1–CA3 are out of 10 each; Exam is out of 70.</p>';
+    return body;
+  }
+
+  // sheets tab
+  body += '<div class="toolbar no-print"><div class="spacer"></div>' +
+    '<button class="btn btn-outline" data-action="results-compute">Compute</button>' +
+    '<button class="btn btn-primary" data-action="results-publish">Publish</button></div>';
+  if (!r.sheets.length) return body + '<div class="empty">No result sheets yet. Compute first.</div>';
+  body += '<div class="table-wrap"><table><thead><tr><th>#</th><th>Student</th><th>Total</th><th>Average</th><th>Status</th><th></th></tr></thead><tbody>' +
+    r.sheets.map(function (row) {
+      return '<tr>' +
+        '<td>' + esc(row.position || '—') + '</td>' +
+        '<td><strong>' + esc(fullName(row.student)) + '</strong></td>' +
+        '<td>' + esc(row.totalScore) + '</td>' +
+        '<td>' + esc(row.average) + '</td>' +
+        '<td>' + (row.status ? '<span class="badge ' + (row.status === 'PUBLISHED' ? 'ok' : 'warn') + '">' + esc(row.status) + '</span>' : '—') + '</td>' +
+        '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(row.student.id) + '">Report card</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+  return body;
+}
+
+/* ------------------------------- report card ------------------------------- */
+
+function loadReport() {
+  state.busy = true; render();
+  authed('api_getReportCard', state.report.studentId, state.report.termId || state.results.termId)
+    .then(function (data) { state.report.data = data; state.busy = false; render(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewReport() {
+  if (state.busy || !state.report.data) return '<div class="page-loading">Loading report card…</div>';
+  var d = state.report.data;
+  var canEdit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']);
+  var body = '<div class="toolbar no-print">' +
+      '<button class="btn btn-outline" data-action="back-results">← Back to results</button>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn btn-primary" data-action="print-report">Print report card</button>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="report-head">' +
+        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '') +
+        '<div><div class="school">' + esc(BRAND.schoolName) + '</div>' +
+          '<div class="subtitle">' + esc(BRAND.subtitle) + ' — Terminal Report Sheet</div></div>' +
+      '</div>' +
+      '<div class="report-meta">' +
+        '<div class="kv"><div class="k">Student</div><div class="v">' + esc(fullName(d.student)) + '</div>' +
+          '<div class="k small">' + esc(d.student.admissionNo) + (d.student.classArm ? ' · ' + esc(armLabel(d.student.classArm)) : '') + '</div></div>' +
+        '<div class="kv"><div class="k">Term</div><div class="v">' + esc(d.term.label) + '</div></div>' +
+        '<div class="report-summary">' +
+          '<div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div>' +
+          '<div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div>' +
+          '<div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div>' +
+          '<div class="kv"><div class="k">Status</div><div class="v">' + esc(d.sheet.status) + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="table-wrap" style="margin-top:18px"><table><thead><tr>' +
+        '<th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th>' +
+      '</tr></thead><tbody>' +
+      (d.scores.length ? d.scores.map(function (s) {
+        return '<tr><td>' + esc(s.subject.name) + '</td>' +
+          '<td>' + esc(s.ca1 || '—') + '</td><td>' + esc(s.ca2 || '—') + '</td><td>' + esc(s.ca3 || '—') + '</td>' +
+          '<td>' + esc(s.exam || '—') + '</td><td><strong>' + esc(s.total || '—') + '</strong></td>' +
+          '<td>' + esc(s.grade || '—') + '</td><td>' + esc(s.remark || '—') + '</td></tr>';
+      }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No scores captured for this term.</td></tr>') +
+      '</tbody></table></div>' +
+      '<div class="grid cols-2" style="margin-top:18px">' +
+        '<div><div class="k muted small">Teacher\'s remark</div><div>' + esc(d.sheet.teacherRemark || '—') + '</div></div>' +
+        '<div><div class="k muted small">Principal\'s remark</div><div>' + esc(d.sheet.principalRemark || '—') + '</div></div>' +
+      '</div>' +
+      '<div style="margin-top:18px"><div class="k muted small" style="margin-bottom:6px">Grading scale</div>' +
+        d.gradeScale.map(function (g) { return '<span class="badge" style="margin-right:6px">' + esc(g.grade) + ': ' + esc(g.minScore) + '–' + esc(g.maxScore) + ' (' + esc(g.remark) + ')</span>'; }).join('') +
+      '</div>' +
+      footerHtml(false) +
+    '</div>';
+
+  if (canEdit) {
+    body += '<div class="card no-print"><h3 style="margin-top:0">Remarks</h3><form id="remarks-form">' +
+      '<div class="field"><label>Teacher\'s remark</label><textarea name="teacherRemark">' + esc(d.sheet.teacherRemark) + '</textarea></div>' +
+      '<div class="field"><label>Principal\'s remark</label><textarea name="principalRemark">' + esc(d.sheet.principalRemark) + '</textarea></div>' +
+      '<button class="btn btn-primary" type="submit">Save remarks</button></form></div>';
+  }
+  return body;
+}
+
+/* ------------------------------- admin ------------------------------- */
+
+var ADMIN_TABS = [
+  { key: 'ClassLevels', label: 'Class levels' },
+  { key: 'ClassArms', label: 'Class arms' },
+  { key: 'Subjects', label: 'Subjects' },
+  { key: 'SubjectClass', label: 'Subject → class' },
+  { key: 'Terms', label: 'Terms' },
+  { key: 'GradeScale', label: 'Grade scale' },
+  { key: 'Users', label: 'Users' }
+];
+
+function loadAdmin() {
+  state.busy = true; render();
+  authed('api_listRef', state.admin.tab).then(function (rows) {
+    if (state.admin.tab === 'Users') state.admin.users = rows; else state.admin.rows = rows;
+    state.busy = false; render();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewAdmin() {
+  var a = state.admin;
+  var tabsList = ADMIN_TABS.filter(function (t) { return t.key !== 'Users' || state.user.role === 'ADMIN'; });
+  var tabs = '<div class="tabs">' + tabsList.map(function (t) {
+    return '<button data-action="admin-tab" data-tab="' + t.key + '" class="' + (a.tab === t.key ? 'active' : '') + '">' + esc(t.label) + '</button>';
+  }).join('') + '</div>';
+  var body = tabs + '<div class="toolbar"><div class="spacer"></div><button class="btn btn-primary" data-action="admin-new">+ Add ' + esc(singular(a.tab)) + '</button></div>';
+  if (state.busy) return body + '<div class="page-loading">Loading…</div>';
+  if (a.form) body += adminFormHtml(a.tab, a.form);
+  body += adminTableHtml(a.tab);
+  return body;
+}
+
+function singular(tab) {
+  var map = { ClassLevels: 'class level', ClassArms: 'class arm', Subjects: 'subject', SubjectClass: 'mapping', Terms: 'term', GradeScale: 'grade', Users: 'user' };
+  return map[tab] || 'record';
+}
+
+function adminTableHtml(tab) {
+  if (tab === 'Users') return adminUsersTable();
+  var rows = state.admin.rows;
+  if (!rows.length) return '<div class="empty">No records yet.</div>';
+  if (tab === 'ClassLevels') return wrapTable(['Section', 'Name', 'Order', ''], rows.map(function (r) {
+    return row([esc(r.section), esc(r.name), esc(r.orderIndex), actions(r.id)]); }));
+  if (tab === 'ClassArms') return wrapTable(['Class level', 'Arm', ''], rows.map(function (r) {
+    return row([esc(levelName(r.classLevelId)), esc(r.name), actions(r.id)]); }));
+  if (tab === 'Subjects') return wrapTable(['Section', 'Subject', ''], rows.map(function (r) {
+    return row([esc(r.section), esc(r.name), actions(r.id)]); }));
+  if (tab === 'SubjectClass') return wrapTable(['Subject', 'Class level', ''], rows.map(function (r) {
+    return row([esc(subjectName(r.subjectId)), esc(levelName(r.classLevelId)), actions(r.id)]); }));
+  if (tab === 'Terms') return wrapTable(['Session', 'Term', 'Current', ''], rows.map(function (r) {
+    return row([esc(r.sessionName), esc(TERM_LABELS[r.termName] || r.termName), (r.isCurrent === true || String(r.isCurrent) === 'true' ? '<span class="badge ok">Current</span>' : '—'), actions(r.id)]); }));
+  if (tab === 'GradeScale') return wrapTable(['Section', 'Grade', 'Min', 'Max', 'Remark', ''], rows.map(function (r) {
+    return row([esc(r.section), esc(r.grade), esc(r.minScore), esc(r.maxScore), esc(r.remark), actions(r.id)]); }));
+  return '';
+}
+
+function adminUsersTable() {
+  var rows = state.admin.users;
+  if (!rows.length) return '<div class="empty">No users yet.</div>';
+  return wrapTable(['Username', 'Name', 'Role', 'Active', ''], rows.map(function (u) {
+    return row([esc(u.username), esc(u.fullName || '—'), esc(ROLE_LABELS[u.role] || u.role),
+      (u.active ? '<span class="badge ok">Yes</span>' : '<span class="badge warn">No</span>'), actions(u.id)]);
+  }));
+}
+
+function wrapTable(headers, rows) {
+  return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
+    '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+}
+function row(cells) { return '<tr>' + cells.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }
+function actions(id) {
+  return '<div style="text-align:right;white-space:nowrap">' +
+    '<button class="btn btn-outline btn-sm" data-action="admin-edit" data-id="' + esc(id) + '">Edit</button> ' +
+    '<button class="btn btn-danger btn-sm" data-action="admin-delete" data-id="' + esc(id) + '">Delete</button></div>';
+}
+function levelName(id) { var l = findIn(state.boot.classLevelsAll, id); return l ? l.name : '—'; }
+function subjectName(id) { var s = findIn(state.boot.subjects, id); return s ? s.name : '—'; }
+function findIn(list, id) { for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i]; return null; }
+
+function adminFormHtml(tab, form) {
+  var isNew = !form.id;
+  var f = '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add' : 'Edit') + ' ' + esc(singular(tab)) + '</h3><form id="admin-form" data-id="' + esc(form.id || '') + '">';
+  if (tab === 'ClassLevels') {
+    f += '<div class="grid cols-3">' +
+      field('Section', select('section', state.boot.sections, form.section)) +
+      field('Name', input('name', form.name)) +
+      field('Order', '<input name="orderIndex" type="number" value="' + esc(form.orderIndex || 0) + '">') + '</div>';
+  } else if (tab === 'ClassArms') {
+    f += '<div class="grid cols-2">' +
+      field('Class level', selectObjects('classLevelId', state.boot.classLevelsAll, form.classLevelId, 'name')) +
+      field('Arm name', input('name', form.name)) + '</div>';
+  } else if (tab === 'Subjects') {
+    f += '<div class="grid cols-2">' + field('Section', select('section', state.boot.sections, form.section)) + field('Subject name', input('name', form.name)) + '</div>';
+  } else if (tab === 'SubjectClass') {
+    f += '<div class="grid cols-2">' +
+      field('Subject', selectObjects('subjectId', state.boot.subjects, form.subjectId, 'name')) +
+      field('Class level', selectObjects('classLevelId', state.boot.classLevelsAll, form.classLevelId, 'name')) + '</div>';
+  } else if (tab === 'Terms') {
+    f += '<div class="grid cols-3">' +
+      field('Session', input('sessionName', form.sessionName)) +
+      field('Term', select('termName', ['FIRST', 'SECOND', 'THIRD'], form.termName)) +
+      field('Current', '<select name="isCurrent"><option value="false"' + (form.isCurrent ? '' : ' selected') + '>No</option><option value="true"' + (form.isCurrent ? ' selected' : '') + '>Yes</option></select>') + '</div>';
+  } else if (tab === 'GradeScale') {
+    f += '<div class="grid cols-4">' +
+      field('Section', select('section', state.boot.sections, form.section)) +
+      field('Grade', input('grade', form.grade)) +
+      field('Min', '<input name="minScore" type="number" value="' + esc(form.minScore || 0) + '">') +
+      field('Max', '<input name="maxScore" type="number" value="' + esc(form.maxScore || 0) + '">') + '</div>' +
+      '<div class="grid cols-2">' + field('Remark', input('remark', form.remark)) + field('Order', '<input name="orderIndex" type="number" value="' + esc(form.orderIndex || 0) + '">') + '</div>';
+  } else if (tab === 'Users') {
+    f += '<div class="grid cols-3">' +
+      field('Username', input('username', form.username)) +
+      field('Full name', input('fullName', form.fullName)) +
+      field('Role', select('role', state.boot.roles, form.role)) +
+      field('Email', input('email', form.email)) +
+      field('Password' + (isNew ? '' : ' (leave blank to keep)'), '<input name="password" type="password" autocomplete="new-password">') +
+      field('Active', '<select name="active"><option value="true"' + (form.active !== false ? ' selected' : '') + '>Yes</option><option value="false"' + (form.active === false ? ' selected' : '') + '>No</option></select>') + '</div>' +
+      '<div class="grid cols-2">' +
+      field('Section scope (comma separated, blank = all)', input('sectionScope', form.sectionScope)) +
+      field('Class-arm ids (comma separated, blank = all)', input('classArmScope', form.classArmScope)) + '</div>';
+  }
+  f += '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Save</button>' +
+    '<button class="btn btn-outline" type="button" data-action="admin-cancel">Cancel</button></div></form></div>';
+  return f;
+}
+function field(label, control) { return '<div class="field"><label>' + esc(label) + '</label>' + control + '</div>'; }
+function input(name, value) { return '<input name="' + name + '" type="text" value="' + esc(value || '') + '">'; }
+function select(name, list, value) {
+  return '<select name="' + name + '">' + list.map(function (v) {
+    return '<option value="' + esc(v) + '"' + (String(v) === String(value) ? ' selected' : '') + '>' + esc(v) + '</option>';
+  }).join('') + '</select>';
+}
+function selectObjects(name, list, value, labelKey) {
+  return '<select name="' + name + '">' + list.map(function (o) {
+    return '<option value="' + esc(o.id) + '"' + (String(o.id) === String(value) ? ' selected' : '') + '>' + esc(o[labelKey]) + '</option>';
+  }).join('') + '</select>';
+}
+
+/* ------------------------------- announcements ------------------------------- */
+
+function loadAnnouncements() {
+  state.busy = true; render();
+  authed('api_listAnnouncements').then(function (list) {
+    state.announcements.list = list; state.busy = false; render();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function viewAnnouncements() {
+  var a = state.announcements;
+  var canPost = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'TEACHER']);
+  var body = '';
+  if (canPost) {
+    body += '<div class="toolbar"><div class="spacer"></div><button class="btn btn-primary" data-action="ann-new">+ New announcement</button></div>';
+    if (a.form) {
+      body += '<div class="card"><form id="ann-form">' +
+        '<div class="field"><label>Title</label><input name="title" type="text" required></div>' +
+        '<div class="field"><label>Audience</label><select name="audience">' +
+          state.boot.audiences.map(function (x) { return '<option value="' + x + '">' + x + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Message</label><textarea name="body" required></textarea></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Post</button>' +
+        '<button class="btn btn-outline" type="button" data-action="ann-cancel">Cancel</button></div></form></div>';
+    }
+  }
+  if (state.busy) return body + '<div class="page-loading">Loading…</div>';
+  if (!a.list.length) return body + '<div class="empty">No announcements yet.</div>';
+  body += a.list.map(function (item) {
+    return '<div class="card" style="margin-bottom:14px"><div class="row"><strong>' + esc(item.title) + '</strong>' +
+      '<span class="badge">' + esc(item.audience) + '</span><div class="spacer"></div>' +
+      '<span class="muted small">' + esc(String(item.createdAt).slice(0, 10)) + '</span>' +
+      (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER']) ? ' <button class="btn btn-danger btn-sm" data-action="ann-delete" data-id="' + esc(item.id) + '">Delete</button>' : '') +
+      '</div><p style="margin:10px 0 0">' + esc(item.body) + '</p></div>';
+  }).join('');
+  return body;
+}
+
+/* ------------------------------- events ------------------------------- */
+
+document.addEventListener('click', function (e) {
+  var nav = e.target.closest('[data-nav]');
+  if (nav) { navigate(nav.getAttribute('data-nav')); return; }
+
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+
+  if (action === 'signout') {
+    authed('api_logout').catch(function () {});
+    state.token = ''; state.user = null; state.boot = null;
+    sessionStorage.removeItem('kms_token');
+    clearMessages(); render(); return;
+  }
+  if (action === 'student-new') { state.students.form = emptyStudent(); clearMessages(); render(); return; }
+  if (action === 'student-cancel') { state.students.form = null; render(); return; }
+  if (action === 'student-edit') {
+    var st = findIn(state.students.list, id);
+    if (st) { state.students.form = JSON.parse(JSON.stringify(st)); state.students.form.classArmId = st.classArmId; clearMessages(); render(); }
+    return;
+  }
+  if (action === 'student-delete') { deleteStudent(id); return; }
+
+  if (action === 'att-status') { setAttStatus(el.getAttribute('data-sid'), el.getAttribute('data-status')); return; }
+  if (action === 'attendance-save') { saveAttendance(); return; }
+
+  if (action === 'res-tab') { state.results.tab = el.getAttribute('data-tab'); clearMessages(); loadResults(); return; }
+  if (action === 'scores-save') { saveScores(); return; }
+  if (action === 'results-compute') { computeResults(); return; }
+  if (action === 'results-publish') { publishResults(); return; }
+  if (action === 'open-report') { state.report.studentId = id; state.report.termId = state.results.termId; navigate('reportcard'); return; }
+  if (action === 'back-results') { navigate('results'); return; }
+  if (action === 'print-report') { window.print(); return; }
+
+  if (action === 'admin-tab') { state.admin.tab = el.getAttribute('data-tab'); state.admin.form = null; clearMessages(); loadAdmin(); return; }
+  if (action === 'admin-new') { state.admin.form = {}; clearMessages(); render(); return; }
+  if (action === 'admin-edit') { editAdmin(id); return; }
+  if (action === 'admin-delete') { deleteAdmin(id); return; }
+  if (action === 'admin-cancel') { state.admin.form = null; render(); return; }
+
+  if (action === 'ann-new') { state.announcements.form = true; clearMessages(); render(); return; }
+  if (action === 'ann-cancel') { state.announcements.form = false; render(); return; }
+  if (action === 'ann-delete') { deleteAnnouncement(id); return; }
+});
+
+document.addEventListener('change', function (e) {
+  var t = e.target;
+  var f = t.getAttribute && t.getAttribute('data-field');
+  if (f === 'students-class') { state.students.classArmId = t.value; clearMessages(); loadStudents(); }
+  else if (f === 'att-class') { state.attendance.classArmId = t.value; clearMessages(); loadRoster(); }
+  else if (f === 'att-date') { state.attendance.date = t.value; clearMessages(); loadRoster(); }
+  else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; clearMessages(); loadResults(); }
+  else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
+  else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
+  else if (t.getAttribute('data-action') === 'att-note') {
+    var sid = t.getAttribute('data-sid');
+    if (state.attendance.roster) {
+      state.attendance.roster.students.forEach(function (r) { if (r.studentId === sid) r.note = t.value; });
+    }
+  }
+});
+
+document.addEventListener('input', function (e) {
+  var t = e.target;
+  if (t.getAttribute('data-action') === 'att-note') {
+    var sid = t.getAttribute('data-sid');
+    if (state.attendance.roster) {
+      state.attendance.roster.students.forEach(function (r) { if (r.studentId === sid) r.note = t.value; });
+    }
+  }
+  if (t.getAttribute('data-score')) {
+    var row = t.closest('tr');
+    var sid2 = t.getAttribute('data-sid');
+    var vals = {};
+    ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) {
+      var inp = row.querySelector('[data-score="' + k + '"]');
+      vals[k] = inp && inp.value !== '' ? Number(inp.value) : 0;
+    });
+    var total = (vals.ca1 || 0) + (vals.ca2 || 0) + (vals.ca3 || 0) + (vals.exam || 0);
+    var cell = document.querySelector('[data-total-for="' + sid2 + '"]');
+    if (cell) cell.textContent = total;
+  }
+});
+
+document.addEventListener('submit', function (e) {
+  var form = e.target;
+  e.preventDefault();
+  if (form.id === 'login-form') { doLogin(form); return; }
+  if (form.id === 'student-form') { saveStudent(form); return; }
+  if (form.id === 'admin-form') { saveAdmin(form); return; }
+  if (form.id === 'ann-form') { saveAnnouncement(form); return; }
+  if (form.id === 'remarks-form') { saveRemarks(form); return; }
+});
+
+/* ------------------------------- actions ------------------------------- */
+
+function emptyStudent() {
+  return { firstName: '', middleName: '', lastName: '', gender: '', dateOfBirth: '', classArmId: state.students.classArmId, guardianName: '', guardianPhone: '', address: '', status: 'ACTIVE' };
+}
+
+function doLogin(form) {
+  state.busy = true; state.error = null; render();
+  call('api_login', form.username.value.trim(), form.password.value).then(function (res) {
+    state.token = res.token;
+    sessionStorage.setItem('kms_token', res.token);
+    state.user = res.user;
+    return authed('api_bootstrap');
+  }).then(function (boot) {
+    state.boot = boot; state.user = boot.user;
+    state.results.termId = boot.currentTermId || '';
+    if (boot.classArms.length) {
+      state.students.classArmId = boot.classArms[0].id;
+      state.attendance.classArmId = boot.classArms[0].id;
+      state.results.classArmId = boot.classArms[0].id;
+    }
+    state.busy = false;
+    navigate('dashboard');
+  }).catch(function (err) {
+    state.busy = false; state.error = err.message; render();
+  });
+}
+
+function saveStudent(form) {
+  var data = {
+    id: form.getAttribute('data-id') || '', firstName: form.firstName.value, middleName: form.middleName.value,
+    lastName: form.lastName.value, gender: form.gender.value, dateOfBirth: form.dateOfBirth.value,
+    classArmId: form.classArmId.value, guardianName: form.guardianName.value, guardianPhone: form.guardianPhone.value,
+    address: form.address.value, status: form.status.value
+  };
+  state.busy = true; clearMessages(); render();
+  authed('api_saveStudent', data).then(function () {
+    state.students.form = null; state.notice = 'Student saved.'; loadStudents();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function deleteStudent(id) {
+  if (!window.confirm('Delete this student? This cannot be undone.')) return;
+  state.busy = true; clearMessages(); render();
+  authed('api_deleteStudent', id).then(function () { state.notice = 'Student deleted.'; loadStudents(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function setAttStatus(sid, status) {
+  var roster = state.attendance.roster;
+  if (!roster) return;
+  roster.students.forEach(function (r) { if (r.studentId === sid) r.status = status; });
+  var tr = document.querySelector('tr[data-sid="' + sid + '"]');
+  if (tr) {
+    tr.querySelectorAll('[data-action="att-status"]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-status') === status);
+    });
+  }
+}
+
+function saveAttendance() {
+  var roster = state.attendance.roster;
+  if (!roster) return;
+  var records = roster.students.map(function (r) { return { studentId: r.studentId, status: r.status, note: r.note }; });
+  state.busy = true; clearMessages(); render();
+  authed('api_saveAttendance', state.attendance.classArmId, state.attendance.date, records)
+    .then(function () { state.notice = 'Attendance saved.'; loadRoster(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function saveScores() {
+  var sheet = state.results.sheet;
+  if (!sheet) return;
+  var records = sheet.rows.map(function (row) {
+    var rec = { studentId: row.studentId };
+    ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) {
+      var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]');
+      rec[k] = inp ? inp.value : '';
+    });
+    return rec;
+  });
+  state.busy = true; clearMessages(); render();
+  authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records)
+    .then(function () { state.notice = 'Scores saved.'; loadResults(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function computeResults() {
+  state.busy = true; clearMessages(); render();
+  authed('api_computeResults', state.results.classArmId, state.results.termId)
+    .then(function (res) { state.notice = 'Computed results for ' + res.students + ' students.'; state.results.tab = 'sheets'; loadResults(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function publishResults() {
+  if (!window.confirm('Publish results for this class and term?')) return;
+  state.busy = true; clearMessages(); render();
+  authed('api_publishResults', state.results.classArmId, state.results.termId, true)
+    .then(function () { state.notice = 'Results published.'; loadResults(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function saveRemarks(form) {
+  var data = { teacherRemark: form.teacherRemark.value, principalRemark: form.principalRemark.value };
+  state.busy = true; clearMessages(); render();
+  authed('api_saveRemarks', state.report.studentId, state.report.termId || state.results.termId, data)
+    .then(function () { state.notice = 'Remarks saved.'; loadReport(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function editAdmin(id) {
+  var list = state.admin.tab === 'Users' ? state.admin.users : state.admin.rows;
+  var rec = findIn(list, id);
+  if (!rec) return;
+  state.admin.form = JSON.parse(JSON.stringify(rec));
+  if (state.admin.tab === 'Users') state.admin.form.active = rec.active;
+  clearMessages(); render();
+}
+
+function saveAdmin(form) {
+  var tab = state.admin.tab;
+  var payload = { id: form.getAttribute('data-id') || '' };
+  var els = form.querySelectorAll('[name]');
+  els.forEach(function (el) { payload[el.getAttribute('name')] = el.value; });
+  state.busy = true; clearMessages(); render();
+  authed('api_saveRef', tab, payload).then(function () {
+    state.admin.form = null; state.notice = 'Saved.'; loadAdmin();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function deleteAdmin(id) {
+  if (!window.confirm('Delete this record?')) return;
+  state.busy = true; clearMessages(); render();
+  authed('api_deleteRef', state.admin.tab, id).then(function () { state.notice = 'Deleted.'; loadAdmin(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+function saveAnnouncement(form) {
+  var payload = { id: '', title: form.title.value, body: form.body.value, audience: form.audience.value };
+  state.busy = true; clearMessages(); render();
+  authed('api_saveAnnouncement', payload).then(function () {
+    state.announcements.form = false; state.notice = 'Announcement posted.'; loadAnnouncements();
+  }).catch(function (err) { state.busy = false; setError(err); });
+}
+
+function deleteAnnouncement(id) {
+  if (!window.confirm('Delete this announcement?')) return;
+  state.busy = true; clearMessages(); render();
+  authed('api_deleteAnnouncement', id).then(function () { state.notice = 'Deleted.'; loadAnnouncements(); })
+    .catch(function (err) { state.busy = false; setError(err); });
+}
+
+/* ------------------------------- start ------------------------------- */
+start();
+</script>
