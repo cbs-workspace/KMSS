@@ -614,10 +614,18 @@ function getClassArms_(user) {
     return { id: a.id, name: a.name, classLevelId: a.classLevelId, classLevel: l ? { id: l.id, name: l.name, section: l.section } : null };
   });
   if (user) {
-    var sections = userSections_(user);
-    if (sections.length) list = list.filter(function (a) { return a.classLevel && sections.indexOf(a.classLevel.section) !== -1; });
-    var arms = userArmIds_(user);
-    if (arms.length) list = list.filter(function (a) { return arms.indexOf(a.id) !== -1; });
+    if (user.role === 'PARENT') {
+      // Parents are scoped strictly to the class arms of their linked wards.
+      var wardIds = parentStudentIds_(user);
+      var wardArm = {};
+      if (wardIds.length) readTable_('Students').forEach(function (s) { if (wardIds.indexOf(String(s.id)) !== -1) wardArm[String(s.classArmId)] = true; });
+      list = list.filter(function (a) { return wardArm[String(a.id)]; });
+    } else {
+      var sections = userSections_(user);
+      if (sections.length) list = list.filter(function (a) { return a.classLevel && sections.indexOf(a.classLevel.section) !== -1; });
+      var arms = userArmIds_(user);
+      if (arms.length) list = list.filter(function (a) { return arms.indexOf(a.id) !== -1; });
+    }
   }
   return list;
 }
@@ -692,6 +700,7 @@ function api_listStudents(token, opts) {
   var user = requireUser_(token);
   var armsById = armsMap_(user);
   var list = readTable_('Students').filter(function (s) { return armsById[s.classArmId]; });
+  if (user.role === 'PARENT') { var wardIds = parentStudentIds_(user); list = list.filter(function (s) { return wardIds.indexOf(String(s.id)) !== -1; }); }
   if (opts.classArmId) list = list.filter(function (s) { return String(s.classArmId) === String(opts.classArmId); });
   var q = String(opts.search || '').trim().toLowerCase();
   if (q) list = list.filter(function (s) { return [s.firstName, s.middleName, s.lastName, s.admissionNo].join(' ').toLowerCase().indexOf(q) !== -1; });
@@ -1183,11 +1192,13 @@ function api_dashboard(token) {
   var arms = armsMap_(user);
   var armIds = Object.keys(arms);
   var sections = user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(arms);
+  var wardSet = null;
+  if (user.role === 'PARENT') { wardSet = {}; parentStudentIds_(user).forEach(function (id) { wardSet[String(id)] = true; }); }
 
   var bySection = { KG: 0, PRIMARY: 0, SECONDARY: 0 }, byLevelMap = {};
   var total = 0, active = 0, inactive = 0, male = 0, female = 0;
   readTable_('Students').forEach(function (s) {
-    if (!arms[s.classArmId]) return;
+    if (!arms[s.classArmId] || (wardSet && !wardSet[String(s.id)])) return;
     total++;
     if (String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE') inactive++; else active++;
     var g = String(s.gender || '').trim();
@@ -1205,7 +1216,7 @@ function api_dashboard(token) {
     return String(a.level).localeCompare(String(b.level), undefined, { numeric: true });
   });
 
-  var staffAll = readTable_('Staff');
+  var staffAll = user.role === 'PARENT' ? [] : readTable_('Staff');
   var staffScoped = user.role === 'ADMIN' ? staffAll : staffAll.filter(function (st) { return sections.indexOf(st.section) !== -1; });
   var staffBySection = { KG: 0, PRIMARY: 0, SECONDARY: 0, Unassigned: 0 }, staffByDeg = {};
   var staffTotal = 0, staffActive = 0;
@@ -1264,8 +1275,10 @@ function api_searchDirectory(token, query) {
   var arms = armsMap_(user);
   var out = { students: [], staff: [] };
   if (q.length < 2) return out;
+  var wardIds = user.role === 'PARENT' ? parentStudentIds_(user) : null;
   readTable_('Students').forEach(function (s) {
     if (out.students.length >= 40 || !arms[s.classArmId]) return;
+    if (wardIds && wardIds.indexOf(String(s.id)) === -1) return;
     var hay = [s.firstName, s.middleName, s.lastName, s.admissionNo, s.guardianName, s.guardianPhone].join(' ').toLowerCase();
     if (hay.indexOf(q) !== -1) out.students.push(decorateStudent_(s, arms));
   });
