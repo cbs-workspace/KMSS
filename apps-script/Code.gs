@@ -37,13 +37,15 @@ var CFG = {
     SUBJECT_CLASS: 'SubjectClass', TERMS: 'Terms', GRADE_SCALE: 'GradeScale', STUDENTS: 'Students',
     STAFF: 'Staff', PARENT_STUDENTS: 'ParentStudents', ATTENDANCE: 'Attendance', SCORES: 'Scores',
     RESULT_SHEETS: 'ResultSheets', PAYMENTS: 'Payments', FILES: 'Files', ANNOUNCEMENTS: 'Announcements',
-    APPLICATIONS: 'Applications', AUDIT_LOG: 'AuditLog'
+    APPLICATIONS: 'Applications', FEES: 'Fees', FEE_SELECTIONS: 'FeeSelections', FEE_PLANS: 'FeePlans',
+    SETTINGS: 'Settings', AUDIT_LOG: 'AuditLog'
   },
   ROLES: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'TEACHER', 'PARENT'],
   SECTIONS: ['KG', 'PRIMARY', 'SECONDARY'],
   TERM_NAMES: ['FIRST', 'SECOND', 'THIRD'],
   ATTENDANCE_STATUSES: ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'],
-  PAYMENT_CATEGORIES: ['FEES', 'UNIFORM', 'BOOKS', 'OTHER'],
+  FEE_CATEGORIES: ['TUITION', 'FEES', 'BOOKS', 'UNIFORM', 'SPORT', 'PRACTICAL', 'LABORATORY', 'TRANSPORT', 'ICT', 'EXCURSION', 'DEVELOPMENT', 'OTHER'],
+  PAYMENT_CATEGORIES: ['TUITION', 'FEES', 'BOOKS', 'UNIFORM', 'SPORT', 'PRACTICAL', 'LABORATORY', 'TRANSPORT', 'ICT', 'EXCURSION', 'DEVELOPMENT', 'OTHER'],
   PAYMENT_STATUSES: ['PENDING', 'VERIFIED', 'REJECTED'],
   ENTRY_ROLES: ['PRINCIPAL', 'HEADMASTER', 'TEACHER'],
   FINANCE_ROLES: ['PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER']
@@ -64,10 +66,14 @@ var HEADERS = {
   Attendance: ['id', 'date', 'classArmId', 'studentId', 'status', 'note', 'recordedBy', 'createdAt'],
   Scores: ['id', 'termId', 'classArmId', 'studentId', 'subjectId', 'ca1', 'ca2', 'ca3', 'exam', 'total', 'grade', 'remark', 'recordedBy', 'updatedAt'],
   ResultSheets: ['id', 'termId', 'studentId', 'position', 'totalScore', 'average', 'teacherRemark', 'principalRemark', 'status', 'updatedAt'],
-  Payments: ['id', 'studentId', 'parentUserId', 'termId', 'category', 'amount', 'method', 'reference', 'note', 'status', 'evidenceFileId', 'evidenceUrl', 'verifiedBy', 'verifiedAt', 'createdAt', 'updatedAt'],
+  Payments: ['id', 'studentId', 'parentUserId', 'termId', 'category', 'amount', 'method', 'reference', 'note', 'status', 'evidenceFileId', 'evidenceUrl', 'verifiedBy', 'verifiedAt', 'createdAt', 'updatedAt', 'feePlanId', 'installmentNo', 'amountPaid', 'balanceAfter', 'receiptNo', 'viewfile', 'items'],
   Files: ['id', 'ownerType', 'ownerId', 'name', 'mimeType', 'size', 'driveFileId', 'url', 'uploadedBy', 'createdAt'],
   Announcements: ['id', 'title', 'body', 'audience', 'createdBy', 'createdAt', 'active', 'category', 'link'],
   Applications: ['id', 'ref', 'childFirstName', 'childMiddleName', 'childLastName', 'gender', 'dateOfBirth', 'classLevelId', 'guardianName', 'guardianPhone', 'guardianEmail', 'address', 'previousSchool', 'notes', 'photoFileId', 'documentFileId', 'status', 'submittedAt', 'reviewedAt', 'reviewedBy', 'remarks'],
+  Fees: ['id', 'name', 'category', 'section', 'classLevelId', 'sessionName', 'termName', 'amount', 'mandatory', 'active', 'orderIndex', 'note', 'updatedAt'],
+  FeeSelections: ['id', 'studentId', 'parentUserId', 'termId', 'feeId', 'category', 'name', 'amount', 'mandatory', 'selected', 'createdAt', 'updatedAt'],
+  FeePlans: ['id', 'studentId', 'parentUserId', 'termId', 'installments', 'createdAt', 'updatedAt'],
+  Settings: ['key', 'value', 'updatedAt'],
   AuditLog: ['id', 'at', 'actorId', 'actorUsername', 'action', 'target', 'detail']
 };
 
@@ -156,6 +162,7 @@ function readTable_(name) {
   }
   return rows;
 }
+function readTableSafe_(name) { try { return readTable_(name); } catch (e) { return []; } }
 function findById_(name, id) {
   var rows = readTable_(name);
   for (var i = 0; i < rows.length; i++) if (String(rows[i].id) === String(id)) return rows[i];
@@ -360,6 +367,7 @@ function seedReferenceData_() {
   if (readTable_('Subjects').length === 0) seedSubjects_();
   if (readTable_('Terms').length === 0) seedTerms_();
   if (readTable_('GradeScale').length === 0) seedGradeScale_();
+  if (readTable_('Fees').length === 0) seedFees_();
 }
 function seedClassLevels_() {
   var levels = [
@@ -404,6 +412,30 @@ function seedGradeScale_() {
   ];
   CFG.SECTIONS.forEach(function (section) {
     defs.forEach(function (d) { appendRow_('GradeScale', { id: uuid_(), section: section, grade: d.grade, minScore: d.minScore, maxScore: d.maxScore, remark: d.remark, orderIndex: d.orderIndex }); });
+  });
+}
+/**
+ * Sample fee catalogue so new school fee schedules are non-empty.
+ * All amounts are placeholders — edit them in the sheet or the Fees page.
+ * A blank section/level/term means "applies to every section/level/term".
+ */
+function seedFees_() {
+  var definitions = [
+    { name: 'School fees', category: 'TUITION', amount: 60000, mandatory: true, orderIndex: 1 },
+    { name: 'Tuition', category: 'TUITION', amount: 120000, section: 'SECONDARY', mandatory: true, orderIndex: 1 },
+    { name: 'Tuition', category: 'TUITION', amount: 90000, section: 'PRIMARY', mandatory: true, orderIndex: 1 },
+    { name: 'Tuition', category: 'TUITION', amount: 70000, section: 'KG', mandatory: true, orderIndex: 1 },
+    { name: 'Books & stationery', category: 'BOOKS', amount: 25000, mandatory: false, orderIndex: 2 },
+    { name: 'Uniform (pair)', category: 'UNIFORM', amount: 15000, mandatory: false, orderIndex: 3 },
+    { name: 'Sports', category: 'SPORT', amount: 8000, mandatory: false, orderIndex: 4 },
+    { name: 'Practical materials', category: 'PRACTICAL', amount: 6000, mandatory: false, orderIndex: 5 },
+    { name: 'Laboratory', category: 'LABORATORY', amount: 10000, section: 'SECONDARY', mandatory: false, orderIndex: 6 },
+    { name: 'Transport', category: 'TRANSPORT', amount: 18000, mandatory: false, orderIndex: 7 },
+    { name: 'ICT', category: 'ICT', amount: 7000, mandatory: false, orderIndex: 8 },
+    { name: 'Excursion', category: 'EXCURSION', amount: 5000, mandatory: false, orderIndex: 9 }
+  ];
+  definitions.forEach(function (d) {
+    appendRow_('Fees', { id: uuid_(), name: d.name, category: d.category, section: d.section || '', classLevelId: '', sessionName: '', termName: '', amount: d.amount, mandatory: d.mandatory, active: true, orderIndex: d.orderIndex, note: '', updatedAt: nowIso_() });
   });
 }
 /** Editor helper: create a user quickly. */
@@ -1052,6 +1084,55 @@ function ensureAnnouncementColumns() {
   return added;
 }
 
+/* =========================== 12a. SETTINGS & SCHEMA MIGRATION =========================== */
+
+function getSetting_(key, def) {
+  var list = readTableSafe_('Settings');
+  for (var i = 0; i < list.length; i++) if (String(list[i].key) === String(key)) return list[i].value;
+  return def === undefined ? '' : def;
+}
+function setSetting_(key, value) {
+  var list = readTableSafe_('Settings');
+  for (var i = 0; i < list.length; i++) if (String(list[i].key) === String(key)) { updateRow_('Settings', list[i].key, { value: value, updatedAt: nowIso_() }); return; }
+  appendRow_('Settings', { key: key, value: value, updatedAt: nowIso_() });
+}
+function ensureColumns_(name, headers) {
+  var sheet = getSheet_(name);
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var current = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h); });
+  headers.forEach(function (h) {
+    if (current.indexOf(h) === -1) { sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h); current.push(h); }
+  });
+}
+/**
+ * Non-destructive migration (safe on a live spreadsheet). Creates the new
+ * fee/settings tabs and appends the new Payments columns. Run once from the
+ * editor after deploying the new version — no data is cleared.
+ */
+function ensureFeeTables() {
+  var ss = getSpreadsheet_();
+  ['Fees', 'FeeSelections', 'FeePlans', 'Settings'].forEach(function (name) { ensureSheet_(ss, name); });
+  ensureColumns_('Payments', HEADERS.Payments);
+  Logger.log('Fee/settings tables ensured. (Run setUp() to clear & re-seed everything.)');
+  return true;
+}
+function api_getSettings(token) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'], 'You cannot view settings.');
+  var out = {};
+  readTable_('Settings').forEach(function (r) { out[r.key] = r.value; });
+  if (!out.ADMISSION_NOTIFY_EMAILS) out.ADMISSION_NOTIFY_EMAILS = OWNER_ADMIN_EMAIL;
+  return out;
+}
+function api_saveSettings(token, payload) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'You cannot change settings.');
+  payload = payload || {};
+  Object.keys(payload).forEach(function (key) { setSetting_(key, String(payload[key] || '')); });
+  logAudit_(user, 'UPDATE_SETTINGS', '', Object.keys(payload).join(','));
+  return api_getSettings(token);
+}
+
 
 /* =========================== 13. DRIVE / FILES =========================== */
 
@@ -1140,7 +1221,9 @@ function api_listPayments(token, opts) {
     return {
       id: p.id, studentId: p.studentId, studentName: s ? fullNameOf_(s) : '—', admissionNo: s ? s.admissionNo : '',
       category: p.category, amount: p.amount, method: p.method, reference: p.reference, note: p.note, status: p.status,
-      evidenceFileId: p.evidenceFileId, evidenceUrl: p.evidenceUrl, termId: p.termId, createdAt: p.createdAt, verifiedAt: p.verifiedAt
+      evidenceFileId: p.evidenceFileId, evidenceUrl: p.evidenceUrl, viewfile: p.viewfile || p.evidenceUrl, termId: p.termId,
+      feePlanId: p.feePlanId, installmentNo: p.installmentNo, amountPaid: p.amountPaid, balanceAfter: p.balanceAfter,
+      receiptNo: p.receiptNo, items: p.items, createdAt: p.createdAt, verifiedAt: p.verifiedAt
     };
   });
 }
@@ -1152,19 +1235,34 @@ function api_savePayment(token, payload) {
   if (user.role === 'PARENT') assertParentOf_(user, payload.studentId);
   else assertRole_(user, CFG.FINANCE_ROLES, 'You cannot record payments.');
   var category = CFG.PAYMENT_CATEGORIES.indexOf(payload.category) !== -1 ? payload.category : 'FEES';
-  var id = uuid_();
+  var termId = payload.termId || (getCurrentTerm_() || {}).id || '';
+  var plan = termId ? feePlanFor_(payload.studentId, termId) : null;
+  var sched = null;
+  if (termId) {
+    var stu0 = findById_('Students', payload.studentId), term0 = findById_('Terms', termId);
+    if (stu0 && term0) sched = buildFeeSchedule_(stu0, term0);
+  }
+  var paidBefore = 0, planCount = 0;
+  if (termId) paymentsForPlan_(payload.studentId, termId).forEach(function (p) {
+    if (String(p.status).toUpperCase() !== 'REJECTED') { paidBefore += numOrZero_(p.amount); planCount++; }
+  });
+  var amount = round2_(Number(payload.amount));
+  var balanceAfter = sched ? round2_(Math.max(0, sched.totalBill - (paidBefore + amount))) : '';
   var fields = {
-    id: id, studentId: payload.studentId, parentUserId: user.role === 'PARENT' ? user.id : (payload.parentUserId || ''),
-    termId: payload.termId || (getCurrentTerm_() || {}).id || '', category: category, amount: Number(payload.amount),
-    method: payload.method || '', reference: payload.reference || '', note: payload.note || '',
-    status: 'PENDING', evidenceFileId: '', evidenceUrl: '', verifiedBy: '', verifiedAt: '', createdAt: nowIso_(), updatedAt: nowIso_()
+    id: uuid_(), studentId: payload.studentId, parentUserId: user.role === 'PARENT' ? user.id : (payload.parentUserId || ''),
+    termId: termId, category: category, amount: amount, method: payload.method || '', reference: payload.reference || '', note: payload.note || '',
+    status: 'PENDING', evidenceFileId: '', evidenceUrl: '', verifiedBy: '', verifiedAt: '', createdAt: nowIso_(), updatedAt: nowIso_(),
+    feePlanId: plan ? plan.id : '', installmentNo: termId ? (planCount + 1) : '', amountPaid: amount, balanceAfter: balanceAfter,
+    receiptNo: nextReceiptNo_(), viewfile: '',
+    items: sched ? sched.items.filter(function (i) { return i.selected; }).map(function (i) { return i.name; }).join(', ') : ''
   };
   appendRow_('Payments', fields);
   if (payload.evidence && payload.evidence.dataUrl) {
-    var stored = storeFile_(user, 'PAYMENT', id, payload.evidence);
-    updateRow_('Payments', id, { evidenceFileId: stored.driveFileId, evidenceUrl: stored.url, updatedAt: nowIso_() });
+    var stored = storeFile_(user, 'PAYMENT', fields.id, payload.evidence);
+    updateRow_('Payments', fields.id, { evidenceFileId: stored.driveFileId, evidenceUrl: stored.url, viewfile: stored.url, updatedAt: nowIso_() });
   }
-  return { id: id };
+  logAudit_(user, 'RECORD_PAYMENT', '', 'student ' + payload.studentId + ' amount ' + amount + ' receipt ' + fields.receiptNo);
+  return { id: fields.id, receiptNo: fields.receiptNo, balanceAfter: fields.balanceAfter, installmentNo: fields.installmentNo, planId: fields.feePlanId };
 }
 function api_verifyPayment(token, id, decision) {
   var user = requireUser_(token);
@@ -1173,6 +1271,199 @@ function api_verifyPayment(token, id, decision) {
   if (!findById_('Payments', id)) throw new Error('Payment not found.');
   updateRow_('Payments', id, { status: status, verifiedBy: user.id, verifiedAt: nowIso_(), updatedAt: nowIso_() });
   return { status: status };
+}
+
+/* ==================== 14a. FEES, SELECTIONS & RECEIPTS ==================== */
+
+/** A fee applies to a class level when section/level/session/term constraints are blank or match. */
+function feeApplies_(fee, level, term) {
+  if (!toBool_(fee.active)) return false;
+  if (level) {
+    if (fee.section && String(fee.section) !== String(level.section)) return false;
+    if (fee.classLevelId && String(fee.classLevelId) !== String(level.id)) return false;
+  }
+  if (term) {
+    if (fee.sessionName && String(fee.sessionName) !== String(term.sessionName)) return false;
+    if (fee.termName && String(fee.termName) !== String(term.termName)) return false;
+  }
+  return true;
+}
+function applicableFeesForLevel_(level, term) {
+  if (!level) return [];
+  return readTableSafe_('Fees').filter(function (f) { return feeApplies_(f, level, term); }).sort(function (a, b) {
+    var ao = numOrZero_(a.orderIndex), bo = numOrZero_(b.orderIndex);
+    if (ao !== bo) return ao - bo;
+    return String(a.name).localeCompare(String(b.name));
+  });
+}
+function applicableFeesForStudent_(student, term) {
+  var arm = getArmById_(student.classArmId);
+  var level = arm ? findById_('ClassLevels', arm.classLevelId) : null;
+  return applicableFeesForLevel_(level, term);
+}
+function feeSelectionsFor_(studentId, termId) {
+  return readTableSafe_('FeeSelections').filter(function (s) { return String(s.studentId) === String(studentId) && String(s.termId) === String(termId); });
+}
+function feePlanFor_(studentId, termId) {
+  return findWhere_('FeePlans', function (p) { return String(p.studentId) === String(studentId) && String(p.termId) === String(termId); });
+}
+function paymentsForPlan_(studentId, termId) {
+  return readTable_('Payments').filter(function (p) { return String(p.studentId) === String(studentId) && String(p.termId) === String(termId); })
+    .sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+}
+function classArmLabel_(armId) {
+  var a = getArmById_(armId), l = a ? findById_('ClassLevels', a.classLevelId) : null;
+  return a && l ? (l.section + ' · ' + l.name + ' ' + a.name) : '';
+}
+/** Reduces a ward + term into a bill: applicable items, mandatory defaults, paid/balance. */
+function buildFeeSchedule_(student, term) {
+  var fees = applicableFeesForStudent_(student, term);
+  var selMap = {}; feeSelectionsFor_(student.id, term.id).forEach(function (r) { selMap[String(r.feeId)] = r; });
+  var items = fees.map(function (f) {
+    var r = selMap[String(f.id)];
+    var mandatory = toBool_(f.mandatory);
+    var selected = r ? (mandatory || toBool_(r.selected)) : mandatory;
+    return { feeId: f.id, name: String(f.name || ''), category: String(f.category || 'FEES'), amount: round2_(numOrZero_(f.amount)), mandatory: mandatory, selected: selected, note: String(f.note || '') };
+  });
+  var plan = feePlanFor_(student.id, term.id);
+  var total = items.reduce(function (t, i) { return t + (i.selected ? i.amount : 0); }, 0);
+  var pays = paymentsForPlan_(student.id, term.id);
+  var paid = 0, done = 0;
+  pays.forEach(function (p) { if (String(p.status).toUpperCase() !== 'REJECTED') { paid += numOrZero_(p.amount); done++; } });
+  return {
+    items: items,
+    saved: feeSelectionsFor_(student.id, term.id).length > 0,
+    installments: plan ? (Number(plan.installments) || 0) : 0, planId: plan ? plan.id : '',
+    totalBill: round2_(total), amountPaid: round2_(paid), paidCount: done, balance: round2_(Math.max(0, total - paid)),
+    payments: pays.map(paymentReceiptView_)
+  };
+}
+function termRef_(termId) {
+  var t = findById_('Terms', termId);
+  return t ? { id: t.id, label: termLabel_(t), termName: t.termName, sessionName: t.sessionName } : null;
+}
+function api_getFeeSchedule(token, studentId, termId) {
+  var user = requireUser_(token);
+  var student = findById_('Students', studentId);
+  if (!student) throw new Error('Student not found.');
+  assertStudentAccess_(user, student);
+  var term = termId ? findById_('Terms', termId) : getCurrentTerm_();
+  if (!term) throw new Error('No term is available.');
+  var sched = buildFeeSchedule_(student, term);
+  return {
+    student: decorateStudent_(student, armsMap_(user)), term: termRef_(term.id),
+    items: sched.items, saved: sched.saved, installments: sched.installments, planId: sched.planId,
+    totalBill: sched.totalBill, amountPaid: sched.amountPaid, paidCount: sched.paidCount, balance: sched.balance,
+    payments: sched.payments
+  };
+}
+function api_saveFeeSelection(token, studentId, termId, payload) {
+  var user = requireUser_(token);
+  if (user.role !== 'PARENT' && !hasRole_(user, CFG.FINANCE_ROLES)) throw new Error('Only parents or finance staff can select fees.');
+  var student = findById_('Students', studentId);
+  if (!student) throw new Error('Student not found.');
+  assertStudentAccess_(user, student);
+  var term = findById_('Terms', termId);
+  if (!term || !toBool_(term.active)) throw new Error('Select a valid term.');
+  payload = payload || {};
+  var existing = {}; feeSelectionsFor_(studentId, termId).forEach(function (r) { existing[String(r.feeId)] = r; });
+  (payload.items || []).forEach(function (it) {
+    if (!it || !it.feeId) return;
+    var fee = findById_('Fees', it.feeId);
+    if (!fee || !toBool_(fee.active)) return;
+    var mandatory = toBool_(fee.mandatory);
+    var fields = {
+      studentId: student.id, parentUserId: user.role === 'PARENT' ? user.id : '', termId: termId, feeId: fee.id,
+      category: String(fee.category || 'FEES'), name: String(fee.name || ''), amount: round2_(numOrZero_(fee.amount)),
+      mandatory: mandatory, selected: mandatory ? true : !!it.selected, updatedAt: nowIso_()
+    };
+    if (existing[String(fee.id)]) updateRow_('FeeSelections', existing[String(fee.id)].id, fields);
+    else { fields.id = uuid_(); fields.createdAt = nowIso_(); appendRow_('FeeSelections', fields); existing[String(fee.id)] = fields; }
+  });
+  var installments = [1, 2, 3].indexOf(Number(payload.installments)) !== -1 ? Number(payload.installments) : 1;
+  var plan = feePlanFor_(studentId, termId);
+  if (plan) updateRow_('FeePlans', plan.id, { installments: installments, updatedAt: nowIso_() });
+  else appendRow_('FeePlans', { id: uuid_(), studentId: student.id, parentUserId: user.role === 'PARENT' ? user.id : '', termId: termId, installments: installments, createdAt: nowIso_(), updatedAt: nowIso_() });
+  logAudit_(user, 'SAVE_FEE_SELECTION', student.id, 'term ' + termId + ' installments ' + installments);
+  return buildFeeSchedule_(student, term);
+}
+var FEE_WRITE_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
+function api_listFees(token, opts) {
+  requireUser_(token);
+  opts = opts || {};
+  var list = readTableSafe_('Fees');
+  if (opts.activeOnly) list = list.filter(function (f) { return toBool_(f.active); });
+  var levelsById = indexById_(readTable_('ClassLevels'));
+  return list.map(function (f) {
+    var o = stripRow_(f);
+    o.levelName = (f.classLevelId && levelsById[f.classLevelId]) ? levelsById[f.classLevelId].name : '';
+    return o;
+  }).sort(function (a, b) {
+    var o = numOrZero_(a.orderIndex) - numOrZero_(b.orderIndex);
+    if (o !== 0) return o;
+    return String(a.name).localeCompare(String(b.name));
+  });
+}
+function api_saveFee(token, payload) {
+  var user = requireUser_(token);
+  assertRole_(user, FEE_WRITE_ROLES, 'You cannot edit fees.');
+  payload = payload || {};
+  if (!payload.name) throw new Error('Fee/charge name is required.');
+  if (payload.amount === '' || payload.amount === null || payload.amount === undefined || isNaN(Number(payload.amount))) throw new Error('Enter the amount (₦).');
+  var section = String(payload.section || '').trim();
+  if (section && CFG.SECTIONS.indexOf(section) === -1) throw new Error('Invalid section.');
+  var category = CFG.FEE_CATEGORIES.indexOf(payload.category) !== -1 ? payload.category : 'FEES';
+  var fields = {
+    name: String(payload.name).trim(), category: category, section: section,
+    classLevelId: payload.classLevelId || '', sessionName: String(payload.sessionName || '').trim(),
+    termName: CFG.TERM_NAMES.indexOf(payload.termName) !== -1 ? payload.termName : '',
+    amount: round2_(numOrZero_(payload.amount)), mandatory: toBool_(payload.mandatory),
+    active: payload.active === undefined ? true : toBool_(payload.active), orderIndex: numOrZero_(payload.orderIndex),
+    note: String(payload.note || '').trim(), updatedAt: nowIso_()
+  };
+  if (payload.id) {
+    if (!findById_('Fees', payload.id)) throw new Error('Fee not found.');
+    updateRow_('Fees', payload.id, fields);
+  } else { fields.id = uuid_(); appendRow_('Fees', fields); }
+  logAudit_(user, 'SAVE_FEE', fields.name, 'amount ' + fields.amount);
+  return api_listFees(token, {});
+}
+function api_deleteFee(token, id) {
+  var user = requireUser_(token);
+  assertRole_(user, FEE_WRITE_ROLES, 'You cannot delete fees.');
+  if (!findById_('Fees', id)) throw new Error('Fee not found.');
+  deleteRow_('Fees', id);
+  logAudit_(user, 'DELETE_FEE', id, '');
+  return true;
+}
+function nextReceiptNo_() {
+  var prefix = 'KMS/RCP/' + new Date().getFullYear() + '/', max = 0;
+  readTable_('Payments').forEach(function (p) { var v = String(p.receiptNo || ''); if (v.indexOf(prefix) === 0) { var n = parseInt(v.slice(prefix.length), 10); if (!isNaN(n) && n > max) max = n; } });
+  var next = String(max + 1); while (next.length < 4) next = '0' + next; return prefix + next;
+}
+function paymentReceiptView_(p) {
+  var student = findById_('Students', p.studentId);
+  return {
+    id: p.id, receiptNo: p.receiptNo || '', studentId: p.studentId,
+    studentName: student ? fullNameOf_(student) : '—', admissionNo: student ? student.admissionNo : '',
+    classArm: classArmLabel_(student ? student.classArmId : ''), term: termRef_(p.termId),
+    category: p.category, amount: numOrZero_(p.amount),
+    amountPaid: (p.amountPaid === '' || p.amountPaid === null || p.amountPaid === undefined) ? numOrZero_(p.amount) : numOrZero_(p.amountPaid),
+    balanceAfter: (p.balanceAfter === '' || p.balanceAfter === null || p.balanceAfter === undefined) ? '' : numOrZero_(p.balanceAfter),
+    installmentNo: p.installmentNo || '', method: p.method, reference: p.reference, note: p.note, items: p.items || '',
+    status: p.status, viewfile: p.viewfile || p.evidenceUrl, evidenceUrl: p.evidenceUrl, createdAt: p.createdAt, verifiedAt: p.verifiedAt
+  };
+}
+function api_getReceipt(token, paymentId) {
+  var user = requireUser_(token);
+  var p = findById_('Payments', paymentId);
+  if (!p) throw new Error('Payment/receipt not found.');
+  if (user.role === 'PARENT') assertParentOf_(user, p.studentId);
+  else if (userArmIds_(user).length) {
+    var stu = findById_('Students', p.studentId);
+    if (stu) assertArmAllowed_(user, stu.classArmId);
+  }
+  return { school: brand_(), receipt: paymentReceiptView_(p) };
 }
 
 /* =========================== 14b. DASHBOARD / DIRECTORY =========================== */
@@ -1309,7 +1600,7 @@ function api_bootstrap(token) {
     subjects: readTable_('Subjects').filter(function (s) { return toBool_(s.active); }), subjectClass: readTable_('SubjectClass'),
     terms: getTerms_(), gradeScale: readTable_('GradeScale'), roles: CFG.ROLES, sections: CFG.SECTIONS,
     attendanceStatuses: CFG.ATTENDANCE_STATUSES, audiences: ANNOUNCE_AUDIENCES,
-    paymentCategories: CFG.PAYMENT_CATEGORIES, paymentStatuses: CFG.PAYMENT_STATUSES,
+    paymentCategories: CFG.PAYMENT_CATEGORIES, paymentStatuses: CFG.PAYMENT_STATUSES, feeCategories: CFG.FEE_CATEGORIES,
     admissionStatuses: ADMISSION_STATUSES,
     currentTermId: current ? current.id : ''
   };
@@ -1658,6 +1949,79 @@ function assertApplicationScope_(user, a) {
 }
 
 /** Public — no login required: submit an admission application from the website. */
+function escHtml_(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function admissionRecipients_(guardianEmail) {
+  var list = [];
+  function add(e) { e = String(e || '').trim().toLowerCase(); if (e && EMAIL_RE.test(e) && list.indexOf(e) === -1) list.push(e); }
+  add(guardianEmail);
+  readTableSafe_('Users').forEach(function (u) { if ((u.role === 'ADMIN' || u.role === 'PRINCIPAL') && toBool_(u.active)) add(u.email); });
+  add(OWNER_ADMIN_EMAIL);
+  String(getSetting_('ADMISSION_NOTIFY_EMAILS', '')).split(/[,;\s]+/).forEach(add);
+  return list;
+}
+function admissionPdfBlob_(a, level) {
+  try {
+    if (typeof DocumentApp === 'undefined') return null;
+    var doc = DocumentApp.create('KMS Admission ' + a.ref);
+    var body = doc.getBody();
+    body.appendParagraph(CFG.APP_NAME).setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph('Admission Application — Reference ' + a.ref);
+    [
+      ['Applying for', level ? (level.section + ' · ' + level.name) : ''],
+      ['Child', [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' ')],
+      ['Gender', a.gender], ['Date of birth', String(a.dateOfBirth || '').slice(0, 10)],
+      ['Guardian name', a.guardianName], ['Guardian phone', a.guardianPhone], ['Guardian email', a.guardianEmail || ''],
+      ['Home address', a.address || ''], ['Previous school', a.previousSchool || ''], ['Notes', a.notes || '']
+    ].forEach(function (r) { body.appendParagraph(r[0] + ':  ' + r[1]); });
+    body.appendParagraph('Status: PENDING (awaiting school review)');
+    doc.saveAndClose();
+    var file = DriveApp.getFileById(doc.getId());
+    var blob = file.getAs('application/pdf').setName('KMS-Admission-' + a.ref + '.pdf');
+    file.setTrashed(true);
+    return blob;
+  } catch (e) { Logger.log('admissionPdfBlob_ failed: ' + (e && e.message ? e.message : e)); return null; }
+}
+/** Sends the applicant + all admin/principal recipients a summary of the application (with PDF). */
+function notifyAdmission_(a, level) {
+  var subject = 'Admission application received — ' + a.ref + ' (' + [a.childFirstName, a.childLastName].filter(Boolean).join(' ') + ')';
+  var text = [
+    CFG.APP_NAME + ' — Admission application received',
+    '', 'Reference: ' + a.ref,
+    'Applying for: ' + (level ? (level.section + ' · ' + level.name) : ''),
+    'Child: ' + [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' '),
+    'Gender: ' + a.gender, 'Date of birth: ' + String(a.dateOfBirth || '').slice(0, 10),
+    'Guardian: ' + a.guardianName, 'Phone: ' + a.guardianPhone, 'Email: ' + (a.guardianEmail || '—'),
+    'Address: ' + (a.address || '—'), 'Previous school: ' + (a.previousSchool || '—'),
+    'Notes: ' + (a.notes || '—'), '', 'Status: PENDING — the school office will review this application.',
+    ''
+  ].join('\n');
+  var rowHtml = function (label, value) {
+    return '<tr><td style="padding:6px 8px;border:1px solid #e2e8e4;background:#f4f7f5;color:#14532d;white-space:nowrap"><strong>' + escHtml_(label) + '</strong></td><td style="padding:6px 8px;border:1px solid #e2e8e4">' + escHtml_(value) + '</td></tr>';
+  };
+  var html = '<html><body style="font-family:Arial,Helvetica,sans-serif;color:#1b2a26;max-width:640px;margin:0 auto">' +
+    '<h2 style="color:#14532d;margin:0 0 4px">' + escHtml_(CFG.APP_NAME) + '</h2>' +
+    '<p style="color:#66756f;margin:0 0 16px">Admission application received</p>' +
+    '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px">' +
+    rowHtml('Reference', a.ref) + rowHtml('Applying for', level ? (level.section + ' · ' + level.name) : '') +
+    rowHtml('Child', [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' ')) +
+    rowHtml('Gender', a.gender) + rowHtml('Date of birth', String(a.dateOfBirth || '').slice(0, 10)) +
+    rowHtml('Guardian name', a.guardianName) + rowHtml('Guardian phone', a.guardianPhone) +
+    rowHtml('Guardian email', a.guardianEmail || '—') + rowHtml('Home address', a.address || '—') +
+    rowHtml('Previous school', a.previousSchool || '—') + rowHtml('Notes', a.notes || '—') +
+    '</table><p style="color:#66756f;font-size:13px;margin-top:12px">Status: <strong>PENDING</strong> — the school office will review this application shortly.</p></body></html>';
+  var recipients = admissionRecipients_(a.guardianEmail);
+  if (!recipients.length) { Logger.log('No admission notification recipients configured for ' + a.ref); return; }
+  try {
+    var opts = { to: recipients.join(','), subject: subject, body: text, htmlBody: html };
+    var pdf = admissionPdfBlob_(a, level);
+    if (pdf) opts.attachments = [pdf];
+    MailApp.sendEmail(opts);
+    Logger.log('Admission notification for ' + a.ref + ' emailed to ' + recipients.length + ' recipient(s).');
+  } catch (e) { Logger.log('Admission notification FAILED for ' + a.ref + ': ' + (e && e.message ? e.message : e)); }
+}
 function api_applyAdmission(payload) {
   payload = payload || {};
   if (String(payload.website || '').replace(/\s/g, '')) return { ref: 'KMS/APP/0000', status: 'PENDING', submitted: true, message: 'Your application has been received.' }; // honeypot
@@ -1694,7 +2058,8 @@ function api_applyAdmission(payload) {
   if (doc) fields.documentFileId = doc.driveFileId;
   appendRow_('Applications', fields);
   Logger.log('New admission application ' + ref + ' for ' + firstName + ' ' + lastName);
-  return { ref: ref, status: 'PENDING', submitted: true, message: 'Your application has been received.' };
+  notifyAdmission_(fields, level);
+  return { ref: ref, status: 'PENDING', submitted: true, message: 'Your application has been received. A copy has been sent to your email and to the school office.' };
 }
 function api_listApplications(token) {
   var user = assertApplicationsAccess_(token);

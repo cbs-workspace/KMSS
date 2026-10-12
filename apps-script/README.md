@@ -10,9 +10,10 @@ This replaces the earlier React + Express + PostgreSQL app (kept in `client/` an
 | --- | --- | --- |
 | `Code.gs` | Script | `Code` |
 | `index.html` | HTML | `index` |
+| `Admission.html` | HTML | `Admission` |
 | `appsscript.json` | Manifest | `appsscript` |
 
-Everything else — config, database layer, auth, reference data, students, staff, attendance, results, report cards, announcements, Drive uploads, payments and the whole single-page UI — is inside those two files.
+Everything else — config, database layer, auth, reference data, students, staff, attendance, results, report cards, fee catalogue & receipts, announcements, Drive uploads, payments and the whole single-page UI — is inside those files.
 
 ## What it does
 
@@ -24,7 +25,9 @@ Everything else — config, database layer, auth, reference data, students, staf
 - **Results** — per-subject score entry (CA1–CA3 /10, Exam /70), compute totals, averages, positions, publish
 - **Report cards** — printable terminal report sheet with the school logo and CBS footer
 - **Payments** — parents record fees/uniform/books payments and upload evidence; bursar/account officer verify
+- **Fees & receipts** — a fee catalogue (per section / class level / term) is maintained in the **Fees** tab or portal **Fees** page; parents pick optionals per ward/term, choose a 2- or 3-installment plan, and every payment produces an official printable receipt with running balance
 - **My Wards** — parents see the students linked to their account
+- **My Fees** — parents see each ward's fee schedule, select items, print the schedule and their receipts
 - **Announcements** — audience targeting (all / **website** / section / staff / parents), with an optional label (badge) and link. Anything posted to the **WEBSITE** audience appears on the public school website's scrolling marquee.
 - **Setup** — maintain class levels, class arms, subjects, subject↔class mapping, terms, grade scale, parent↔ward links
 - **Users** — admin-only panel to add users and manage access, plus self-service password change (see below)
@@ -70,6 +73,8 @@ The directory search matches students and staff by name, admission/staff number,
    | `FOOTER_TEXT` | *© 2026 Capacity Building and Support (CBS). All rights reserved.* | Footer line |
 
 5. Run the setup function once: in the editor choose `setUp` and click **Run**. Approve the permissions prompt. **`setUp()` is destructive — it clears every tab and re-seeds the reference data and the owner administrator** (reset & re-seed). Only run it when you want a clean slate.
+
+   Existing deployment upgrading to **Phase 1 (fees/settings)**? Do **not** run `setUp()` — run `ensureFeeTables()` instead. It **non-destructively** creates the `Fees`, `FeeSelections`, `FeePlans` and `Settings` tabs and extends the `Payments` columns (adding receipt/installment fields).
 6. **Deploy → New deployment → Web app**
    - *Execute as*: **Me**
    - *Who has access*: **Anyone** (or *Anyone with Google account*)
@@ -169,6 +174,22 @@ Demo logins (shared password `Demo@1234`):
 - The evidence file is saved to the Drive folder and a `Files` row plus a `Payments` row (`status = PENDING`) are written.
 - Bursar / Account Officer open **Payments**, review the evidence and **verify** or reject; status becomes `VERIFIED` / `REJECTED`.
 
+## Fees, fee selections & receipts
+
+- **Fee catalogue** (`Fees` tab, or portal **Fees** page for ADMIN/PRINCIPAL/HEADMASTER/BURSAR). Each fee/charge has a category (TUITION, FEES, BOOKS, UNIFORM, SPORT, PRACTICAL, LABORATORY, TRANSPORT, ICT, EXCURSION, DEVELOPMENT, OTHER), an amount, and scoping: section, class level, session and term — blank means *all*. `mandatory` items are added to every bill automatically; optional ones are chosen by parents. `active=false` hides it.
+- **Parent selection** (portal **My Fees**). Per ward + term a parent sees the applicable items, a total bill, amount paid and balance, ticks the optional items they want (mandatory items are locked on), chooses to pay in **1, 2 or 3 installments**, and saves. Selections are stored in `FeeSelections`, the chosen plan in `FeePlans`.
+- **Receipts**. Whenever a payment is recorded (by the parent or finance staff) the row is stamped with `receiptNo` (`KMS/RCP/<year>/<0001>`), `installmentNo`, `amountPaid` and `balanceAfter` (the running bill balance after that payment). Attaching evidence fills the `viewfile` link. Parents view/print official receipts (school logo, no designer branding) from **My Fees** or **Payments**.
+
+## Settings
+
+A small key/value `Settings` tab. Current settings:
+
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `ADMISSION_NOTIFY_EMAILS` | owner admin email | Extra recipients of admission-application notifications (the applicant + every active ADMIN/PRINCIPAL user are always notified) |
+
+Editable from the portal **Fees → Settings** card, or directly in the `Settings` tab. Mail is sent via MailApp (counts against the Gmail quota — keep the list small).
+
 ## Data model (spreadsheet tabs)
 
 | Tab | Purpose |
@@ -186,7 +207,11 @@ Demo logins (shared password `Demo@1234`):
 | `Attendance` | One row per student per day |
 | `Scores` | One row per student/subject/term (CA1, CA2, CA3, Exam, total, grade) |
 | `ResultSheets` | Per student/term totals, average, position, remarks, status |
-| `Payments` | Fee/uniform/books payments + evidence + verification |
+| `Payments` | Fee/uniform/books payments + evidence + verification + receipt fields (`feePlanId`, `installmentNo`, `amountPaid`, `balanceAfter`, `receiptNo`, `viewfile`, `items`) |
+| `Fees` | Fee/charge catalogue (category, section/level/session/term scope, amount, mandatory, active) |
+| `FeeSelections` | Which optional fees a parent has selected per student/term |
+| `FeePlans` | Installment plan (1/2/3) per student/term |
+| `Settings` | Key/value school settings (`ADMISSION_NOTIFY_EMAILS`, …) |
 | `Files` | Uploaded file index (Drive file id, url, owner, size) |
 | `Applications` | Public admission applications (ref, child, guardian, class level, files, status workflow) |
 | `Announcements` | Posts with audience targeting; `category` (badge) and `link` are optional extra columns |
@@ -209,7 +234,7 @@ Embed options (query parameters on the `/exec` URL):
 
 | Parameter | Effect |
 | --- | --- |
-| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `users`, `admin`, `announcements` |
+| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `fees`, `users`, `admin`, `announcements` |
 | `embed=1` | Compact mode: hides the CBS footer and tightens page padding to blend into the host page |
 | `admission=1` | Show the **public admission application form** (`Admission.html`), no login required — embed it on the website alongside the portal |
 | `public=announcements&callback=<fn>` | **Public, no login** — returns the website announcements as JS (JSONP) for the landing-page marquee. Only active posts with audience `WEBSITE` are returned. |

@@ -47,6 +47,12 @@
     .success h2 { margin: 0 0 8px; color: var(--green-dark); }
     .success .ref { font-weight: 700; color: var(--green-dark); }
     .success p { color: var(--muted); }
+    .summary { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .summary .srow { display: flex; justify-content: space-between; gap: 14px; padding: 9px 13px; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .summary .srow:last-child { border-bottom: 0; }
+    .summary .srow .k { color: var(--muted); flex-shrink: 0; }
+    .summary .srow .v { text-align: right; font-weight: 600; }
+    .summary .srow.review-note { background: var(--green-light); font-weight: 600; color: var(--green-dark); }
     .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .foot { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
   </style>
@@ -102,6 +108,17 @@
           <span class="muted small" style="color:var(--muted);font-size:12px">We only use this information to process your application.</span>
         </div>
       </form>
+    </div>
+
+    <div class="card" id="review-card" style="display:none">
+      <h2>Review your application</h2>
+      <p class="sub">Check everything below before submitting. Use <strong>Back to edit</strong> to change anything.</p>
+      <div class="summary" id="review-summary"></div>
+      <p class="notice" style="margin-top:16px">A copy of this application will be emailed to the guardian (if an email was provided) and to the school office.</p>
+      <div class="row">
+        <button class="btn" id="edit-btn" type="button">&#8592; Back to edit</button>
+        <button class="btn" id="confirm-btn" type="button">Confirm &amp; submit</button>
+      </div>
     </div>
 
     <div class="card success" id="success-card" style="display:none">
@@ -182,36 +199,87 @@
       });
     }
 
+    var draft = null;
+
+    function summaryRow(label, value, extra) {
+      var srow = document.createElement('div');
+      srow.className = 'srow' + (extra ? ' ' + extra : '');
+      var k = document.createElement('span'); k.className = 'k'; k.textContent = label;
+      var v = document.createElement('span'); v.className = 'v'; v.textContent = (value === null || value === undefined || value === '') ? '—' : String(value);
+      srow.appendChild(k); srow.appendChild(v);
+      return srow;
+    }
+
+    function showReview(payload, photoFile, docFile, levelName) {
+      var s = document.getElementById('review-summary');
+      s.innerHTML = '';
+      [
+        ['Class level', levelName],
+        ['Child', [payload.firstName, payload.middleName, payload.lastName].filter(Boolean).join(' ')],
+        ['Gender', payload.gender],
+        ['Date of birth', payload.dateOfBirth],
+        ['Guardian name', payload.guardianName],
+        ['Guardian phone', payload.guardianPhone],
+        ['Guardian email', payload.guardianEmail],
+        ['Home address', payload.address],
+        ['Previous school', payload.previousSchool],
+        ['Notes', payload.notes],
+        ['Attachments', (photoFile ? '1 passport photo' : 'No passport photo') + ' · ' + (docFile ? '1 document' : 'No document')]
+      ].forEach(function (r) { s.appendChild(summaryRow(r[0], r[1])); });
+      s.appendChild(summaryRow('Confirmation', 'By submitting, you confirm the details above are correct', 'review-note'));
+      form.style.display = 'none';
+      document.getElementById('review-card').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function setSubmitBusy(busy) {
+      var c = document.getElementById('confirm-btn');
+      c.disabled = busy;
+      c.innerHTML = busy ? '<span class="spinner"></span> Submitting…' : 'Confirm &amp; submit';
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault(); msg.innerHTML = '';
       var level = val('level'), firstName = val('firstName'), lastName = val('lastName');
       var gender = val('gender'), dob = val('dob'), gName = val('guardianName'), gPhone = val('guardianPhone'), gEmail = val('guardianEmail');
       if (!level || !firstName || !lastName || !gender || !dob || !gName || !gPhone) { showMsg('err', 'Please fill in all required fields.'); return; }
       if (gEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) { showMsg('err', 'Enter a valid guardian email or leave it blank.'); return; }
-      var photoInput = document.getElementById('photo'), docInput = document.getElementById('document');
-      var payload = {
+      draft = {
         website: document.getElementById('website').value,
         firstName: firstName, middleName: val('middleName'), lastName: lastName, gender: gender, dateOfBirth: dob, classLevelId: level,
         guardianName: gName, guardianPhone: gPhone, guardianEmail: gEmail, address: val('address'),
         previousSchool: val('prevSchool'), notes: val('notes')
       };
-      setBusy(true);
+      var lvl = LEVELS.filter(function (l) { return l.id === level; })[0];
+      showReview(draft, document.getElementById('photo').files[0], document.getElementById('document').files[0], lvl ? (lvl.section + ' · ' + lvl.name) : level);
+    });
+
+    document.getElementById('edit-btn').addEventListener('click', function () {
+      document.getElementById('review-card').style.display = 'none';
+      form.style.display = 'block';
+      window.scrollTo(0, 0);
+    });
+
+    document.getElementById('confirm-btn').addEventListener('click', function () {
+      if (!draft) return;
+      setSubmitBusy(true); msg.innerHTML = '';
+      var photoInput = document.getElementById('photo'), docInput = document.getElementById('document');
       Promise.all([
         photoInput.files.length ? readImage(photoInput.files[0]) : Promise.resolve(null),
         docInput.files.length ? readFileRaw(docInput.files[0]) : Promise.resolve(null)
       ]).then(function (files) {
-        payload.photo = files[0]; payload.document = files[1];
+        draft.photo = files[0]; draft.document = files[1];
         return new Promise(function (resolve, reject) {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); }).api_applyAdmission(payload);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); }).api_applyAdmission(draft);
         });
       }).then(function (res) {
-        setBusy(false);
+        setSubmitBusy(false);
         document.getElementById('ref').textContent = res.ref;
-        form.style.display = 'none';
+        document.getElementById('review-card').style.display = 'none';
         successCard.style.display = 'block';
         window.scrollTo(0, 0);
       }).catch(function (err) {
-        setBusy(false);
+        setSubmitBusy(false);
         showMsg('err', (err && err.message ? err.message : String(err)));
       });
     });

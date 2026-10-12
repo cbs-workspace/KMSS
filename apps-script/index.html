@@ -157,11 +157,41 @@
       .report-head { gap: 10px; }
       .report-head .school { font-size: 16px; }
     }
+    /* ---- fees ---- */
+    .fee-sheet { border: 1px solid var(--slate-200); border-radius: 12px; background: #fff; overflow: hidden; }
+    .fee-sheet .sheet-head { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .fee-sum { display: flex; gap: 18px; padding: 14px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--slate-100); }
+    .fee-sum .f { flex: 1; min-width: 110px; }
+    .fee-sum .k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--slate-500); }
+    .fee-sum .v { font-size: 20px; font-weight: 700; }
+    .fee-sum .v .neg { color: var(--red); }
+    .fee-item { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--slate-100); }
+    .fee-item:last-child { border-bottom: 0; }
+    .fee-item input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--emerald); flex-shrink: 0; }
+    .fee-item .amt { margin-left: auto; font-weight: 700; white-space: nowrap; }
+    .fee-items { border-top: 1px solid var(--slate-100); }
+    .receipt-card { border: 1px solid var(--slate-300) !important; }
+    .receipt { max-width: 640px; margin: 0 auto; background: #fff; font-size: 14px; }
+    .receipt hr { border: 0; border-top: 1px dashed var(--slate-300); margin: 12px 0; }
+    .receipt .r-title { text-align: center; margin: 2px 0 14px; }
+    .receipt .r-title h2 { margin: 0; letter-spacing: .14em; font-size: 18px; color: var(--slate-700); }
+    .receipt .r-row { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; }
+    .receipt .r-row .k { color: var(--slate-500); }
+    .receipt .r-row .v { font-weight: 600; text-align: right; }
+    .receipt .r-row.line { border-top: 1px solid var(--slate-200); margin-top: 4px; padding-top: 8px; }
+    .receipt .r-foot { font-size: 12px; color: var(--slate-500); text-align: center; margin-top: 14px; }
+    #print-area { display: none; }
+    @media print {
+      #print-area { display: block !important; }
+      body.print-receipt #app { display: none !important; }
+      .fee-item { break-inside: avoid; }
+    }
     @media print { .sidebar, .topbar, .toolbar, .no-print, .tabs, .dash-hero, .cards, .search-wrap, .nav-toggle, .sidebar-backdrop { display: none !important; } body { background: #fff; } .content { padding: 0; } .card { border: 0; padding: 0; } .footer { border-top: 1px solid #ccc; } }
   </style>
 </head>
 <body>
   <div id="app"></div>
+  <div id="print-area"></div>
   <script>
     var BRAND = <?!= brandJson ?>;
     var INITIAL_VIEW = <?!= initialViewJson ?>;
@@ -195,6 +225,7 @@
       { key: 'applications', label: 'Applications', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'staff', label: 'Staff', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'my-wards', label: 'My Wards', roles: ['PARENT'] },
+      { key: 'fees', label: function () { return state.user && state.user.role === 'PARENT' ? 'My Fees' : 'Fees'; }, roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'PARENT'] },
       { key: 'payments', label: 'Payments', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'PARENT'] },
       { key: 'users', label: 'Users', roles: ['ADMIN'] },
       { key: 'admin', label: 'Setup & Users', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] }
@@ -219,6 +250,8 @@
       applications: { list: [], detail: null },
       payments: { list: [], status: '', form: null, options: [] },
       wards: { list: [], payments: [] },
+      fees: { termId: '', wardId: '', schedule: null, list: [], form: null, settings: null },
+      receipt: null,
       admin: { tab: 'ClassLevels', rows: [], form: null, parentUsers: [], studentsList: [] },
       users: { list: [], form: null, audit: [], flash: null },
       pwForm: false,
@@ -272,7 +305,7 @@
       return '<div class="layout"><div class="sidebar-backdrop" data-action="close-nav"></div><aside class="sidebar"><div class="sidebar-brand">' +
         (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') +
         '<div><div class="name">Kings Metro</div><div class="sub">School Management</div></div></div>' +
-        '<nav class="nav">' + nav.map(function (n) { return '<button data-nav="' + n.key + '" class="' + (state.view === n.key ? 'active' : '') + '">' + esc(n.label) + '</button>'; }).join('') + '</nav>' +
+        '<nav class="nav">' + nav.map(function (n) { return '<button data-nav="' + n.key + '" class="' + (state.view === n.key ? 'active' : '') + '">' + esc(typeof n.label === 'function' ? n.label() : n.label) + '</button>'; }).join('') + '</nav>' +
         '<div class="sidebar-foot">v1.0 · Apps Script</div></aside><div class="main">' +
         '<header class="topbar"><div class="tb-left"><button class="nav-toggle" data-action="toggle-nav" type="button" aria-label="Open menu">&#9776;</button>' +
         '<div><div class="who">' + esc(ROLE_LABELS[state.user.role] || state.user.role) + '</div><div class="mail">' + esc(state.user.fullName || state.user.username) + '</div></div></div>' +
@@ -294,8 +327,10 @@
       else if (v === 'applications') body = viewApplications();
       else if (v === 'payments') body = viewPayments();
       else if (v === 'my-wards') body = viewWards();
+      else if (v === 'fees') body = viewFees();
       else if (v === 'users') body = viewUsers();
       else if (v === 'admin') body = viewAdmin();
+      if (state.receipt) body = receiptPreviewHtml(state.receipt) + body;
       if (state.pwForm) body = pwFormHtml() + body;
       return headerHtml() + body + footerHtml(false);
     }
@@ -312,6 +347,7 @@
       if (view === 'applications') return loadApplications();
       if (view === 'payments') return loadPayments();
       if (view === 'my-wards') return loadWards();
+      if (view === 'fees') return loadFees();
       if (view === 'users') return loadUsers();
       if (view === 'admin') return loadAdmin();
       render();
@@ -695,20 +731,186 @@
       if (!p.list.length) return body + '<div class="empty">No payments recorded yet.</div>';
       return body + '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Amount</th><th>Method</th><th>Ref</th><th>Evidence</th><th>Status</th><th></th></tr></thead><tbody>' +
         p.list.map(function (x) { return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><strong>' + esc(x.studentName) + '</strong><div class="muted small">' + esc(x.admissionNo) + '</div></td><td>' + esc(x.category) + '</td><td>' + esc(x.amount) + '</td><td>' + esc(x.method || '—') + '</td><td>' + esc(x.reference || '—') + '</td><td>' + (x.evidenceUrl ? '<a href="' + esc(x.evidenceUrl) + '" target="_blank">View</a>' : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
-          '<td style="text-align:right;white-space:nowrap">' + (canVerify && x.status === 'PENDING' ? '<button class="btn btn-outline btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="VERIFIED">Verify</button> <button class="btn btn-danger btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="REJECTED">Reject</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+          '<td style="text-align:right;white-space:nowrap">' + (canVerify && x.status === 'PENDING' ? '<button class="btn btn-outline btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="VERIFIED">Verify</button> <button class="btn btn-danger btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="REJECTED">Reject</button>' : '') + ' <button class="btn btn-outline btn-sm" data-action="receipt-open" data-id="' + esc(x.id) + '">Receipt</button>' + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
     function badgeStatus(s) { var cls = s === 'VERIFIED' ? 'ok' : (s === 'REJECTED' ? 'bad' : 'warn'); return '<span class="badge ' + cls + '">' + esc(s) + '</span>'; }
     function paymentFormHtml(f, options, isParent) {
+      var selStudent = (f && f.studentId) || '', selTerm = (f && f.termId) || state.boot.currentTermId || '';
       return '<div class="card"><h3 style="margin-top:0">' + (isParent ? 'Submit payment / evidence' : 'Record payment') + '</h3><form id="payment-form">' +
-        '<div class="grid cols-3"><div class="field"><label>' + (isParent ? 'Ward' : 'Student') + '</label><select name="studentId" required><option value="">Select…</option>' + optionsHtml(options, function (o) { return o.id; }, '', function (o) { return fullName(o) + ' — ' + (o.admissionNo || ''); }) + '</select></div>' +
+        '<div class="grid cols-3"><div class="field"><label>' + (isParent ? 'Ward' : 'Student') + '</label><select name="studentId" required><option value="">Select…</option>' + optionsHtml(options, function (o) { return o.id; }, selStudent, function (o) { return fullName(o) + ' — ' + (o.admissionNo || ''); }) + '</select></div>' +
         '<div class="field"><label>Purpose</label><select name="category">' + state.boot.paymentCategories.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') + '</select></div>' +
         '<div class="field"><label>Amount (₦)</label><input name="amount" type="number" min="0" step="0.01" required></div>' +
-        '<div class="field"><label>Term</label><select name="termId">' + termOptions(state.boot.currentTermId) + '</select></div>' +
+        '<div class="field"><label>Term</label><select name="termId">' + termOptions(selTerm) + '</select></div>' +
         '<div class="field"><label>Method</label><input name="method" type="text" placeholder="Transfer / Cash / POS"></div>' +
         '<div class="field"><label>Reference</label><input name="reference" type="text" placeholder="Teller / transaction no."></div></div>' +
         '<div class="field"><label>Note</label><textarea name="note" placeholder="Items paid for: fees, uniform, books…"></textarea></div>' +
         '<div class="field"><label>Evidence (receipt / teller — stored in Drive)</label><input type="file" name="evidence" accept="image/*,.pdf"></div>' +
         '<div class="row"><button class="btn btn-primary" type="submit">Submit</button><button class="btn btn-outline" type="button" data-action="cancel-payment">Cancel</button></div></form></div>';
+    }
+
+    /* ---------------- fees ---------------- */
+    function loadFees() {
+      if (state.user.role === 'PARENT') { loadMyFees(); return; }
+      state.busy = true; render();
+      Promise.all([authed('api_listFees'), authed('api_getSettings')]).then(function (res) {
+        state.fees.list = res[0] || []; state.fees.settings = res[1] || {};
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function loadMyFees() {
+      state.busy = true; render();
+      state.receipt = null;
+      authed('api_myWards').then(function (wards) {
+        state.wards.list = wards || [];
+        if (!state.fees.wardId && wards.length) state.fees.wardId = wards[0].id;
+        if (!state.fees.termId) state.fees.termId = state.boot.currentTermId || ((state.boot.terms[0] || {}).id || '');
+        if (!state.fees.wardId || !state.fees.termId) { state.busy = false; render(); return null; }
+        return authed('api_getFeeSchedule', state.fees.wardId, state.fees.termId);
+      }).then(function (s) {
+        if (s) state.fees.schedule = s;
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewFees() {
+      if (state.user.role === 'PARENT') return viewMyFees();
+      return viewFeeAdmin();
+    }
+    function feeStat(k, v, neg) {
+      return '<div class="f"><div class="k">' + esc(k) + '</div><div class="v' + (neg ? '"><span class="neg">' : '">') + esc(v) + (neg ? '</span>' : '') + '</div></div>';
+    }
+    function viewMyFees() {
+      var f = state.fees;
+      if (!state.wards.list.length) return '<div class="empty">No wards are linked to your account yet. Please contact the school office.</div>';
+      var body = '<div class="toolbar no-print">' +
+        '<div class="field" style="min-width:220px"><label>Ward</label><select data-field="fees-ward">' +
+        state.wards.list.map(function (w) { return '<option value="' + esc(w.id) + '"' + (String(w.id) === String(f.wardId) ? ' selected' : '') + '>' + esc(fullName(w)) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field" style="min-width:190px"><label>Term</label><select data-field="fees-term">' + termOptions(f.termId) + '</select></div>' +
+        '<div class="spacer"></div>' +
+        '<button class="btn btn-outline" data-action="fees-print-sheet">Print schedule</button>' +
+        '<button class="btn btn-primary" data-action="fees-pay">Make a payment</button></div>';
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Building fee schedule…</div>';
+      if (!f.schedule) return body + '<div class="empty">Select a ward and term to see the fee schedule.</div>';
+      var s = f.schedule, ward = findIn(state.wards.list, f.wardId);
+      body += '<div class="card fee-sheet">' +
+        '<div class="sheet-head"><h3 style="margin:0">Fee schedule — ' + esc(s.term ? s.term.label : '') + '</h3>' + (s.saved ? '<span class="badge ok">Selection saved</span>' : '<span class="badge warn">Unsaved changes</span>') + '</div>' +
+        '<div class="fee-sum">' +
+        feeStat('Total bill', '₦ ' + fmtMoney(s.totalBill)) + feeStat('Paid so far', '₦ ' + fmtMoney(s.amountPaid)) +
+        feeStat('Balance', '₦ ' + fmtMoney(s.balance), s.balance > 0) + feeStat('Installments', (s.installments || '—')) +
+        (s.paidCount ? feeStat('Payments made', s.paidCount) : '') + '</div>' +
+        '<div class="fee-items">' + s.items.map(function (it, i) {
+          var canToggle = !it.mandatory;
+          return '<div class="fee-item"><input type="checkbox" data-fee="' + esc(it.feeId) + '"' + (it.selected ? ' checked' : '') + (canToggle ? '' : ' disabled') + '>' +
+            '<div><strong>' + esc(it.name) + '</strong> <span class="badge">' + esc(it.category) + '</span>' + (it.mandatory ? ' <span class="badge ok">Mandatory</span>' : ' <span class="badge">Optional</span>') +
+            (it.note ? '<div class="muted small">' + esc(it.note) + '</div>' : '') + '</div>' +
+            '<div class="amt">₦ ' + esc(it.amount) + '</div></div>';
+        }).join('') + '</div>' +
+        '<div class="sheet-head" style="padding:14px 16px"><div class="field" style="min-width:170px;margin:0"><label>Pay in</label><select data-field="fees-inst">' + [1, 2, 3].map(function (n) {
+          return '<option value="' + n + '"' + (Number(s.installments) === n ? ' selected' : '') + '>' + (n === 1 ? 'One payment (full)' : (n === 2 ? 'Two installments' : 'Three installments')) + '</option>';
+        }).join('') + '</select></div><div class="spacer"></div>' +
+        '<button class="btn btn-primary" data-action="fees-save"' + (s.saved ? ' disabled' : '') + '>Save selection</button></div></div>';
+      var pays = s.payments || [];
+      body += '<div class="card no-print" style="margin-top:20px"><h3 style="margin-top:0">Payments &amp; receipts</h3>' +
+        (pays.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Receipt no.</th><th>#</th><th>Category</th><th>Amount</th><th>Balance after</th><th>Status</th><th></th></tr></thead><tbody>' +
+        pays.map(function (x) {
+          return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><code>' + esc(x.receiptNo) + '</code></td><td>' + esc(x.installmentNo || '—') + '</td><td>' + esc(x.category) + '</td><td>₦ ' + esc(x.amountPaid) + '</td><td>' + (x.balanceAfter !== '' ? '₦ ' + esc(x.balanceAfter) : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
+            '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="receipt-open" data-id="' + esc(x.id) + '">Print / view receipt</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">No payments recorded for this ward and term yet.</div>') +
+        '<p class="muted small" style="margin-top:12px">Evidence (teller / receipt) for each payment is kept on file by the school. Full payment reduces the balance to ₦0 — an official receipt is generated for every payment.</p></div>';
+      return body;
+    }
+    function viewFeeAdmin() {
+      var f = state.fees, canEdit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR']);
+      var body = '<div class="section-head"><h3>Fee &amp; charges catalogue</h3><span class="muted small">Set fees by section / class level / term. Mandatory charges are always added to every bill; optional ones are chosen by parents.</span></div>' +
+        '<div class="toolbar no-print"><div class="spacer"></div>' + (canEdit ? '<button class="btn btn-primary" data-action="fee-new">+ Add fee / charge</button>' : '') + '</div>';
+      if (f.form) body += feeFormHtml(f.form);
+      if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (!f.list.length) body += '<div class="empty">No fees configured yet. Add the first fee above, or edit the Fees sheet directly.</div>';
+      else body += '<div class="table-wrap"><table><thead><tr><th>Fee / charge</th><th>Category</th><th>Applies to</th><th>Amount</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody>' +
+        f.list.map(function (x) {
+          var scope = [x.section ? SECTION_LABELS[x.section] : '', x.levelName, x.sessionName, x.termName ? TERM_LABELS[x.termName] : ''].filter(Boolean).join(' · ') || 'All sections and terms';
+          return '<tr><td><strong>' + esc(x.name) + '</strong>' + (x.note ? '<div class="muted small">' + esc(x.note) + '</div>' : '') + '</td><td><span class="badge">' + esc(x.category) + '</span></td><td>' + esc(scope) + '</td><td>₦ ' + esc(x.amount) + '</td><td>' + (x.mandatory === true || String(x.mandatory) === 'true' ? '<span class="badge ok">Mandatory</span>' : '<span class="badge">Optional</span>') + '</td><td>' + (x.active === false || String(x.active) === 'false' ? '<span class="badge bad">Inactive</span>' : '<span class="badge ok">Active</span>') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="fee-edit" data-id="' + esc(x.id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="fee-delete" data-id="' + esc(x.id) + '">Delete</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+      body += '<div class="card" style="margin-top:24px"><div class="section-head"><h3>Settings</h3></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Admission notification emails <span class="muted small">(comma-separated — the applicant plus all admin/principal users are always notified)</span></label><input data-field="adm-emails" type="text" value="' + esc(f.settings.ADMISSION_NOTIFY_EMAILS || '') + '"></div></div>' +
+        '<button class="btn btn-primary" data-action="fees-save-settings">Save settings</button></div>';
+      return body;
+    }
+    function feeFormHtml(f) {
+      var isNew = !f.id;
+      var catOpts = (state.boot.feeCategories || state.boot.paymentCategories || []).map(function (c) { return '<option value="' + c + '"' + (String(f.category) === c ? ' selected' : '') + '>' + c + '</option>'; }).join('');
+      return '<div class="card"><h3 style="margin-top:0">' + (isNew ? 'Add fee / charge' : 'Edit fee / charge') + '</h3><form id="fee-form" data-id="' + esc(f.id || '') + '">' +
+        '<div class="grid cols-3">' + inputField('Name *', 'name', f.name, true) +
+        '<div class="field"><label>Category</label><select name="category">' + catOpts + '</select></div>' +
+        '<div class="field"><label>Amount (₦) *</label><input name="amount" type="number" min="0" step="0.01" value="' + esc(f.amount || 0) + '" required></div></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Section <span class="muted small">(blank = all)</span></label><select name="section"><option value="">All sections</option>' + SECTIONS.map(function (sn) { return '<option value="' + sn + '"' + (String(f.section) === sn ? ' selected' : '') + '>' + SECTION_LABELS[sn] + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Class level <span class="muted small">(blank = all)</span></label><select name="classLevelId"><option value="">All levels</option>' + optionsHtml(state.boot.classLevelsAll, function (o) { return o.id; }, f.classLevelId, function (o) { return o.name; }) + '</select></div>' +
+        '<div class="field"><label>Term <span class="muted small">(blank = all terms)</span></label><select name="termName"><option value="">All terms</option>' + ['FIRST', 'SECOND', 'THIRD'].map(function (t) { return '<option value="' + t + '"' + (String(f.termName) === t ? ' selected' : '') + '>' + TERM_LABELS[t] + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Session <span class="muted small">(blank = any)</span></label><input name="sessionName" type="text" value="' + esc(f.sessionName || '') + '"></div>' +
+        '<div class="field"><label>Type</label><select name="mandatory">' + ['false', 'true'].map(function (m) { return '<option value="' + m + '"' + (String(!!f.mandatory) === m ? ' selected' : '') + '>' + (m === 'true' ? 'Mandatory' : 'Optional') + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Status</label><select name="active">' + ['true', 'false'].map(function (a) { return '<option value="' + a + '"' + (String(f.active === undefined ? true : !!f.active) === a ? ' selected' : '') + '>' + (a === 'true' ? 'Active' : 'Inactive') + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="field"><label>Note <span class="muted small">(short description shown to parents)</span></label><input name="note" type="text" value="' + esc(f.note || '') + '"></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Order <span class="muted small">(sorting)</span></label><input name="orderIndex" type="number" value="' + esc(f.orderIndex || 0) + '"></div></div>' +
+        '<div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Save</button><button class="btn btn-outline" type="button" data-action="fee-cancel">Cancel</button></div></form></div>';
+    }
+    function receiptPreviewHtml(res) {
+      return '<div class="card receipt-card no-print"><div class="row" style="margin-bottom:14px"><strong>Receipt preview</strong><div class="spacer"></div><button class="btn btn-primary btn-sm" data-action="receipt-print">Print</button> <button class="btn btn-outline btn-sm" data-action="receipt-close">Close</button></div>' + receiptHtml(res) + '</div>';
+    }
+    function receiptHtml(res) {
+      var b = res.school || {}, r = res.receipt || {};
+      var row = function (k, v, line) { return '<div class="r-row' + (line ? ' line' : '') + '"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v === '' || v === null || v === undefined ? '—' : v) + '</span></div>'; };
+      var rowRaw = function (k, v, line) { return '<div class="r-row' + (line ? ' line' : '') + '"><span class="k">' + esc(k) + '</span><span class="v">' + (v === '' || v === null || v === undefined ? '—' : v) + '</span></div>'; };
+      var st = String(r.status || 'PENDING');
+      var statusBadge = st === 'VERIFIED' ? '<span class="badge ok">VERIFIED</span>' : (st === 'REJECTED' ? '<span class="badge bad">REJECTED — contact the office</span>' : '<span class="badge warn">PENDING — awaiting verification</span>');
+      var doc = '<div class="report-head">' + (b.logoUrl ? '<img src="' + esc(b.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') +
+        '<div><div class="school">' + esc(b.schoolName || 'Kings Metro School') + '</div><div class="subtitle">' + esc(b.subtitle || '') + '</div></div></div>';
+      return doc + '<div class="r-title"><h2>OFFICIAL RECEIPT</h2><code>' + esc(r.receiptNo || '') + '</code></div>' +
+        rowRaw('Status', statusBadge) + row('Student', r.studentName + ' (' + r.admissionNo + ')') + row('Class', r.classArm) + row('Term', r.term ? r.term.label : (r.termId || '')) +
+        row('Date', String(r.createdAt || '').slice(0, 10)) + row('Payment', r.category + (r.installmentNo ? ' — installment ' + r.installmentNo : '')) +
+        (r.items ? row('Items', r.items) : '') +
+        row('Method', r.method || '—') + (r.reference ? row('Reference', r.reference) : '') +
+        '<hr>' + row('Amount paid', '₦ ' + fmtMoney(r.amountPaid), true) +
+        (r.balanceAfter !== '' ? row('Balance after this payment', '₦ ' + fmtMoney(r.balanceAfter)) : '') +
+        (r.viewfile ? rowRaw('Evidence', '<a href="' + esc(r.viewfile) + '" target="_blank">Open evidence</a>') : '') +
+        '<div class="r-foot">' + esc(b.footerText || '') + '<br>Keep this receipt for your records.</div>';
+    }
+    function toggleFeeItem(t) {
+      var s = state.fees.schedule; if (!s) return;
+      var it = null, i = 0; for (; i < s.items.length; i++) if (String(s.items[i].feeId) === String(t.getAttribute('data-fee'))) it = s.items[i];
+      if (!it || it.mandatory) { t.checked = it ? it.selected : false; return; }
+      it.selected = t.checked;
+      var total = 0; s.items.forEach(function (x) { if (x.selected) total += Number(x.amount); });
+      s.totalBill = Math.round(total * 100) / 100;
+      s.balance = Math.max(0, s.totalBill - (Number(s.amountPaid) || 0));
+      s.saved = false;
+      render();
+    }
+    function saveFeeSelection() {
+      var s = state.fees.schedule; if (!s) return;
+      var prevTerm = s.term;
+      state.busy = true; clearMessages(); render();
+      authed('api_saveFeeSelection', state.fees.wardId, state.fees.termId, {
+        studentId: state.fees.wardId, termId: state.fees.termId,
+        installments: s.installments || 1,
+        items: s.items.map(function (it) { return { feeId: it.feeId, selected: it.selected }; })
+      }).then(function (updated) {
+        if (!updated.term) updated.term = prevTerm;
+        state.fees.schedule = updated;
+        state.notice = 'Fee selection saved. You chose ' + (updated.installments || 1) + (updated.installments === 1 ? ' payment (full)' : ' equal installments') + ' for this term\u2019s bill.';
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function printReceipt() {
+      var res = state.receipt; if (!res) return;
+      document.getElementById('print-area').innerHTML = receiptHtml(res);
+      document.body.classList.add('print-receipt');
+      setTimeout(function () { window.print(); }, 60);
+    }
+    function printFeeSheet() {
+      document.body.classList.remove('print-receipt');
+      setTimeout(function () { window.print(); }, 40);
     }
 
     /* ---------------- parent wards ---------------- */
@@ -920,6 +1122,17 @@
         case 'ann-new': state.announcements.form = true; clearMessages(); render(); return;
         case 'cancel-ann': state.announcements.form = false; render(); return;
         case 'ann-delete': if (confirm('Delete this announcement?')) act(authed('api_deleteAnnouncement', id), 'Deleted.', loadAnnouncements); return;
+        case 'receipt-open': state.busy = true; clearMessages(); render(); authed('api_getReceipt', id).then(function (res) { state.receipt = res; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); return;
+        case 'receipt-print': printReceipt(); return;
+        case 'receipt-close': state.receipt = null; render(); return;
+        case 'fees-save': saveFeeSelection(); return;
+        case 'fees-pay': state.payments.form = { studentId: state.fees.wardId, termId: state.fees.termId }; navigate('payments'); return;
+        case 'fees-print-sheet': printFeeSheet(); return;
+        case 'fee-new': state.fees.form = { category: 'TUITION', mandatory: false, active: true, orderIndex: 0 }; clearMessages(); render(); return;
+        case 'fee-cancel': state.fees.form = null; render(); return;
+        case 'fee-edit': var ffe = findIn(state.fees.list, id); if (ffe) { state.fees.form = JSON.parse(JSON.stringify(ffe)); clearMessages(); render(); } return;
+        case 'fee-delete': if (confirm('Delete this fee/charge? Parents\u2019 saved selections for it remain in the log.')) act(authed('api_deleteFee', id), 'Fee deleted.', loadFees); return;
+        case 'fees-save-settings': var ems = String((document.querySelector('[data-field="adm-emails"]') || {}).value || ''); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', ') }), 'Settings saved.', loadFees); return;
       }
     });
     function act(promise, notice, reload) { state.busy = true; clearMessages(); render(); promise.then(function () { state.notice = notice; state.busy = false; reload(); }).catch(function (err) { state.busy = false; setError(err); }); }
@@ -934,6 +1147,10 @@
       else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
       else if (f === 'pay-status') { state.payments.status = t.value; clearMessages(); loadPayments(); }
+      else if (f === 'fees-ward') { state.fees.wardId = t.value; state.fees.schedule = null; loadMyFees(); }
+      else if (f === 'fees-term') { state.fees.termId = t.value; state.fees.schedule = null; loadMyFees(); }
+      else if (f === 'fees-inst') { if (state.fees.schedule) { state.fees.schedule.installments = Number(t.value); state.fees.schedule.saved = false; render(); } }
+      else if (t.hasAttribute && t.hasAttribute('data-fee')) { toggleFeeItem(t); }
       else if (t.getAttribute('data-action') === 'att-note') { setAttNote(t.getAttribute('data-sid'), t.value); }
     });
     document.addEventListener('input', function (e) {
@@ -952,6 +1169,7 @@
       else if (form.id === 'payment-form') savePayment(form);
       else if (form.id === 'admin-form') saveAdmin(form);
       else if (form.id === 'ann-form') saveAnnouncement(form);
+      else if (form.id === 'fee-form') saveFee(form);
       else if (form.id === 'remarks-form') saveRemarks(form);
       else if (form.id === 'user-form') addUserSubmit(form);
       else if (form.id === 'pw-form') changePwSubmit(form);
@@ -983,6 +1201,7 @@
     function savePayment(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=evidence]')).then(function (file) { if (file) data.evidence = file; return authed('api_savePayment', data); }).then(function () { state.payments.form = null; state.notice = 'Payment submitted.'; loadPayments(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function saveAdmin(form) { act(authed('api_saveRef', state.admin.tab, collect(form)), 'Saved.', function () { state.admin.form = null; loadAdmin(); }); }
     function saveAnnouncement(form) { var data = collect(form); state.busy = true; clearMessages(); render(); authed('api_saveAnnouncement', data).then(function () { state.announcements.form = false; state.notice = 'Announcement posted.'; loadAnnouncements(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveFee(form) { var data = collect(form); data.mandatory = data.mandatory === 'true'; data.active = data.active === 'true'; state.busy = true; clearMessages(); render(); authed('api_saveFee', data).then(function () { state.fees.form = null; state.notice = 'Fee / charge saved. Parents will see it on their next schedule.'; loadFees(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function saveRemarks(form) { state.busy = true; clearMessages(); render(); authed('api_saveRemarks', state.report.studentId, state.report.termId || state.results.termId, { teacherRemark: form.teacherRemark.value, principalRemark: form.principalRemark.value }).then(function () { state.notice = 'Remarks saved.'; loadReport(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function setAttStatus(sid, status) { var r = state.attendance.roster; if (!r) return; r.students.forEach(function (x) { if (x.studentId === sid) x.status = status; }); var tr = document.querySelector('tr[data-sid="' + sid + '"]'); if (tr) tr.querySelectorAll('[data-action="att-status"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-status') === status); }); }
     function setAttNote(sid, note) { var r = state.attendance.roster; if (r) r.students.forEach(function (x) { if (x.studentId === sid) x.note = note; }); }
