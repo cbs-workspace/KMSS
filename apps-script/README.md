@@ -151,10 +151,11 @@ Run one of these from the editor (all idempotent — existing rows are skipped):
 
 | Function | What it seeds |
 | --- | --- |
-| `createDemoStudents()` | **100 students per class level** (Creche, Pre-Nursery, Nursery 1, Nursery 2, KG, Primary 1–6, JSS 1–3, SSS 1–3 = 1,700) with every field filled (admission no. `KMS/YYYY/0000`, Nigerian names, ages per class, guardians, phones, Sokoto addresses). Photos are left empty (passport upload is required for hand-entered students). |
-| `createDemoStaff()` | Staff records (staff no. `KMS/STF/0000`, name, gender, DOB, phone, address, designation, section) for leadership, finance, department heads and class teachers — **plus a login for each**. |
-| `createDemoUsers()` | Logins for the same roster (this is what `createDemoStaff()` uses for passwords). |
-| `createDemoData()` | All of the above in one run. |
+| `createDemoStudents()` | **100 students per class arm** (Nursery, KG, Primary 1–6, JSS 1–3, SSS 1–3 = **1,700**) with every field filled (admission no. `KMS/YYYY/0000`, Nigerian names, ages per class, guardians, phones, Sokoto addresses). Photos are left empty (passport upload is required for hand-entered students). |
+| `createDemoStaff()` | Staff records (staff no. `KMS/STF/0000`, name, gender, DOB, phone, email, address, designation, section) for leadership, finance, department heads and class teachers — **plus a login for each** — plus **15 non-teaching staff** (cleaners, security, cook, librarian, lab attendant, driver, receptionist, storekeeper, nurse, ICT, exams officer, counsellor, secretary) as records only (no login). |
+| `createDemoUsers()` | Logins for the teaching/admin roster (this is what `createDemoStaff()` uses for passwords). |
+| `createDemoParents()` | **10 parent logins** `demo.parent1` … `demo.parent10`, each linked to 1–3 wards of the same surname. |
+| `createDemoData()` | **Everything below in one run** — users, staff, students, the 10 parents, staff attendance (last 5 school days), student attendance (last 5 school days, all 1,700), scores for every subject + auto-generated result sheets for the current term, fee selections/plans/payments + receipts (~150 students), a full weekly timetable (17 arms × Mon–Fri), announcements, admission applications (one per status) and default settings. Expect ~20k rows and 1–3 minutes. |
 
 Demo logins (shared password `Demo@1234`):
 
@@ -168,8 +169,9 @@ Demo logins (shared password `Demo@1234`):
 | `demo.t.kg.hod` · `demo.t.kg.1` … `demo.t.kg.5` | Teachers | HOD = all KG arms; each class teacher owns one arm |
 | `demo.t.primary.hod` · `demo.t.primary.1` … `.6` | Teachers | Primary |
 | `demo.t.secondary.hod` · `demo.t.secondary.1` … `.6` | Teachers | Secondary |
+| `demo.parent1` … `demo.parent10` | Parents | each sees only their linked wards |
 
-**These are demo accounts with a known password — deactivate them (Users/Teachers panels) before go-live.** Sign in uses the username, not the email. A demo *Parent* requires students to exist first (Students + ParentStudents tabs).
+**These are demo accounts with a known password — deactivate them (Users/Teachers panels) before go-live.** Sign in uses the username, not the email. Run `createDemoData()` after `setUp()` so students exist before the parent links are created.
 
 ## Payments & parent uploads
 

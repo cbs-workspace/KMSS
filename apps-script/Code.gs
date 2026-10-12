@@ -475,10 +475,15 @@ function resetOwnerAdminPassword() {
 
 /**
  * Demo data — idempotent seeds you can run from the editor.
- *   createDemoStudents()  → 100 students per class level (all fields filled).
- *   createDemoStaff()     → staff records AND a login for every staff member.
- *   createDemoUsers()     → logins for the same roster (shared DEMO_PASSWORD).
- *   createDemoData()      → all of the above in one run.
+ *   createDemoStudents()  → 100 students per class arm (all fields filled).
+ *   createDemoStaff()     → teaching + admin + non-teaching staff (cleaner, security,
+ *                           cook, librarian, etc.) with emails; a login for every staff
+ *                           member with a portal role (non-teaching staff are records only).
+ *   createDemoUsers()     → logins for the teaching/admin roster (shared DEMO_PASSWORD).
+ *   createDemoParents()   → ~10 parent logins (demo.parent1..10) linked to wards.
+ *   createDemoData()      → ALL of the above plus attendance, staff attendance, scores +
+ *                           auto result sheets, fee plans/payments/receipts, timetable,
+ *                           announcements and admission applications — a full test dataset.
  * Demo accounts use a known password — deactivate them before go-live.
  */
 
@@ -500,6 +505,49 @@ function demoAgeFor_(level) {
   if (String(level.section) === 'PRIMARY') return 5 + (Number(level.orderIndex) || 1);
   if (String(level.section) === 'SECONDARY') return 10 + (Number(level.orderIndex) || 1);
   return 6 + Math.floor(Math.random() * 6);
+}
+
+var DEMO_EMAIL_DOMAIN = 'kingsmetro.example';
+function demoPad_(n, width) { var s = String(n); var w = width || 2; while (s.length < w) s = '0' + s; return s; }
+function demoIsoDate_(d) { return d.getFullYear() + '-' + demoPad_(d.getMonth() + 1) + '-' + demoPad_(d.getDate()); }
+/** Unique demo email: first.last<seq>@kingsmetro.example (never a real inbox). */
+function demoEmail_(first, last, seq) {
+  var f = String(first || 'user').toLowerCase().replace(/[^a-z]/g, '') || 'user';
+  var l = String(last || '').toLowerCase().replace(/[^a-z]/g, '');
+  return f + (l ? '.' + l : '') + seq + '@' + DEMO_EMAIL_DOMAIN;
+}
+function demoJoined_(seq) { return (2014 + (seq % 10)) + '-' + demoPad_(1 + (seq % 8)) + '-' + demoPad_(1 + (seq % 27)); }
+/** Last `count` weekday dates (yyyy-MM-dd), oldest first, ending today. */
+function demoRecentSchoolDays_(count) {
+  var days = [], d = new Date(), guard = 0;
+  while (days.length < count && guard < 60) {
+    var dow = d.getDay();
+    if (dow !== 0 && dow !== 6) days.push(demoIsoDate_(d));
+    d = new Date(d.getTime() - 86400000);
+    guard++;
+  }
+  return days.reverse();
+}
+function demoRemarkFor_(average) {
+  var n = Number(average) || 0;
+  if (n >= 70) return 'An excellent result. Keep it up.';
+  if (n >= 60) return 'A very good result. Well done.';
+  if (n >= 50) return 'A good result; there is room to do better.';
+  if (n >= 40) return 'A fair result. More effort is needed.';
+  return 'Needs improvement. Please work harder next term.';
+}
+/** Active admin user id (for seeded recordedBy/createdBy fields), or ''. */
+function demoAdminId_() { var u = findWhere_('Users', function (x) { return x.role === 'ADMIN'; }); return u ? u.id : ''; }
+/** Map classArmId -> first TEACHER user id assigned to it (fallback: admin). */
+function demoTeacherByArm_() {
+  var map = {}, adminId = '';
+  readTable_('Users').forEach(function (u) {
+    if (u.role === 'ADMIN' && !adminId) adminId = u.id;
+    if (u.role !== 'TEACHER') return;
+    parseCsv_(u.classArmScope).forEach(function (a) { if (!map[a]) map[a] = u.id; });
+  });
+  map._admin = adminId;
+  return map;
 }
 
 /** All active class-arm ids per section, sorted by level order then arm name. */
@@ -533,7 +581,7 @@ function demoPeople_() {
     people.push({
       username: username, role: role, designation: designation, section: section, sectionScope: sectionScope,
       age: age, male: m, firstName: nm.first, middleName: '', lastName: nm.last,
-      phone: phone(), address: address(), armIds: armIds || []
+      phone: phone(), address: address(), email: demoEmail_(nm.first, nm.last, n), armIds: armIds || []
     });
   }
   add('demo.admin', 'ADMIN', 'Administrator', '', '', 47, true);
@@ -549,12 +597,37 @@ function demoPeople_() {
   });
   return people;
 }
+/** Non-teaching support staff — Staff records only (no portal login; no matching role). */
+function demoSupportStaff_() {
+  var defs = [
+    'Cleaner', 'Cleaner', 'Security Officer', 'Security Officer', 'Cook', 'Librarian',
+    'Laboratory Attendant', 'Driver', 'Receptionist', 'Storekeeper', 'School Nurse',
+    'ICT Support Officer', 'Examinations Officer', 'Guidance Counsellor', 'Administrative Secretary'
+  ];
+  var out = [];
+  defs.forEach(function (designation, i) {
+    var male = i % 2 === 0;
+    var firstList = male ? DEMO_FIRST_MALE : DEMO_FIRST_FEMALE;
+    var first = firstList[(i * 5 + 2) % firstList.length];
+    var last = DEMO_LAST_NAMES[(i * 3 + 4) % DEMO_LAST_NAMES.length];
+    var p = DEMO_PHONE_PREFIXES[(i * 3 + 1) % DEMO_PHONE_PREFIXES.length];
+    var rest = String(5000000 + ((i * 17) % 4999999)); while (rest.length < 7) rest = '0' + rest;
+    out.push({
+      firstName: first, middleName: '', lastName: last, male: male, age: 24 + (i % 16),
+      designation: designation, section: '',
+      phone: '+234 ' + p.slice(1) + ' ' + rest.slice(0, 4) + ' ' + rest.slice(4),
+      address: DEMO_STREETS[(i * 7) % DEMO_STREETS.length] + ', Sokoto',
+      email: demoEmail_(first, last, 100 + i), dateJoined: demoJoined_(i + 3)
+    });
+  });
+  return out;
+}
 function ensureDemoLogin_(p) {
   if (findWhere_('Users', function (u) { return String(u.username).toLowerCase() === p.username.toLowerCase(); })) return false;
   var salt = makeSalt_();
   appendRow_('Users', {
     id: uuid_(), username: p.username, passwordHash: hashPassword_(DEMO_PASSWORD, salt), salt: salt,
-    role: p.role, fullName: ([p.firstName, p.middleName, p.lastName].join(' ')).trim(), email: '',
+    role: p.role, fullName: ([p.firstName, p.middleName, p.lastName].join(' ')).trim(), email: p.email || '',
     sectionScope: p.sectionScope, classArmScope: p.armIds.join(','), active: true, createdAt: nowIso_()
   });
   return true;
@@ -567,23 +640,31 @@ function createDemoUsers() {
   return { created: created, message: msg };
 }
 function createDemoStaff() {
-  var people = demoPeople_();
+  var teaching = demoPeople_();
+  var support = demoSupportStaff_();
   var existing = readTable_('Staff');
   var rows = [], newLogins = 0;
-  people.forEach(function (p) {
-    var dup = existing.some(function (s) { return String(s.lastName).toLowerCase() === p.lastName.toLowerCase() && String(s.firstName).toLowerCase() === p.firstName.toLowerCase(); });
-    if (dup) return;
-    if (ensureDemoLogin_(p)) newLogins++;
-    rows.push({
+  function isDup(p) { return existing.some(function (s) { return String(s.lastName).toLowerCase() === String(p.lastName).toLowerCase() && String(s.firstName).toLowerCase() === String(p.firstName).toLowerCase(); }); }
+  function staffRow(p, dateJoined) {
+    return {
       id: uuid_(), staffNo: '', firstName: p.firstName, middleName: p.middleName, lastName: p.lastName,
-      gender: p.male ? 'Male' : 'Female', dateOfBirth: demoDob_(p.age), email: '', phone: p.phone,
-      address: p.address, designation: p.designation, section: p.section, dateJoined: '', status: 'ACTIVE',
+      gender: p.male ? 'Male' : 'Female', dateOfBirth: demoDob_(p.age), email: p.email || '', phone: p.phone,
+      address: p.address, designation: p.designation, section: p.section, dateJoined: dateJoined, status: 'ACTIVE',
       photoFileId: '', createdAt: nowIso_(), updatedAt: nowIso_()
-    });
+    };
+  }
+  teaching.forEach(function (p) {
+    if (isDup(p)) return;
+    if (ensureDemoLogin_(p)) newLogins++;
+    rows.push(staffRow(p, demoJoined_(p.age % 8)));
+  });
+  support.forEach(function (p) {
+    if (isDup(p)) return;
+    rows.push(staffRow(p, p.dateJoined));
   });
   var prefix = 'KMS/STF/', max = 0;
   existing.forEach(function (s) { var v = String(s.staffNo || ''); if (v.indexOf(prefix) === 0) { var nn = parseInt(v.slice(prefix.length), 10); if (!isNaN(nn) && nn > max) max = nn; } });
-  rows.forEach(function (r) { max++; var no = String(max); while (no.length < 4) no = '0' + no; r.staffNo = prefix + no; });
+  rows.forEach(function (r) { max++; r.staffNo = prefix + demoPad_(max, 4); });
   bulkAppend_('Staff', rows);
   var msg = 'Demo staff ready: ' + rows.length + ' new record(s), ' + newLogins + ' new login(s).';
   Logger.log(msg);
@@ -626,9 +707,333 @@ function createDemoData() {
   var users = createDemoUsers();
   var staff = createDemoStaff();
   var students = createDemoStudents();
-  var msg = 'Demo data ready:\n  Logins: ' + users.created.length + ' new (password ' + DEMO_PASSWORD + ')\n  Staff: ' + staff.created + ' new\n  Students: ' + students.created + ' new';
+  var parents = createDemoParents();
+  var staffAtt = createDemoStaffAttendance_();
+  var attendance = createDemoAttendance_();
+  var scores = createDemoScores_();
+  var payments = createDemoFinance_();
+  var timetable = createDemoTimetable_();
+  var announcements = createDemoAnnouncements_();
+  var applications = createDemoApplications_();
+  createDemoSettings_();
+  var msg = 'Demo data ready (password ' + DEMO_PASSWORD + '):' +
+    '\n  Logins: ' + users.created.length + ' new' +
+    '\n  Staff: ' + staff.created + ' new' +
+    '\n  Students: ' + students.created + ' new' +
+    '\n  Parents: ' + parents.created.length + ' new' +
+    '\n  Staff attendance rows: ' + staffAtt +
+    '\n  Student attendance rows: ' + attendance +
+    '\n  Score rows: ' + scores +
+    '\n  Payment rows: ' + payments +
+    '\n  Timetable entries: ' + timetable +
+    '\n  Announcements: ' + announcements +
+    '\n  Applications: ' + applications;
   Logger.log(msg);
-  return { logins: users.created, staff: staff.created, students: students.created, message: msg };
+  return {
+    logins: users.created, staff: staff.created, students: students.created, parents: parents.created,
+    attendance: attendance, staffAttendance: staffAtt, scores: scores, payments: payments,
+    timetable: timetable, announcements: announcements, applications: applications, message: msg
+  };
+}
+
+/** Parent logins (demo.parent1..10) linked to 1-3 wards sharing the same surname. */
+function createDemoParents() {
+  var created = [];
+  var students = readTable_('Students');
+  if (!students.length) return { created: created, message: 'No students to link demo parents to.' };
+  var target = Math.min(10, students.length);
+  var relationships = ['Father', 'Mother', 'Guardian'];
+  /* one parent per distinct surname so every parent's email surfaces as a guardian contact */
+  var anchors = [], usedLast = {};
+  for (var ai = 0; ai < students.length && anchors.length < target; ai++) {
+    var ln = String(students[ai].lastName || '');
+    if (!ln || usedLast[ln]) continue;
+    usedLast[ln] = true; anchors.push(students[ai]);
+  }
+  while (anchors.length < target) anchors.push(students[anchors.length % students.length]);
+  for (var i = 0; i < target; i++) {
+    var username = 'demo.parent' + (i + 1);
+    if (findWhere_('Users', function (u) { return String(u.username).toLowerCase() === username.toLowerCase(); })) continue;
+    var anchor = anchors[i];
+    var last = anchor.lastName;
+    var siblings = students.filter(function (s) { return String(s.lastName) === String(last); }).slice(0, 3);
+    if (!siblings.length) siblings = [anchor];
+    var first = DEMO_FIRST_MALE[(i * 5 + 1) % DEMO_FIRST_MALE.length];
+    var salt = makeSalt_();
+    var user = {
+      id: uuid_(), username: username, passwordHash: hashPassword_(DEMO_PASSWORD, salt), salt: salt, role: 'PARENT',
+      fullName: first + ' ' + last, email: demoEmail_(first, last, 200 + i), sectionScope: '', classArmScope: '', active: true, createdAt: nowIso_()
+    };
+    appendRow_('Users', user);
+    siblings.forEach(function (s, k) {
+      appendRow_('ParentStudents', { id: uuid_(), parentUserId: user.id, studentId: s.id, relationship: relationships[(i + k) % relationships.length], createdAt: nowIso_() });
+    });
+    created.push(username);
+  }
+  var msg = 'Demo parents ready (' + created.length + ' new). Shared password: ' + DEMO_PASSWORD;
+  Logger.log(msg);
+  return { created: created, message: msg };
+}
+
+/** Seeded StaffAttendance for the last 5 school days (skips if any rows exist). */
+function createDemoStaffAttendance_() {
+  if (readTableSafe_('StaffAttendance').length > 0) return 0;
+  var staff = readTable_('Staff');
+  if (!staff.length) return 0;
+  var adminId = demoAdminId_();
+  var days = demoRecentSchoolDays_(5), rows = [], now = nowIso_();
+  days.forEach(function (date) {
+    staff.forEach(function (st) {
+      var r = Math.random();
+      var status = r < 0.93 ? 'PRESENT' : r < 0.97 ? 'LATE' : r < 0.99 ? 'ABSENT' : 'EXCUSED';
+      rows.push({ id: uuid_(), date: date, staffId: st.id, status: status, note: '', recordedBy: adminId, createdAt: now });
+    });
+  });
+  bulkAppend_('StaffAttendance', rows);
+  Logger.log('Demo staff attendance added: ' + rows.length + ' rows.');
+  return rows.length;
+}
+
+/** Seeded student Attendance for the last 5 school days (skips if any rows exist). */
+function createDemoAttendance_() {
+  if (readTableSafe_('Attendance').length > 0) return 0;
+  var students = readTable_('Students');
+  if (!students.length) return 0;
+  var teachers = demoTeacherByArm_();
+  var byArm = {};
+  students.forEach(function (s) { (byArm[s.classArmId] = byArm[s.classArmId] || []).push(s); });
+  var days = demoRecentSchoolDays_(5), rows = [], now = nowIso_();
+  days.forEach(function (date) {
+    Object.keys(byArm).forEach(function (armId) {
+      var recorder = teachers[armId] || teachers._admin || '';
+      byArm[armId].forEach(function (s) {
+        var r = Math.random();
+        var status = r < 0.90 ? 'PRESENT' : r < 0.95 ? 'LATE' : r < 0.985 ? 'ABSENT' : 'EXCUSED';
+        rows.push({ id: uuid_(), date: date, classArmId: armId, studentId: s.id, status: status, note: '', recordedBy: recorder, createdAt: now });
+      });
+    });
+  });
+  bulkAppend_('Attendance', rows);
+  Logger.log('Demo attendance added: ' + rows.length + ' rows.');
+  return rows.length;
+}
+
+/** Seeded Scores + auto-generated ResultSheets for the current term (skips if any scores exist). */
+function createDemoScores_() {
+  if (readTableSafe_('Scores').length > 0) return 0;
+  var term = getCurrentTerm_();
+  if (!term) return 0;
+  var arms = readTable_('ClassArms').filter(function (a) { return toBool_(a.active); });
+  var students = readTable_('Students');
+  var byArm = {};
+  students.forEach(function (s) { (byArm[s.classArmId] = byArm[s.classArmId] || []).push(s); });
+  var teachers = demoTeacherByArm_();
+  var scaleBySection = {};
+  CFG.SECTIONS.forEach(function (sec) { scaleBySection[sec] = getGradeScale_(sec); });
+  function gradeFor(section, total) {
+    var scale = scaleBySection[section] || [];
+    for (var i = 0; i < scale.length; i++) if (total >= Number(scale[i].minScore) && total <= Number(scale[i].maxScore)) return scale[i];
+    return { grade: '', remark: '' };
+  }
+  var rows = [], now = nowIso_();
+  arms.forEach(function (arm) {
+    var section = studentSection_(arm.id);
+    var subjects = getSubjectsForArm_(arm.id);
+    var list = byArm[arm.id] || [];
+    var recorder = teachers[arm.id] || teachers._admin || '';
+    list.forEach(function (s) {
+      var ability = 0.5 + Math.random() * 0.45;
+      subjects.forEach(function (sub) {
+        var ca1 = Math.max(0, Math.min(10, Math.round(ability * 10 + (Math.random() * 4 - 2))));
+        var ca2 = Math.max(0, Math.min(10, Math.round(ability * 10 + (Math.random() * 4 - 2))));
+        var ca3 = Math.max(0, Math.min(10, Math.round(ability * 10 + (Math.random() * 4 - 2))));
+        var exam = Math.max(0, Math.min(70, Math.round(ability * 70 + (Math.random() * 20 - 10))));
+        var total = ca1 + ca2 + ca3 + exam;
+        var g = gradeFor(section, total);
+        rows.push({
+          id: uuid_(), termId: term.id, classArmId: arm.id, studentId: s.id, subjectId: sub.id,
+          ca1: ca1, ca2: ca2, ca3: ca3, exam: exam, total: total, grade: g.grade, remark: g.remark,
+          recordedBy: recorder, updatedAt: now
+        });
+      });
+    });
+  });
+  bulkAppend_('Scores', rows);
+  var rsRows = [];
+  arms.forEach(function (arm) {
+    var computed = computeClassResults_(arm.id, term.id);
+    Object.keys(computed).forEach(function (sid) {
+      var c = computed[sid];
+      rsRows.push({
+        id: uuid_(), termId: term.id, studentId: sid, position: c.position, totalScore: c.totalScore,
+        average: c.average, teacherRemark: demoRemarkFor_(c.average), principalRemark: '', status: 'DRAFT', updatedAt: now
+      });
+    });
+  });
+  bulkAppend_('ResultSheets', rsRows);
+  Logger.log('Demo scores added: ' + rows.length + ' score rows, ' + rsRows.length + ' result sheets.');
+  return rows.length;
+}
+
+/** Seeded FeeSelections, FeePlans and Payments for ~150 students (skips if any payments exist). */
+function createDemoFinance_() {
+  if (readTableSafe_('Payments').length > 0) return 0;
+  var term = getCurrentTerm_();
+  var students = readTable_('Students');
+  if (!term || !students.length) return 0;
+  var adminId = demoAdminId_();
+  var parentByStudent = {};
+  readTableSafe_('ParentStudents').forEach(function (ps) { if (!parentByStudent[ps.studentId]) parentByStudent[ps.studentId] = ps.parentUserId; });
+  var levelById = indexById_(readTable_('ClassLevels'));
+  var armById = indexById_(readTable_('ClassArms'));
+  var feesByLevel = {};
+  Object.keys(levelById).forEach(function (lid) { feesByLevel[lid] = applicableFeesForLevel_(levelById[lid], term); });
+  function feesForStudent(s) { var arm = armById[s.classArmId]; return arm ? (feesByLevel[arm.classLevelId] || []) : []; }
+  var year = new Date().getFullYear();
+  var receiptPrefix = 'KMS/RCP/' + year + '/', maxRcp = 0;
+  readTableSafe_('Payments').forEach(function (p) { var v = String(p.receiptNo || ''); if (v.indexOf(receiptPrefix) === 0) { var n = parseInt(v.slice(receiptPrefix.length), 10); if (!isNaN(n) && n > maxRcp) maxRcp = n; } });
+  var methods = ['Bank transfer', 'Cash', 'POS', 'Bank deposit', 'Cheque'];
+  var selRows = [], planRows = [], payRows = [], seen = {};
+  var target = Math.min(150, students.length);
+  for (var i = 0; i < target; i++) {
+    var s = students[(i * 11) % students.length];
+    if (seen[s.id]) continue;
+    seen[s.id] = true;
+    var fees = feesForStudent(s);
+    if (!fees.length) continue;
+    var parentId = parentByStudent[s.id] || '';
+    var items = fees.map(function (f) {
+      var mandatory = toBool_(f.mandatory);
+      var selected = mandatory || Math.random() < 0.5;
+      return { fee: f, selected: selected, mandatory: mandatory };
+    });
+    items.forEach(function (it) {
+      selRows.push({
+        id: uuid_(), studentId: s.id, parentUserId: parentId, termId: term.id, feeId: it.fee.id,
+        category: String(it.fee.category || 'FEES'), name: String(it.fee.name || ''), amount: round2_(numOrZero_(it.fee.amount)),
+        mandatory: it.mandatory, selected: it.selected, createdAt: nowIso_(), updatedAt: nowIso_()
+      });
+    });
+    var total = 0;
+    items.forEach(function (it) { if (it.selected) total += numOrZero_(it.fee.amount); });
+    total = round2_(total);
+    if (total <= 0) continue;
+    var installments = 1 + Math.floor(Math.random() * 3);
+    var planId = uuid_();
+    planRows.push({ id: planId, studentId: s.id, parentUserId: parentId, termId: term.id, installments: installments, createdAt: nowIso_(), updatedAt: nowIso_() });
+    var itemNames = items.filter(function (it) { return it.selected; }).map(function (it) { return it.fee.name; }).join(', ');
+    var paidInstallments = Math.floor(Math.random() * (installments + 1));
+    var per = round2_(total / installments);
+    var paid = 0;
+    for (var k = 1; k <= paidInstallments; k++) {
+      var amt = (k === installments) ? round2_(total - paid) : per;
+      if (amt <= 0) break;
+      paid = round2_(paid + amt);
+      maxRcp++;
+      var status = (k === 1 || Math.random() < 0.6) ? 'VERIFIED' : 'PENDING';
+      payRows.push({
+        id: uuid_(), studentId: s.id, parentUserId: parentId, termId: term.id, category: 'FEES', amount: amt,
+        method: demoPick_(methods), reference: 'KMS-REF-' + (100000 + maxRcp), note: '', status: status,
+        evidenceFileId: '', evidenceUrl: '', verifiedBy: status === 'VERIFIED' ? adminId : '', verifiedAt: status === 'VERIFIED' ? nowIso_() : '',
+        createdAt: demoIsoDate_(new Date(Date.now() - (paidInstallments - k + 1) * 9 * 86400000)), updatedAt: nowIso_(),
+        feePlanId: planId, installmentNo: k, amountPaid: amt, balanceAfter: round2_(Math.max(0, total - paid)),
+        receiptNo: receiptPrefix + demoPad_(maxRcp, 4), viewfile: '', items: itemNames
+      });
+    }
+  }
+  bulkAppend_('FeeSelections', selRows);
+  bulkAppend_('FeePlans', planRows);
+  bulkAppend_('Payments', payRows);
+  Logger.log('Demo finance added: ' + selRows.length + ' selections, ' + planRows.length + ' plans, ' + payRows.length + ' payments.');
+  return payRows.length;
+}
+
+/** Weekly class timetable for every arm for the current term (skips if any entries exist). */
+function createDemoTimetable_() {
+  if (readTableSafe_('Timetable').length > 0) return 0;
+  var term = getCurrentTerm_();
+  if (!term) return 0;
+  var arms = readTable_('ClassArms').filter(function (a) { return toBool_(a.active); });
+  var days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
+  var periods = [['08:00', '08:45'], ['08:45', '09:30'], ['09:30', '10:15'], ['10:45', '11:30'], ['11:30', '12:15']];
+  var adminId = demoAdminId_();
+  var teacherByArm = {};
+  readTable_('Users').forEach(function (u) {
+    if (u.role !== 'TEACHER') return;
+    parseCsv_(u.classArmScope).forEach(function (a) { if (!teacherByArm[a]) teacherByArm[a] = u.fullName; });
+  });
+  var rows = [], now = nowIso_();
+  arms.forEach(function (arm) {
+    var subjects = getSubjectsForArm_(arm.id);
+    var teacherName = teacherByArm[arm.id] || 'Class Teacher';
+    days.forEach(function (day, di) {
+      periods.forEach(function (p, pi) {
+        var sub = subjects.length ? subjects[(pi + di) % subjects.length] : null;
+        rows.push({
+          id: uuid_(), termId: term.id, classArmId: arm.id, dayOfWeek: day, startTime: p[0], endTime: p[1],
+          subjectId: sub ? sub.id : '', title: sub ? sub.name : 'Period', teacher: teacherName, room: '',
+          kind: 'CLASS', note: '', createdBy: adminId, createdAt: now, updatedAt: now
+        });
+      });
+    });
+  });
+  bulkAppend_('Timetable', rows);
+  Logger.log('Demo timetable added: ' + rows.length + ' rows.');
+  return rows.length;
+}
+
+/** A few published announcements (skips if any exist). */
+function createDemoAnnouncements_() {
+  if (readTableSafe_('Announcements').length > 0) return 0;
+  var adminId = demoAdminId_();
+  var defs = [
+    { title: 'Welcome to the new academic session', body: 'We welcome all pupils and parents back to Kings Metro School. Please settle outstanding fees and ensure your wards resume on time.', audience: 'ALL', category: 'News' },
+    { title: 'Parents–Teachers meeting', body: 'The first Parents–Teachers meeting of the term holds on the last Saturday of the month at 9:00am. Attendance is important.', audience: 'PARENTS', category: 'Event' },
+    { title: 'Staff briefing — Friday 2:00pm', body: 'All teaching and non-teaching staff are required to attend the briefing in the assembly hall.', audience: 'STAFF', category: 'Notice' },
+    { title: 'Mid-term break', body: 'The school will close for the mid-term break and reopen on the announced resumption date.', audience: 'WEBSITE', category: 'Holiday' },
+    { title: 'Admissions still open', body: 'Admission forms for the new session are still available. Kindly visit the school office to obtain a form.', audience: 'WEBSITE', category: 'News' }
+  ];
+  var rows = defs.map(function (d) {
+    return { id: uuid_(), title: d.title, body: d.body, audience: d.audience, createdBy: adminId, createdAt: nowIso_(), active: true, category: d.category, link: d.link || '' };
+  });
+  bulkAppend_('Announcements', rows);
+  Logger.log('Demo announcements added: ' + rows.length + '.');
+  return rows.length;
+}
+
+/** A handful of admission applications in each status (skips if any exist). */
+function createDemoApplications_() {
+  if (readTableSafe_('Applications').length > 0) return 0;
+  var levels = readTable_('ClassLevels').filter(function (l) { return toBool_(l.active); });
+  var adminId = demoAdminId_();
+  var statuses = ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED'];
+  var prefix = 'KMS/APP/', seq = 0, now = nowIso_(), rows = [];
+  readTableSafe_('Applications').forEach(function (a) { var v = String(a.ref || ''); if (v.indexOf(prefix) === 0) { var n = parseInt(v.slice(prefix.length), 10); if (!isNaN(n) && n > seq) seq = n; } });
+  statuses.forEach(function (status, i) {
+    var male = i % 2 === 0;
+    var firstList = male ? DEMO_FIRST_MALE : DEMO_FIRST_FEMALE;
+    var first = firstList[(i * 5 + 6) % firstList.length];
+    var last = DEMO_LAST_NAMES[(i * 3 + 2) % DEMO_LAST_NAMES.length];
+    var level = levels.length ? levels[(i * 3) % levels.length] : {};
+    seq++;
+    rows.push({
+      id: uuid_(), ref: prefix + demoPad_(seq, 4), childFirstName: first, childMiddleName: '', childLastName: last,
+      gender: male ? 'Male' : 'Female', dateOfBirth: demoDob_(5 + (i % 12)), classLevelId: level.id || '',
+      guardianName: DEMO_FIRST_MALE[(i * 4 + 2) % DEMO_FIRST_MALE.length] + ' ' + last, guardianPhone: demoPhone_(),
+      guardianEmail: demoEmail_(first, last, 300 + i), address: DEMO_STREETS[(i * 4) % DEMO_STREETS.length] + ', Sokoto',
+      previousSchool: '', notes: '', photoFileId: '', documentFileId: '', status: status,
+      submittedAt: now, reviewedAt: status === 'PENDING' ? '' : now, reviewedBy: status === 'PENDING' ? '' : adminId, remarks: ''
+    });
+  });
+  bulkAppend_('Applications', rows);
+  Logger.log('Demo applications added: ' + rows.length + '.');
+  return rows.length;
+}
+
+/** Seeds a sensible default admission-notification email if none is set. */
+function createDemoSettings_() {
+  if (!getSetting_('ADMISSION_NOTIFY_EMAILS', '')) setSetting_('ADMISSION_NOTIFY_EMAILS', OWNER_ADMIN_EMAIL);
+  return true;
 }
 
 /* =========================== 6. REFERENCE HELPERS =========================== */
