@@ -930,7 +930,63 @@ function api_saveScores(token, termId, classArmId, subjectId, records) {
     else { fields.id = uuid_(); appendRow_('Scores', fields); }
     saved++;
   });
-  return { saved: saved };
+  return { saved: saved, computed: refreshArmResults_(classArmId, termId).students };
+}
+function api_getStudentGrades(token, studentId, termId) {
+  var user = requireUser_(token);
+  if (user.role === 'PARENT') throw new Error('Grade entry is for staff only; parents use the report card.');
+  var student = findById_('Students', studentId);
+  if (!student) throw new Error('Student not found.');
+  assertStudentAccess_(user, student);
+  assertArmAllowed_(user, student.classArmId);
+  var term = termId ? findById_('Terms', termId) : getCurrentTerm_();
+  if (!term || !toBool_(term.active)) throw new Error('No term is available.');
+  var section = studentSection_(student.classArmId);
+  var existing = {};
+  readTable_('Scores').forEach(function (s) { if (String(s.studentId) === String(studentId) && String(s.termId) === String(term.id)) existing[s.subjectId] = s; });
+  var subjects = getSubjectsForArm_(student.classArmId);
+  var rows = subjects.map(function (s) {
+    var r = existing[s.id];
+    return { subjectId: s.id, subjectName: s.name, ca1: r ? r.ca1 : '', ca2: r ? r.ca2 : '', ca3: r ? r.ca3 : '', exam: r ? r.exam : '', total: r ? r.total : '', grade: r ? r.grade : '' };
+  });
+  var computed = computeClassResults_(student.classArmId, term.id)[studentId] || { totalScore: 0, average: 0, position: '', subjectCount: 0 };
+  var sheet = findWhere_('ResultSheets', function (r) { return String(r.termId) === String(term.id) && String(r.studentId) === String(studentId); });
+  var entered = rows.filter(function (r) { return r.total !== ''; }).length;
+  return {
+    student: decorateStudent_(student, armsMap_(user)),
+    term: { id: term.id, termName: term.termName, sessionName: term.sessionName, label: termLabel_(term) },
+    subjects: rows, gradeScale: getGradeScale_(section),
+    computed: computed, averageGrade: gradeForScore_(section, computed.average).grade,
+    enteredCount: entered, subjectCount: subjects.length, complete: entered >= subjects.length && subjects.length > 0,
+    sheet: sheet ? { status: sheet.status, teacherRemark: sheet.teacherRemark, principalRemark: sheet.principalRemark, position: sheet.position, totalScore: sheet.totalScore, average: sheet.average } : { status: 'DRAFT', teacherRemark: '', principalRemark: '', position: '', totalScore: 0, average: 0 }
+  };
+}
+function api_saveStudentGrades(token, studentId, termId, records) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to enter scores.');
+  var student = findById_('Students', studentId);
+  if (!student) throw new Error('Student not found.');
+  assertStudentAccess_(user, student);
+  assertArmAllowed_(user, student.classArmId);
+  var term = findById_('Terms', termId);
+  if (!term || !toBool_(term.active)) throw new Error('Select a valid term.');
+  var allowed = {}; getSubjectsForArm_(student.classArmId).forEach(function (s) { allowed[String(s.id)] = true; });
+  var existing = {};
+  readTable_('Scores').forEach(function (s) { if (String(s.studentId) === String(studentId) && String(s.termId) === String(termId)) existing[s.subjectId] = s; });
+  var section = studentSection_(student.classArmId), saved = 0;
+  (records || []).forEach(function (rec) {
+    if (!rec.subjectId || !allowed[String(rec.subjectId)]) throw new Error('A selected subject is not part of this student\u2019s curriculum.');
+    var ca1 = clampScore_(rec.ca1, CA_MAX), ca2 = clampScore_(rec.ca2, CA_MAX), ca3 = clampScore_(rec.ca3, CA_MAX), exam = clampScore_(rec.exam, EXAM_MAX);
+    var total = totalFor_({ ca1: ca1, ca2: ca2, ca3: ca3, exam: exam });
+    var g = gradeForScore_(section, total);
+    var fields = { termId: termId, classArmId: student.classArmId, subjectId: rec.subjectId, studentId: studentId, ca1: ca1, ca2: ca2, ca3: ca3, exam: exam, total: total, grade: g.grade, remark: g.remark, recordedBy: user.id, updatedAt: nowIso_() };
+    if (existing[rec.subjectId]) updateRow_('Scores', existing[rec.subjectId].id, fields);
+    else { fields.id = uuid_(); appendRow_('Scores', fields); }
+    saved++;
+  });
+  refreshArmResults_(student.classArmId, termId);
+  logAudit_(user, 'SCORES', 'Per-student grades term ' + termId, 'student ' + studentId);
+  return api_getStudentGrades(token, studentId, termId);
 }
 function computeClassResults_(classArmId, termId) {
   var students = readTable_('Students').filter(function (s) { return String(s.classArmId) === String(classArmId) && String(s.status) !== 'INACTIVE'; });
@@ -947,19 +1003,22 @@ function computeClassResults_(classArmId, termId) {
   var byId = {}; rows.forEach(function (r) { byId[r.studentId] = { totalScore: r.totalScore, average: r.average, subjectCount: r.subjectCount, position: posById[r.studentId] }; });
   return byId;
 }
-function api_computeResults(token, classArmId, termId) {
-  var user = requireUser_(token);
-  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to compute results.');
-  assertArmAllowed_(user, classArmId);
+function refreshArmResults_(classArmId, termId) {
   var computed = computeClassResults_(classArmId, termId), existing = {};
   readTable_('ResultSheets').forEach(function (r) { if (String(r.termId) === String(termId)) existing[r.studentId] = r; });
   Object.keys(computed).forEach(function (sid) {
     var c = computed[sid];
-    var fields = { termId: termId, studentId: sid, position: c.position, totalScore: c.totalScore, average: c.average, updatedAt: nowIso_() };
+    var fields = { termId: termId, studentId: sid, position: c.position, totalScore: c.totalScore, average: c.average, subjectCount: c.subjectCount, updatedAt: nowIso_() };
     if (existing[sid]) updateRow_('ResultSheets', existing[sid].id, fields);
     else { fields.id = uuid_(); fields.teacherRemark = ''; fields.principalRemark = ''; fields.status = 'DRAFT'; appendRow_('ResultSheets', fields); }
   });
   return { students: Object.keys(computed).length };
+}
+function api_computeResults(token, classArmId, termId) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to compute results.');
+  assertArmAllowed_(user, classArmId);
+  return refreshArmResults_(classArmId, termId);
 }
 function api_listResultSheets(token, classArmId, termId) {
   var user = requireUser_(token);
@@ -987,10 +1046,19 @@ function api_getReportCard(token, studentId, termId) {
   scores.sort(function (a, b) { return String(a.subject.name).localeCompare(String(b.subject.name)); });
   var computed = computeClassResults_(student.classArmId, term.id)[studentId] || { totalScore: 0, average: 0, position: '' };
   var sheet = findWhere_('ResultSheets', function (r) { return String(r.termId) === String(term.id) && String(r.studentId) === String(studentId); });
+  var attendance = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+  var tFrom = term.startDate || '', tTo = term.endDate || '';
+  readTable_('Attendance').forEach(function (a) {
+    if (String(a.studentId) !== String(studentId)) return;
+    if (tFrom && String(a.date) < String(tFrom)) return;
+    if (tTo && String(a.date) > String(tTo)) return;
+    if (attendance[a.status.toLowerCase()] === undefined) attendance[a.status.toLowerCase()] = 0;
+    attendance[a.status.toLowerCase()]++; attendance.total++;
+  });
   return {
     student: decorateStudent_(student, armsById),
     term: { id: term.id, termName: term.termName, sessionName: term.sessionName, label: termLabel_(term) },
-    scores: scores, computed: computed, gradeScale: getGradeScale_(studentSection_(student.classArmId)),
+    scores: scores, computed: computed, gradeScale: getGradeScale_(studentSection_(student.classArmId)), attendance: attendance,
     sheet: sheet ? { teacherRemark: sheet.teacherRemark, principalRemark: sheet.principalRemark, status: sheet.status } : { teacherRemark: '', principalRemark: '', status: 'DRAFT' }
   };
 }

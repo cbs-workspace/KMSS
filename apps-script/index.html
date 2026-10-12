@@ -80,9 +80,23 @@
     .login-card h1 { font-size: 22px; margin: 4px 0; }
     .login-footer { width: 100%; max-width: 420px; margin-top: 16px; }
     .report-head { display: flex; align-items: center; justify-content: center; gap: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 16px; margin-bottom: 16px; }
-    .report-head img { height: 64px; width: 64px; object-fit: contain; }
+    .report-head img { height: 72px; width: 72px; object-fit: contain; }
     .report-head .school { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: center; }
     .report-head .subtitle { text-align: center; color: var(--slate-500); font-size: 12px; }
+    .report-title { text-align: center; margin-top: 4px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--emerald-dark); }
+    .report-sheet { background: #fff; border: 1px solid var(--slate-200); border-radius: 14px; padding: 22px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    .report-table thead th { background: var(--slate-50); border: 1px solid var(--slate-200); font-weight: 600; text-align: left; padding: 8px 10px; font-size: 12px; color: var(--slate-600); text-transform: uppercase; letter-spacing: .03em; }
+    .report-table tbody td { border: 1px solid var(--slate-200); padding: 8px 10px; }
+    .report-table tbody tr:nth-child(even) td { background: var(--slate-50); }
+    .report-table .report-total td { background: var(--emerald-light); font-weight: 600; }
+    .report-remarks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+    .remark-box { border: 1px solid var(--slate-200); border-radius: 10px; padding: 12px 14px; min-height: 84px; }
+    .remark-box .sign { margin-top: 26px; border-top: 1px dashed var(--slate-300); padding-top: 6px; font-size: 11px; color: var(--slate-500); text-align: right; }
+    .report-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--slate-100); }
+    .report-signoff { margin-top: 14px; font-size: 11px; color: var(--slate-500); text-align: center; }
+    .report-signoff strong { color: var(--slate-700); }
+    @media print { .report-sheet { border: 0; box-shadow: none; padding: 0; } .report-table thead th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; } .report-table tbody tr:nth-child(even) td { background: #f8fafc !important; } .report-table .report-total td { background: #d1fae5 !important; } }
     .report-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
     .report-meta .kv .k { color: var(--slate-500); font-size: 12px; } .report-meta .kv .v { font-weight: 600; }
     .report-summary { display: flex; gap: 28px; flex-wrap: wrap; }
@@ -243,7 +257,7 @@
       dashboardSearch: { q: '', students: [], staff: [], ran: false, loading: false },
       students: { classArmId: '', search: '', list: [], form: null },
       attendance: { classArmId: '', date: todayISO(), roster: null },
-      results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [] },
+      results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [], studentId: '', grades: null },
       report: { studentId: '', termId: '', data: null },
       staff: { search: '', list: [], form: null },
       teachers: { list: [], form: null, flash: null },
@@ -562,23 +576,43 @@
     function loadResults() {
       state.busy = true; render();
       var r = state.results, subs = subjectsForArm(r.classArmId);
-      if (!r.subjectId && subs.length) r.subjectId = subs[0].id;
-      var task = r.tab === 'entry' ? authed('api_getScoreSheet', r.classArmId, r.termId, r.subjectId).then(function (sh) { r.sheet = sh; }) : authed('api_listResultSheets', r.classArmId, r.termId).then(function (sh) { r.sheets = sh; });
+      if (r.tab !== 'grades' && !r.subjectId && subs.length) r.subjectId = subs[0].id;
+      var task;
+      if (r.tab === 'entry') task = authed('api_getScoreSheet', r.classArmId, r.termId, r.subjectId).then(function (sh) { r.sheet = sh; });
+      else if (r.tab === 'grades') task = authed('api_getScoreSheet', r.classArmId, r.termId, '').then(function (sh) {
+        r.sheet = sh;
+        if (r.studentId) return authed('api_getStudentGrades', r.studentId, r.termId).then(function (g) { r.grades = g; });
+      });
+      else task = authed('api_listResultSheets', r.classArmId, r.termId).then(function (sh) { r.sheets = sh; });
       task.then(function () { state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
     }
     function viewResults() {
       var r = state.results, subs = subjectsForArm(r.classArmId);
+      var studentSel = '';
+      if (r.tab === 'grades' && r.sheet && r.sheet.rows) studentSel = '<div class="field" style="min-width:240px"><label>Student</label><select data-field="res-student"><option value="">Select student…</option>' + r.sheet.rows.map(function (row) { return '<option value="' + esc(row.studentId) + '"' + (String(row.studentId) === String(r.studentId) ? ' selected' : '') + '>' + esc(fullName(row.student)) + ' (' + esc(row.student.admissionNo) + ')</option>'; }).join('') + '</select></div>';
       var body = '<div class="toolbar no-print"><div class="field" style="min-width:220px"><label>Class</label><select data-field="res-class">' + armOptions(r.classArmId) + '</select></div>' +
         '<div class="field" style="min-width:200px"><label>Term</label><select data-field="res-term">' + termOptions(r.termId) + '</select></div>' +
-        (r.tab === 'entry' ? '<div class="field" style="min-width:220px"><label>Subject</label><select data-field="res-subject"><option value="">Select subject…</option>' + optionsHtml(subs, function (s) { return s.id; }, r.subjectId, function (s) { return s.name; }) + '</select></div>' : '') +
-        '<div class="spacer"></div>' + (r.tab === 'entry' ? '<button class="btn btn-primary" data-action="scores-save">Save scores</button>' : '') + '</div>' +
-        '<div class="tabs no-print"><button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button><button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button></div>';
+        (r.tab === 'entry' ? '<div class="field" style="min-width:220px"><label>Subject</label><select data-field="res-subject"><option value="">Select subject…</option>' + optionsHtml(subs, function (s) { return s.id; }, r.subjectId, function (s) { return s.name; }) + '</select></div>' : studentSel) +
+        '<div class="spacer"></div>' + (r.tab === 'entry' ? '<button class="btn btn-primary" data-action="scores-save">Save scores</button>' : (r.tab === 'grades' && r.grades ? '<button class="btn btn-primary" data-action="grades-save">Save grades</button>' : '')) + '</div>' +
+        '<div class="tabs no-print"><button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button><button data-action="res-tab" data-tab="grades" class="' + (r.tab === 'grades' ? 'active' : '') + '">Per-student grades</button><button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button></div>';
       if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
       if (r.tab === 'entry') {
         if (!r.subjectId) return body + '<div class="empty">Select a subject to enter scores.</div>';
         if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
         return body + '<div class="table-wrap"><table><thead><tr><th>Student</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>' +
-          r.sheet.rows.map(function (row) { return '<tr><td><strong>' + esc(fullName(row.student)) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(row.studentId) + '" value="' + esc(row[k]) + '"></td>'; }).join('') + '<td data-total-for="' + esc(row.studentId) + '">' + esc(row.total === '' ? '—' : row.total) + '</td><td>' + esc(row.grade || '—') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="muted small">CA1–CA3 out of 10 each; Exam out of 70.</p>';
+          r.sheet.rows.map(function (row) { return '<tr><td><strong>' + esc(fullName(row.student)) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(row.studentId) + '" value="' + esc(row[k]) + '"></td>'; }).join('') + '<td data-total-for="' + esc(row.studentId) + '">' + esc(row.total === '' ? '—' : row.total) + '</td><td>' + esc(row.grade || '—') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="muted small">CA1–CA3 out of 10 each; Exam out of 70. Totals and result sheets are recomputed automatically when you save.</p>';
+      }
+      if (r.tab === 'grades') {
+        if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
+        if (!r.studentId) return body + '<div class="empty">Pick a student above to enter their grades for this term — results are generated automatically as you save.</div>';
+        if (!r.grades) return body + '<div class="page-loading"><span class="spinner"></span> Loading student…</div>';
+        var g = r.grades, student = g.student;
+        var chips = '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(g.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(g.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(g.computed.average) + '</div></div><div class="kv"><div class="k">Avg grade</div><div class="v">' + esc(g.averageGrade || '—') + '</div></div><div class="kv"><div class="k">Progress</div><div class="v">' + esc(g.enteredCount) + '/' + esc(g.subjectCount) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(g.sheet.status) + '</div></div></div>';
+        var sheetNote = g.complete ? '<div class="alert success">All subjects entered — the result sheet has been generated automatically.</div>' : '<p class="muted small">' + (g.subjectCount - g.enteredCount) + ' subject(s) still need scores before the sheet is complete.</p>';
+        return body + '<div class="card"><div class="grid cols-2"><div><strong>' + esc(fullName(student)) + '</strong><div class="muted small">' + esc(student.admissionNo) + (student.classArm ? ' · ' + esc(armLabel(student.classArm)) : '') + '</div><div class="muted small">' + esc(g.term.label) + '</div></div>' + chips + '</div>' + sheetNote +
+          '<div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th></th></tr></thead><tbody>' +
+          g.subjects.map(function (s) { return '<tr data-grow="' + esc(s.subjectId) + '"><td><strong>' + esc(s.subjectName) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-gscore="' + k + '" value="' + esc(s[k]) + '"></td>'; }).join('') + '<td data-gtotal-for="' + esc(s.subjectId) + '">' + esc(s.total === '' ? '—' : s.total) + '</td><td data-ggrade-for="' + esc(s.subjectId) + '">' + esc(s.grade || '—') + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(student.id) + '">Report card</button></td></tr>'; }).join('') + '</tbody></table></div>' +
+          '<p class="muted small">CA1–CA3 out of 10 each; Exam out of 70. Save to recompute the student\u2019s total, position and the class result sheets.</p></div>';
       }
       body += '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-outline" data-action="results-compute">Compute</button><button class="btn btn-primary" data-action="results-publish">Publish</button></div>';
       if (!r.sheets.length) return body + '<div class="empty">No result sheets yet. Compute first.</div>';
@@ -591,15 +625,19 @@
     function viewReport() {
       if (state.busy || !state.report.data) return '<div class="page-loading"><span class="spinner"></span> Loading report card…</div>';
       var d = state.report.data, canEdit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']);
+      var att = d.attendance || { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+      var attLine = 'Present ' + esc(att.present) + ' · Absent ' + esc(att.absent) + (att.late ? ' · Late ' + esc(att.late) : '') + (att.excused ? ' · Excused ' + esc(att.excused) : '') + (att.total ? ' (' + esc(att.total) + ' recorded)' : '');
       var body = '<div class="toolbar no-print"><button class="btn btn-outline" data-action="back-results">← Back</button><div class="spacer"></div><button class="btn btn-primary" data-action="print-report">Print report card</button></div>' +
-        '<div class="card"><div class="report-head">' + (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '') + '<div><div class="school">' + esc(BRAND.schoolName) + '</div><div class="subtitle">' + esc(BRAND.subtitle) + ' — Terminal Report Sheet</div></div></div>' +
+        '<div class="report-sheet"><div class="report-head">' + (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') + '<div><div class="school">' + esc(BRAND.schoolName) + '</div><div class="subtitle">' + esc(BRAND.subtitle) + '</div><div class="report-title">Terminal Report</div></div></div>' +
         '<div class="report-meta"><div class="kv"><div class="k">Student</div><div class="v">' + esc(fullName(d.student)) + '</div><div class="k small">' + esc(d.student.admissionNo) + (d.student.classArm ? ' · ' + esc(armLabel(d.student.classArm)) : '') + '</div></div>' +
-        '<div class="kv"><div class="k">Term</div><div class="v">' + esc(d.term.label) + '</div></div>' +
+        '<div class="kv"><div class="k">Term · Attendance</div><div class="v">' + esc(d.term.label) + '</div><div class="k small">' + attLine + '</div></div>' +
         '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(d.sheet.status) + '</div></div></div></div>' +
-        '<div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' +
-        (d.scores.length ? d.scores.map(function (s) { return '<tr><td>' + esc(s.subject.name) + '</td><td>' + esc(s.ca1 || '—') + '</td><td>' + esc(s.ca2 || '—') + '</td><td>' + esc(s.ca3 || '—') + '</td><td>' + esc(s.exam || '—') + '</td><td><strong>' + esc(s.total || '—') + '</strong></td><td>' + esc(s.grade || '—') + '</td><td>' + esc(s.remark || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No scores captured for this term.</td></tr>') + '</tbody></table></div>' +
-        '<div class="grid cols-2" style="margin-top:18px"><div><div class="muted small">Teacher\u2019s remark</div><div>' + esc(d.sheet.teacherRemark || '—') + '</div></div><div><div class="muted small">Principal\u2019s remark</div><div>' + esc(d.sheet.principalRemark || '—') + '</div></div></div>' +
-        '<div style="margin-top:18px"><div class="muted small" style="margin-bottom:6px">Grading scale</div>' + d.gradeScale.map(function (g) { return '<span class="badge" style="margin-right:6px">' + esc(g.grade) + ': ' + esc(g.minScore) + '–' + esc(g.maxScore) + ' (' + esc(g.remark) + ')</span>'; }).join('') + '</div>' + footerHtml(false) + '</div>';
+        '<table class="report-table"><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' +
+        (d.scores.length ? d.scores.map(function (s) { return '<tr><td>' + esc(s.subject.name) + '</td><td>' + esc(s.ca1 || '—') + '</td><td>' + esc(s.ca2 || '—') + '</td><td>' + esc(s.ca3 || '—') + '</td><td>' + esc(s.exam || '—') + '</td><td><strong>' + esc(s.total || '—') + '</strong></td><td>' + esc(s.grade || '—') + '</td><td>' + esc(s.remark || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No scores captured for this term.</td></tr>') +
+        '<tr class="report-total"><td colspan="5" style="text-align:right"><strong>Total</strong></td><td><strong>' + esc(d.computed.totalScore) + '</strong></td><td colspan="2">Average <strong>' + esc(d.computed.average) + '</strong> · Position ' + esc(d.computed.position || '—') + '</td></tr></tbody></table>' +
+        '<div class="report-remarks"><div class="remark-box"><div class="muted small" style="margin-bottom:6px">Teacher\u2019s remark</div><div>' + esc(d.sheet.teacherRemark || '—') + '</div><div class="sign">Teacher\u2019s signature</div></div><div class="remark-box"><div class="muted small" style="margin-bottom:6px">Principal\u2019s remark</div><div>' + esc(d.sheet.principalRemark || '—') + '</div><div class="sign">Principal\u2019s signature</div></div></div>' +
+        '<div class="report-foot"><div class="muted small" style="margin-bottom:6px">Grading scale</div>' + d.gradeScale.map(function (g) { return '<span class="badge" style="margin-right:6px">' + esc(g.grade) + ': ' + esc(g.minScore) + '–' + esc(g.maxScore) + ' (' + esc(g.remark) + ')</span>'; }).join('') +
+        '</div><div class="report-signoff">Result prepared by <strong>Kings Metro School</strong> · ' + esc(BRAND.schoolName) + ' portal — this report is official and does not require a counter-signature.</div></div>';
       if (canEdit) body += '<div class="card no-print"><h3 style="margin-top:0">Remarks</h3><form id="remarks-form"><div class="field"><label>Teacher\u2019s remark</label><textarea name="teacherRemark">' + esc(d.sheet.teacherRemark) + '</textarea></div><div class="field"><label>Principal\u2019s remark</label><textarea name="principalRemark">' + esc(d.sheet.principalRemark) + '</textarea></div><button class="btn btn-primary" type="submit">Save remarks</button></form></div>';
       return body;
     }
@@ -1088,6 +1126,7 @@
         case 'attendance-save': saveAttendance(); return;
         case 'res-tab': state.results.tab = el.getAttribute('data-tab'); clearMessages(); loadResults(); return;
         case 'scores-save': saveScores(); return;
+        case 'grades-save': saveGrades(); return;
         case 'results-compute': act(authed('api_computeResults', state.results.classArmId, state.results.termId), 'Results computed.', function () { state.results.tab = 'sheets'; loadResults(); }); return;
         case 'results-publish': if (confirm('Publish results for this class/term?')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, true), 'Results published.', loadResults); return;
         case 'open-report': case 'open-report-ward': state.report.studentId = id; state.report.termId = state.results.termId; navigate('reportcard'); return;
@@ -1143,9 +1182,10 @@
       else if (f === 'staff-search') { state.staff.search = t.value; loadStaff(); }
       else if (f === 'att-class') { state.attendance.classArmId = t.value; clearMessages(); loadRoster(); }
       else if (f === 'att-date') { state.attendance.date = t.value; clearMessages(); loadRoster(); }
-      else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; clearMessages(); loadResults(); }
+      else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; state.results.studentId = ''; state.results.grades = null; clearMessages(); loadResults(); }
       else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
+      else if (f === 'res-student') { state.results.studentId = t.value; state.results.grades = null; clearMessages(); loadResults(); }
       else if (f === 'pay-status') { state.payments.status = t.value; clearMessages(); loadPayments(); }
       else if (f === 'fees-ward') { state.fees.wardId = t.value; state.fees.schedule = null; loadMyFees(); }
       else if (f === 'fees-term') { state.fees.termId = t.value; state.fees.schedule = null; loadMyFees(); }
@@ -1158,6 +1198,7 @@
       if (t.getAttribute && t.getAttribute('data-field') === 'dash-search') { scheduleDashSearch(t.value); return; }
       if (t.getAttribute('data-action') === 'att-note') setAttNote(t.getAttribute('data-sid'), t.value);
       if (t.getAttribute('data-score')) { var rowEl = t.closest('tr'), sid = t.getAttribute('data-sid'), total = 0; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = rowEl.querySelector('[data-score="' + k + '"]'); total += inp && inp.value !== '' ? Number(inp.value) : 0; }); var cell = document.querySelector('[data-total-for="' + sid + '"]'); if (cell) cell.textContent = total; }
+      if (t.getAttribute('data-gscore')) { var grow = t.closest('[data-grow]'), gsub = grow.getAttribute('data-grow'), gtotal = 0; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = grow.querySelector('[data-gscore="' + k + '"]'); gtotal += inp && inp.value !== '' ? Number(inp.value) : 0; }); var gcell = document.querySelector('[data-gtotal-for="' + gsub + '"]'); if (gcell) gcell.textContent = gtotal; }
     });
     document.addEventListener('submit', function (e) {
       var form = e.target; e.preventDefault();
@@ -1206,7 +1247,8 @@
     function setAttStatus(sid, status) { var r = state.attendance.roster; if (!r) return; r.students.forEach(function (x) { if (x.studentId === sid) x.status = status; }); var tr = document.querySelector('tr[data-sid="' + sid + '"]'); if (tr) tr.querySelectorAll('[data-action="att-status"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-status') === status); }); }
     function setAttNote(sid, note) { var r = state.attendance.roster; if (r) r.students.forEach(function (x) { if (x.studentId === sid) x.note = note; }); }
     function saveAttendance() { var r = state.attendance.roster; if (!r) return; var records = r.students.map(function (x) { return { studentId: x.studentId, status: x.status, note: x.note }; }); act(authed('api_saveAttendance', state.attendance.classArmId, state.attendance.date, records), 'Attendance saved.', loadRoster); }
-    function saveScores() { var sh = state.results.sheet; if (!sh) return; var records = sh.rows.map(function (row) { var rec = { studentId: row.studentId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]'); rec[k] = inp ? inp.value : ''; }); return rec; }); act(authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records), 'Scores saved.', loadResults); }
+    function saveScores() { var sh = state.results.sheet; if (!sh) return; var records = sh.rows.map(function (row) { var rec = { studentId: row.studentId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]'); rec[k] = inp ? inp.value : ''; }); return rec; }); act(authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records), 'Scores saved — result sheets updated.', loadResults); }
+    function saveGrades() { var g = state.results.grades; if (!g || !g.subjects.length) return; var records = g.subjects.map(function (s) { var row = document.querySelector('[data-grow="' + s.subjectId + '"]'); var rec = { subjectId: s.subjectId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = row ? row.querySelector('[data-gscore="' + k + '"]') : null; rec[k] = inp ? inp.value : ''; }); return rec; }); var name = fullName(g.student); act(authed('api_saveStudentGrades', g.student.id, g.term.id, records), 'Grades saved for ' + name + ' — result generated automatically.', function (d) { state.results.grades = d; state.busy = false; render(); }); }
 
     start();
   </script>

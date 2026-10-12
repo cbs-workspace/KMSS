@@ -22,8 +22,8 @@ Everything else — config, database layer, auth, reference data, students, staf
 - **Students** — add/edit/delete with photo upload, scoped to a teacher's class(es) / a leader's section
 - **Staff** — record staff with photo upload, staff numbers auto-generated `KMS/STF/0001`
 - **Attendance** — daily register per class with PRESENT/ABSENT/LATE/EXCUSED + note
-- **Results** — per-subject score entry (CA1–CA3 /10, Exam /70), compute totals, averages, positions, publish
-- **Report cards** — printable terminal report sheet with the school logo and CBS footer
+- **Results** — two entry modes: per-subject grids (CA1–CA3 /10, Exam /70) **and per-student entry across the whole curriculum**; totals, averages, positions and `ResultSheets` rows are generated automatically on save, with explicit Compute/Publish still available
+- **Report cards** — printable modern terminal report (school logo + motto, score table, attendance summary, remarks with signature lines, grading key); no designer branding
 - **Payments** — parents record fees/uniform/books payments and upload evidence; bursar/account officer verify
 - **Fees & receipts** — a fee catalogue (per section / class level / term) is maintained in the **Fees** tab or portal **Fees** page; parents pick optionals per ward/term, choose a 2- or 3-installment plan, and every payment produces an official printable receipt with running balance
 - **My Wards** — parents see the students linked to their account
@@ -190,6 +190,18 @@ A small key/value `Settings` tab. Current settings:
 
 Editable from the portal **Fees → Settings** card, or directly in the `Settings` tab. Mail is sent via MailApp (counts against the Gmail quota — keep the list small).
 
+## Results & report cards
+
+Score entry lives on the **Results** page (Admin, Principal, Headmaster, Teacher) with three tabs:
+
+- **Score entry** — a grid for one subject at a time across the whole class arm (CA1–CA3 /10, Exam /70). Saving a grid recomputes the class result sheets automatically.
+- **Per-student grades** — pick a class, term and student to see **every subject in that student's curriculum** with its current scores in one page. Totals update live as you type; **Save grades** writes the whole set and **automatically regenerates that student's `ResultSheets` row** (total, average, position, status preserved) — no separate "Compute" click needed. A completeness note shows how many subjects are still outstanding, and a **Report card** button opens the result.
+- **Result sheets** — the class ranking (position, total, average, status) with the explicit **Compute** and **Publish** buttons; publish flips every sheet for the class/term to `PUBLISHED`.
+
+Subjects are validated against the student's own curriculum, entry requires teacher/leader scope, and parents cannot enter grades (they view their ward's report card). Teachers see only their assigned arms.
+
+The **report card** (`Report card` on any sheet/row, or from a parent's **My Wards**) prints a clean terminal report: school logo and motto, student/term/attendance meta, position/total/average/status, a striped score table with a totals row, teacher & principal remarks with signature lines, the grading-scale key, and an official sign-off. It carries **no CBS/designer branding** and needs no counter-signature.
+
 ## Data model (spreadsheet tabs)
 
 | Tab | Purpose |
@@ -206,7 +218,7 @@ Editable from the portal **Fees → Settings** card, or directly in the `Setting
 | `ParentStudents` | Parent ↔ ward links |
 | `Attendance` | One row per student per day |
 | `Scores` | One row per student/subject/term (CA1, CA2, CA3, Exam, total, grade) |
-| `ResultSheets` | Per student/term totals, average, position, remarks, status |
+| `ResultSheets` | Per student/term totals, average, position, remarks, status — regenerated automatically when scores are saved (per-subject grid or per-student) |
 | `Payments` | Fee/uniform/books payments + evidence + verification + receipt fields (`feePlanId`, `installmentNo`, `amountPaid`, `balanceAfter`, `receiptNo`, `viewfile`, `items`) |
 | `Fees` | Fee/charge catalogue (category, section/level/session/term scope, amount, mandatory, active) |
 | `FeeSelections` | Which optional fees a parent has selected per student/term |
@@ -259,6 +271,6 @@ The public landing site (`../site/index.html`) shows a scrolling announcement ma
 - Five failed sign-in attempts on the same username lock that account for 15 minutes.
 - Changing/resetting a password (or deactivating a user) instantly ends all of that user's open sessions.
 - The spreadsheet is the single source of truth — back it up with Drive version history or *File → Make a copy*.
-- Score entry clamps CA1–CA3 to 10 and Exam to 70; totals and grades are computed server-side.
+- Score entry clamps CA1–CA3 to 10 and Exam to 70; totals and grades are computed server-side, and `ResultSheets` are regenerated automatically whenever scores are saved.
 - The client talks to the server only through `api_*` functions via `google.script.run` (see `index.html` `call()`).
 - Deploying a **new version** is required after code changes: *Deploy → Manage deployments → edit → Version: New version*. Adding scopes (e.g. MailApp) may also require you to re-authorize once and/or create a new deployment.
