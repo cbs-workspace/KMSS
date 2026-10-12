@@ -1102,7 +1102,8 @@
             '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="fee-edit" data-id="' + esc(x.id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="fee-delete" data-id="' + esc(x.id) + '">Delete</button></td></tr>';
         }).join('') + '</tbody></table></div>';
       body += '<div class="card" style="margin-top:24px"><div class="section-head"><h3>Settings</h3></div>' +
-        '<div class="grid cols-2"><div class="field"><label>Admission notification emails <span class="muted small">(comma-separated — the applicant plus all admin/principal users are always notified)</span></label><input data-field="adm-emails" type="text" value="' + esc(f.settings.ADMISSION_NOTIFY_EMAILS || '') + '"></div></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Admission notification emails <span class="muted small">(comma-separated — the applicant plus all admin/principal users are always notified)</span></label><input data-field="adm-emails" type="text" value="' + esc(f.settings.ADMISSION_NOTIFY_EMAILS || '') + '"></div>' +
+        '<div class="field"><label>SMS email-to-SMS gateway <span class="muted small">(carrier suffix, e.g. @vtext.com — leave blank to disable SMS)</span></label><input data-field="sms-gateway" type="text" value="' + esc(f.settings.SMS_EMAIL_GATEWAY || '') + '" placeholder="@vtext.com"></div></div>' +
         '<button class="btn btn-primary" data-action="fees-save-settings">Save settings</button></div>';
       return body;
     }
@@ -1403,7 +1404,7 @@
         case 'fee-cancel': state.fees.form = null; render(); return;
         case 'fee-edit': var ffe = findIn(state.fees.list, id); if (ffe) { state.fees.form = JSON.parse(JSON.stringify(ffe)); clearMessages(); render(); } return;
         case 'fee-delete': if (confirm('Delete this fee/charge? Parents\u2019 saved selections for it remain in the log.')) act(authed('api_deleteFee', id), 'Fee deleted.', loadFees); return;
-        case 'fees-save-settings': var ems = String((document.querySelector('[data-field="adm-emails"]') || {}).value || ''); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', ') }), 'Settings saved.', loadFees); return;
+        case 'fees-save-settings': var ems = String((document.querySelector('[data-field="adm-emails"]') || {}).value || ''); var sgw = String((document.querySelector('[data-field="sms-gateway"]') || {}).value || '').trim(); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', '), SMS_EMAIL_GATEWAY: sgw }), 'Settings saved.', loadFees); return;
         case 'msg-preview': loadMessageAudience(); return;
         case 'msg-fee-remind': runFeeReminders(); return;
         case 'msg-att-alert': runAttendanceAlerts(); return;
