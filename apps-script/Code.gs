@@ -38,6 +38,7 @@ var CFG = {
     STAFF: 'Staff', PARENT_STUDENTS: 'ParentStudents', ATTENDANCE: 'Attendance', SCORES: 'Scores',
     RESULT_SHEETS: 'ResultSheets', PAYMENTS: 'Payments', FILES: 'Files', ANNOUNCEMENTS: 'Announcements',
     APPLICATIONS: 'Applications', FEES: 'Fees', FEE_SELECTIONS: 'FeeSelections', FEE_PLANS: 'FeePlans',
+    STAFF_ATTENDANCE: 'StaffAttendance', TIMETABLE: 'Timetable',
     SETTINGS: 'Settings', AUDIT_LOG: 'AuditLog'
   },
   ROLES: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'TEACHER', 'PARENT'],
@@ -73,6 +74,8 @@ var HEADERS = {
   Fees: ['id', 'name', 'category', 'section', 'classLevelId', 'sessionName', 'termName', 'amount', 'mandatory', 'active', 'orderIndex', 'note', 'updatedAt'],
   FeeSelections: ['id', 'studentId', 'parentUserId', 'termId', 'feeId', 'category', 'name', 'amount', 'mandatory', 'selected', 'createdAt', 'updatedAt'],
   FeePlans: ['id', 'studentId', 'parentUserId', 'termId', 'installments', 'createdAt', 'updatedAt'],
+  StaffAttendance: ['id', 'date', 'staffId', 'status', 'note', 'recordedBy', 'createdAt'],
+  Timetable: ['id', 'termId', 'classArmId', 'dayOfWeek', 'startTime', 'endTime', 'subjectId', 'title', 'teacher', 'room', 'kind', 'note', 'createdBy', 'createdAt', 'updatedAt'],
   Settings: ['key', 'value', 'updatedAt'],
   AuditLog: ['id', 'at', 'actorId', 'actorUsername', 'action', 'target', 'detail']
 };
@@ -92,6 +95,7 @@ function brand_() {
 
 function uuid_() { return Utilities.getUuid(); }
 function nowIso_() { return new Date().toISOString(); }
+function todayIso_() { try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); } catch (e) { return new Date().toISOString().slice(0, 10); } }
 function toBool_(value) {
   if (value === true || value === false) return value;
   var s = String(value).toLowerCase();
@@ -1174,14 +1178,15 @@ function ensureColumns_(name, headers) {
 }
 /**
  * Non-destructive migration (safe on a live spreadsheet). Creates the new
- * fee/settings tabs and appends the new Payments columns. Run once from the
- * editor after deploying the new version — no data is cleared.
+ * fee/settings, staff-register and timetable tabs and appends the new Payments
+ * columns. Run once from the editor after deploying the new version — no data
+ * is cleared.
  */
 function ensureFeeTables() {
   var ss = getSpreadsheet_();
-  ['Fees', 'FeeSelections', 'FeePlans', 'Settings'].forEach(function (name) { ensureSheet_(ss, name); });
+  ['Fees', 'FeeSelections', 'FeePlans', 'Settings', 'StaffAttendance', 'Timetable'].forEach(function (name) { ensureSheet_(ss, name); });
   ensureColumns_('Payments', HEADERS.Payments);
-  Logger.log('Fee/settings tables ensured. (Run setUp() to clear & re-seed everything.)');
+  Logger.log('Fee/settings, staff-register and timetable tables ensured. (Run setUp() to clear & re-seed everything.)');
   return true;
 }
 function api_getSettings(token) {
@@ -1826,6 +1831,390 @@ function api_getAnalytics(token, opts) {
     trends: trends,
     terms: termsList
   };
+}
+
+/* =========================== 14c. COMMUNICATION, STAFF REGISTER & TIMETABLE =========================== */
+
+var COMMS_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
+var MESSAGE_AUDIENCES = ['PARENTS', 'STAFF', 'BOTH'];
+var MESSAGE_CHANNELS = ['EMAIL', 'SMS', 'BOTH'];
+var MAX_MESSAGE_RECIPIENTS = 300; // safety cap per send (protects the Gmail daily quota)
+var DAYS_OF_WEEK = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+var TIMETABLE_KINDS = ['CLASS', 'EXAM'];
+
+/** Students within the caller's section/arm scope. */
+function scopedStudents_(user) {
+  var arms = armsMap_(user);
+  return readTable_('Students').filter(function (s) { return !!arms[s.classArmId]; });
+}
+/** Staff within the caller's section scope (ADMIN = all). */
+function scopedStaff_(user) {
+  var all = readTable_('Staff');
+  if (user.role === 'ADMIN' || !userSections_(user).length) return all;
+  var sections = userSections_(user);
+  return all.filter(function (st) { return sections.indexOf(st.section) !== -1; });
+}
+function money_(n) {
+  var v = Math.round(Number(n) || 0), neg = v < 0, s = String(Math.abs(v)), out = '';
+  while (s.length > 3) { out = ',' + s.slice(-3) + out; s = s.slice(0, -3); }
+  return (neg ? '-' : '') + '\u20A6' + s + out;
+}
+/** Guardians for a set of students: parent-user email + the student's guardian phone. */
+function guardianContactsForStudents_(students) {
+  var usersById = indexById_(readTableSafe_('Users'));
+  var emailByStudent = {};
+  readTableSafe_('ParentStudents').forEach(function (ps) {
+    var u = usersById[ps.parentUserId]; if (!u) return;
+    var e = String(u.email || '').trim().toLowerCase();
+    if (e && EMAIL_RE.test(e) && !emailByStudent[ps.studentId]) emailByStudent[ps.studentId] = e;
+  });
+  return students.map(function (s) {
+    return {
+      studentId: s.id, student: fullNameOf_(s), admissionNo: s.admissionNo || '',
+      classArm: classArmLabel_(s.classArmId),
+      guardianName: s.guardianName || '',
+      email: emailByStudent[s.id] || '',
+      phone: String(s.guardianPhone || '').trim()
+    };
+  });
+}
+function staffContacts_(staffList) {
+  return staffList.map(function (st) {
+    return { staffId: st.id, name: fullNameOf_(st), designation: st.designation || '', section: st.section || '', email: String(st.email || '').trim(), phone: String(st.phone || '').trim() };
+  });
+}
+function resolveMessageRecipients_(user, opts) {
+  opts = opts || {};
+  var audience = MESSAGE_AUDIENCES.indexOf(opts.to) !== -1 ? opts.to : 'PARENTS';
+  var students = scopedStudents_(user), staff = scopedStaff_(user);
+  if (opts.section) {
+    students = students.filter(function (s) { return studentSection_(s.classArmId) === opts.section; });
+    staff = staff.filter(function (st) { return String(st.section) === String(opts.section); });
+  }
+  if (opts.classArmId) students = students.filter(function (s) { return String(s.classArmId) === String(opts.classArmId); });
+  var guardians = (audience === 'PARENTS' || audience === 'BOTH') ? guardianContactsForStudents_(students) : [];
+  var members = (audience === 'STAFF' || audience === 'BOTH') ? staffContacts_(staff) : [];
+  return { audience: audience, guardians: guardians, staff: members };
+}
+function uniqAddresses_(list) {
+  var seen = {}, out = [];
+  list.forEach(function (x) { var v = String(x || '').trim(); if (!v) return; var k = v.toLowerCase(); if (!seen[k]) { seen[k] = true; out.push(v); } });
+  return out;
+}
+/** Sends one message per address (email and/or SMS-via-email-gateway). Never throws on a single failure. */
+function dispatchMessages_(emails, phones, channel, subject, body, html) {
+  var toEmails = (channel === 'EMAIL' || channel === 'BOTH') ? uniqAddresses_(emails) : [];
+  var gateway = String(getSetting_('SMS_EMAIL_GATEWAY', '')).trim();
+  var smsAddrs = [];
+  var wantsSms = (channel === 'SMS' || channel === 'BOTH');
+  if (wantsSms && gateway) {
+    uniqAddresses_(phones).forEach(function (p) { var d = p.replace(/[^0-9]/g, ''); if (d.length >= 5) smsAddrs.push(d + gateway); });
+    smsAddrs = uniqAddresses_(smsAddrs);
+  }
+  var skipped = (wantsSms && !gateway) ? uniqAddresses_(phones).length : 0;
+  var addresses = uniqAddresses_(toEmails.concat(smsAddrs));
+  var capped = 0;
+  if (addresses.length > MAX_MESSAGE_RECIPIENTS) { capped = addresses.length - MAX_MESSAGE_RECIPIENTS; addresses = addresses.slice(0, MAX_MESSAGE_RECIPIENTS); }
+  var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
+  var htmlBody = '<div style="font-family:Arial,Helvetica,sans-serif;color:#1b2a26;font-size:14px">' + (html || escHtml_(body).replace(/\n/g, '<br>')) + '</div>';
+  var sent = 0, failed = 0;
+  addresses.forEach(function (addr) {
+    try { MailApp.sendEmail({ to: addr, subject: subject, body: body, htmlBody: htmlBody }); sent++; }
+    catch (e) { failed++; }
+  });
+  return { sent: sent, failed: failed, skipped: skipped, capped: capped, total: addresses.length, quota: quota, smsGateway: !!gateway };
+}
+function assertComms_(user) { assertRole_(user, COMMS_ROLES, 'Messaging is for school leadership and finance.'); }
+
+function api_messageAudience(token, opts) {
+  var user = requireUser_(token);
+  assertComms_(user);
+  var r = resolveMessageRecipients_(user, opts);
+  var guardianEmails = uniqAddresses_(r.guardians.map(function (g) { return g.email; }));
+  var guardianPhones = uniqAddresses_(r.guardians.map(function (g) { return g.phone; }));
+  var staffEmails = uniqAddresses_(r.staff.map(function (s) { return s.email; }));
+  var staffPhones = uniqAddresses_(r.staff.map(function (s) { return s.phone; }));
+  return {
+    audience: r.audience,
+    sections: user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(armsMap_(user)),
+    guardianCount: r.guardians.length, guardianEmailCount: guardianEmails.length, guardianPhoneCount: guardianPhones.length,
+    staffCount: r.staff.length, staffEmailCount: staffEmails.length, staffPhoneCount: staffPhones.length,
+    smsGateway: String(getSetting_('SMS_EMAIL_GATEWAY', '')),
+    cap: MAX_MESSAGE_RECIPIENTS,
+    sample: r.guardians.slice(0, 6).map(function (g) { return { name: g.student, guardianName: g.guardianName, classArm: g.classArm, email: g.email, phone: g.phone }; })
+      .concat(r.staff.slice(0, 4).map(function (s) { return { name: s.name, guardianName: s.designation, classArm: s.section, email: s.email, phone: s.phone }; }))
+  };
+}
+function api_sendMessage(token, payload) {
+  var user = requireUser_(token);
+  assertComms_(user);
+  payload = payload || {};
+  var subject = String(payload.subject || '').trim();
+  var body = String(payload.body || '').trim();
+  if (!subject) throw new Error('A subject is required.');
+  if (!body) throw new Error('A message body is required.');
+  var channel = MESSAGE_CHANNELS.indexOf(payload.channel) !== -1 ? payload.channel : 'EMAIL';
+  var r = resolveMessageRecipients_(user, payload);
+  var emails = [], phones = [];
+  r.guardians.forEach(function (g) { if (g.email) emails.push(g.email); if (g.phone) phones.push(g.phone); });
+  r.staff.forEach(function (s) { if (s.email) emails.push(s.email); if (s.phone) phones.push(s.phone); });
+  var result = dispatchMessages_(emails, phones, channel, subject, body, payload.html);
+  logAudit_(user, 'SEND_MESSAGE', r.audience, channel + ' sent=' + result.sent + ' failed=' + result.failed + ' skipped=' + result.skipped);
+  return result;
+}
+function api_sendFeeReminders(token, termId, opts) {
+  var user = requireUser_(token);
+  assertComms_(user);
+  opts = opts || {};
+  var term = termId ? findById_('Terms', termId) : getCurrentTerm_();
+  if (!term) throw new Error('No term is available.');
+  var students = scopedStudents_(user);
+  if (opts.section) students = students.filter(function (s) { return studentSection_(s.classArmId) === opts.section; });
+  var levelById = indexById_(readTable_('ClassLevels')), armById = indexById_(readTable_('ClassArms'));
+  var selByStudent = {};
+  readTableSafe_('FeeSelections').forEach(function (r) {
+    if (String(r.termId) !== String(term.id)) return;
+    selByStudent[r.studentId] = selByStudent[r.studentId] || {};
+    selByStudent[r.studentId][r.feeId] = r.selected;
+  });
+  var paidByStudent = {};
+  readTable_('Payments').forEach(function (p) {
+    if (String(p.termId) !== String(term.id)) return;
+    if (String(p.status || '').toUpperCase() === 'REJECTED') return;
+    paidByStudent[p.studentId] = round2_((paidByStudent[p.studentId] || 0) + numOrZero_(p.amount));
+  });
+  var feesByLevel = {};
+  var debtors = students.map(function (st) {
+    var arm = armById[st.classArmId], level = arm ? levelById[arm.classLevelId] : null;
+    if (!level) return null;
+    if (!feesByLevel[level.id]) feesByLevel[level.id] = applicableFeesForLevel_(level, term);
+    var sel = selByStudent[st.id] || {}, bill = 0;
+    feesByLevel[level.id].forEach(function (f) {
+      var r = sel[f.id], mandatory = toBool_(f.mandatory);
+      var selected = r === undefined ? mandatory : (mandatory || toBool_(r));
+      if (selected) bill += numOrZero_(f.amount);
+    });
+    var paid = paidByStudent[st.id] || 0, balance = round2_(Math.max(0, bill - paid));
+    if (balance <= 0) return null;
+    return { studentId: st.id, student: fullNameOf_(st), admissionNo: st.admissionNo || '', classArm: classArmLabel_(st.classArmId), bill: round2_(bill), paid: round2_(paid), balance: balance };
+  }).filter(Boolean);
+  var totalOutstanding = round2_(debtors.reduce(function (t, d) { return t + d.balance; }, 0));
+  if (opts.dryRun) return { term: termRef_(term.id), debtors: debtors.length, totalOutstanding: totalOutstanding, sample: debtors.slice(0, 10) };
+  var contacts = guardianContactsForStudents_(students);
+  var emailByStudent = {}; contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; });
+  var subject = 'Outstanding school fees \u2014 ' + termLabel_(term);
+  var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
+  var sent = 0, skipped = 0, failed = 0;
+  debtors.forEach(function (d) {
+    var email = emailByStudent[d.studentId];
+    if (!email) { skipped++; return; }
+    var bodyText = [
+      'Dear Guardian,', '',
+      'Our records show an outstanding balance on school fees for ' + d.student + (d.classArm ? ' (' + d.classArm + ')' : '') + ' for ' + termLabel_(term) + '.', '',
+      'Total bill: ' + money_(d.bill),
+      'Amount paid: ' + money_(d.paid),
+      'Outstanding: ' + money_(d.balance), '',
+      'Kindly settle this balance at the school office. If you have already paid, please disregard this message.', '',
+      CFG.APP_NAME + ' \u00B7 Finance Office'
+    ].join('\n');
+    try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; }
+    catch (e) { failed++; }
+  });
+  logAudit_(user, 'SEND_FEE_REMINDERS', term.id, 'sent=' + sent + ' skipped=' + skipped);
+  return { term: termRef_(term.id), debtors: debtors.length, sent: sent, skipped: skipped, failed: failed, totalOutstanding: totalOutstanding, quota: quota };
+}
+function api_sendAttendanceAlerts(token, opts) {
+  var user = requireUser_(token);
+  assertComms_(user);
+  opts = opts || {};
+  var term = opts.termId ? findById_('Terms', opts.termId) : getCurrentTerm_();
+  var threshold = Number(opts.threshold); if (isNaN(threshold) || threshold <= 0 || threshold > 100) threshold = 75;
+  var minDays = Number(opts.minDays); if (isNaN(minDays) || minDays < 1) minDays = 3;
+  var students = scopedStudents_(user);
+  if (opts.section) students = students.filter(function (s) { return studentSection_(s.classArmId) === opts.section; });
+  var scopedIds = {}; students.forEach(function (s) { scopedIds[String(s.id)] = true; });
+  var agg = {};
+  readTable_('Attendance').forEach(function (a) {
+    if (!scopedIds[String(a.studentId)]) return;
+    var d = String(a.date || '');
+    if (term) { var from = term.startDate || '', to = term.endDate || ''; if (from && d < from) return; if (to && d > to) return; }
+    var st = String(a.status || '').toUpperCase();
+    if (CFG.ATTENDANCE_STATUSES.indexOf(st) === -1) return;
+    agg[a.studentId] = agg[a.studentId] || { present: 0, total: 0 };
+    agg[a.studentId].total++; if (st === 'PRESENT') agg[a.studentId].present++;
+  });
+  var studentsById = indexById_(students);
+  var atRisk = Object.keys(agg).map(function (sid) {
+    var a = agg[sid];
+    if (a.total < minDays) return null;
+    var rate = round2_(a.present / a.total * 100);
+    if (rate >= threshold) return null;
+    var s = studentsById[sid];
+    return { studentId: sid, student: s ? fullNameOf_(s) : '\u2014', classArm: s ? classArmLabel_(s.classArmId) : '', rate: rate, present: a.present, absences: a.total - a.present, total: a.total };
+  }).filter(Boolean).sort(function (x, y) { return x.rate - y.rate; });
+  if (opts.dryRun) return { term: term ? termRef_(term.id) : null, threshold: threshold, minDays: minDays, count: atRisk.length, sample: atRisk.slice(0, 10) };
+  var contacts = guardianContactsForStudents_(students);
+  var emailByStudent = {}; contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; });
+  var subject = 'Attendance alert \u2014 ' + (term ? termLabel_(term) : CFG.APP_NAME);
+  var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
+  var sent = 0, skipped = 0, failed = 0;
+  atRisk.forEach(function (d) {
+    var email = emailByStudent[d.studentId];
+    if (!email) { skipped++; return; }
+    var bodyText = [
+      'Dear Guardian,', '',
+      'Our records show that ' + d.student + (d.classArm ? ' (' + d.classArm + ')' : '') + ' has attended ' + d.rate + '% of school days this term (' + d.absences + ' absence(s) in ' + d.total + ' recorded days).', '',
+      'We are concerned about this level of attendance. Kindly ensure regular attendance and contact the school office if there are difficulties.', '',
+      CFG.APP_NAME + ' \u00B7 School Office'
+    ].join('\n');
+    try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; }
+    catch (e) { failed++; }
+  });
+  logAudit_(user, 'SEND_ATTENDANCE_ALERTS', term ? term.id : '', 'sent=' + sent + ' skipped=' + skipped);
+  return { term: term ? termRef_(term.id) : null, threshold: threshold, minDays: minDays, count: atRisk.length, sent: sent, skipped: skipped, failed: failed, quota: quota };
+}
+
+/* ---- staff attendance register ---- */
+function api_getStaffRoster(token, date) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'The staff register is for school leadership.');
+  date = String(date || todayIso_()).slice(0, 10);
+  var staff = scopedStaff_(user).slice().sort(function (a, b) { return fullNameOf_(a).localeCompare(fullNameOf_(b)); });
+  var existing = {};
+  readTableSafe_('StaffAttendance').forEach(function (r) { if (String(r.date).slice(0, 10) === date) existing[r.staffId] = r; });
+  return {
+    date: date,
+    statuses: CFG.ATTENDANCE_STATUSES,
+    records: staff.map(function (st) {
+      var e = existing[st.id];
+      return { staffId: st.id, staffNo: st.staffNo || '', name: fullNameOf_(st), designation: st.designation || '', section: st.section || '', status: e ? String(e.status || '') : '', note: e ? String(e.note || '') : '' };
+    })
+  };
+}
+function api_saveStaffAttendance(token, date, records) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'The staff register is for school leadership.');
+  date = String(date || '').slice(0, 10);
+  if (!date) throw new Error('A date is required.');
+  var allowed = {}; scopedStaff_(user).forEach(function (st) { allowed[st.id] = true; });
+  var existingByStaff = {};
+  readTableSafe_('StaffAttendance').forEach(function (r) { if (String(r.date).slice(0, 10) === date && allowed[r.staffId]) existingByStaff[r.staffId] = r; });
+  var saved = 0;
+  (records || []).forEach(function (rec) {
+    if (!rec || !rec.staffId || !allowed[rec.staffId]) return;
+    var st = String(rec.status || '').toUpperCase();
+    if (CFG.ATTENDANCE_STATUSES.indexOf(st) === -1) st = 'PRESENT';
+    var note = String(rec.note || '');
+    var ex = existingByStaff[rec.staffId];
+    if (ex) updateRow_('StaffAttendance', ex.id, { status: st, note: note, recordedBy: user.id });
+    else appendRow_('StaffAttendance', { id: uuid_(), date: date, staffId: rec.staffId, status: st, note: note, recordedBy: user.id, createdAt: nowIso_() });
+    saved++;
+  });
+  logAudit_(user, 'SAVE_STAFF_ATTENDANCE', date, saved + ' records');
+  return { date: date, saved: saved };
+}
+
+/* ---- timetable / exam schedule ---- */
+function armLabelAll_(armId) {
+  var a = getArmById_(armId), l = a ? findById_('ClassLevels', a.classLevelId) : null;
+  return a && l ? (l.section + ' \u00B7 ' + l.name + ' ' + a.name) : '';
+}
+function timetableArms_(user) {
+  if (user.role === 'PARENT') {
+    var wardIds = parentStudentIds_(user), seen = {}, out = [];
+    readTable_('Students').forEach(function (s) {
+      if (wardIds.indexOf(String(s.id)) !== -1 && s.classArmId && !seen[s.classArmId]) { seen[s.classArmId] = true; out.push({ id: s.classArmId, label: armLabelAll_(s.classArmId) }); }
+    });
+    return out;
+  }
+  return getClassArms_(user).map(function (a) { return { id: a.id, label: a.classLevel ? (a.classLevel.section + ' \u00B7 ' + a.classLevel.name + ' ' + a.name) : a.name }; });
+}
+function timetableScopeCheck_(user, armId) {
+  if (user.role === 'PARENT') {
+    var wardIds = parentStudentIds_(user);
+    var ok = readTable_('Students').some(function (s) { return String(s.classArmId) === String(armId) && wardIds.indexOf(String(s.id)) !== -1; });
+    if (!ok) throw new Error('That timetable is not for your ward.');
+    return;
+  }
+  assertArmAllowed_(user, armId);
+}
+function byDayTime_(a, b) {
+  var da = DAYS_OF_WEEK.indexOf(String(a.dayOfWeek).toUpperCase()), db = DAYS_OF_WEEK.indexOf(String(b.dayOfWeek).toUpperCase());
+  if (da !== db) return da - db;
+  return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+}
+function timetableView_(e, subjectsById) {
+  var s = subjectsById[e.subjectId];
+  return {
+    id: e.id, termId: e.termId, classArmId: e.classArmId,
+    dayOfWeek: String(e.dayOfWeek || ''), startTime: String(e.startTime || ''), endTime: String(e.endTime || ''),
+    subjectId: e.subjectId || '', subject: s ? s.name : '', title: String(e.title || ''),
+    teacher: String(e.teacher || ''), room: String(e.room || ''), kind: String(e.kind || 'CLASS'), note: String(e.note || '')
+  };
+}
+function api_listTimetable(token, opts) {
+  var user = requireUser_(token);
+  opts = opts || {};
+  var arms = timetableArms_(user);
+  var armId = String(opts.classArmId || '');
+  if (!armId && arms.length) armId = arms[0].id;
+  if (!armId) return { arms: arms, classArmId: '', classArm: '', termId: '', days: DAYS_OF_WEEK, kinds: TIMETABLE_KINDS, terms: getTerms_().map(function (t) { return { id: t.id, label: termLabel_(t) }; }), entries: [] };
+  timetableScopeCheck_(user, armId);
+  var cur = getCurrentTerm_();
+  var termId = String(opts.termId || (cur ? cur.id : ''));
+  var subjectsById = indexById_(readTableSafe_('Subjects'));
+  var entries = readTableSafe_('Timetable').filter(function (e) {
+    return String(e.classArmId) === String(armId) && (!termId || String(e.termId) === String(termId));
+  }).sort(byDayTime_).map(function (e) { return timetableView_(e, subjectsById); });
+  return {
+    arms: arms, classArmId: armId, classArm: armLabelAll_(armId), termId: termId, days: DAYS_OF_WEEK, kinds: TIMETABLE_KINDS,
+    terms: getTerms_().map(function (t) { return { id: t.id, label: termLabel_(t) }; }), entries: entries
+  };
+}
+function api_saveTimetableEntry(token, payload) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You cannot edit the timetable.');
+  payload = payload || {};
+  var armId = String(payload.classArmId || '');
+  if (!armId) throw new Error('Select a class.');
+  assertArmAllowed_(user, armId);
+  var cur = getCurrentTerm_();
+  var termId = String(payload.termId || (cur ? cur.id : ''));
+  var day = String(payload.dayOfWeek || '').toUpperCase();
+  if (DAYS_OF_WEEK.indexOf(day) === -1) throw new Error('Select a day of the week.');
+  var kind = TIMETABLE_KINDS.indexOf(String(payload.kind || '').toUpperCase()) !== -1 ? String(payload.kind).toUpperCase() : 'CLASS';
+  var subjectId = String(payload.subjectId || '');
+  var subject = subjectId ? findById_('Subjects', subjectId) : null;
+  var title = String(payload.title || '').trim() || (subject ? subject.name : '');
+  if (!title) throw new Error('Enter a subject or a title.');
+  var fields = {
+    termId: termId, classArmId: armId, dayOfWeek: day,
+    startTime: String(payload.startTime || '').trim(), endTime: String(payload.endTime || '').trim(),
+    subjectId: subjectId, title: title, teacher: String(payload.teacher || '').trim(), room: String(payload.room || '').trim(),
+    kind: kind, note: String(payload.note || '').trim(), updatedAt: nowIso_()
+  };
+  if (payload.id) {
+    var existing = findById_('Timetable', payload.id);
+    if (!existing) throw new Error('Timetable entry not found.');
+    assertArmAllowed_(user, existing.classArmId);
+    updateRow_('Timetable', payload.id, fields);
+    logAudit_(user, 'UPDATE_TIMETABLE', payload.id, day + ' ' + title);
+    return { id: payload.id };
+  }
+  fields.id = uuid_(); fields.createdBy = user.id; fields.createdAt = nowIso_();
+  appendRow_('Timetable', fields);
+  logAudit_(user, 'ADD_TIMETABLE', fields.id, day + ' ' + title);
+  return { id: fields.id };
+}
+function api_deleteTimetableEntry(token, id) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You cannot edit the timetable.');
+  var e = findById_('Timetable', id);
+  if (!e) throw new Error('Timetable entry not found.');
+  assertArmAllowed_(user, e.classArmId);
+  deleteRow_('Timetable', id);
+  logAudit_(user, 'DELETE_TIMETABLE', id, '');
+  return true;
 }
 
 /* =========================== 15. BOOTSTRAP / ADMIN =========================== */

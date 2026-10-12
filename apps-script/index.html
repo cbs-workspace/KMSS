@@ -236,9 +236,12 @@
       { key: 'attendance', label: 'Attendance', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'results', label: 'Results', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'statistics', label: 'Statistics', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'] },
+      { key: 'messages', label: 'Messages', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'] },
       { key: 'teachers', label: 'Teachers', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'applications', label: 'Applications', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'staff', label: 'Staff', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
+      { key: 'staff-register', label: 'Staff register', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
+      { key: 'timetable', label: 'Timetable', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'my-wards', label: 'My Wards', roles: ['PARENT'] },
       { key: 'fees', label: function () { return state.user && state.user.role === 'PARENT' ? 'My Fees' : 'Fees'; }, roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'PARENT'] },
       { key: 'payments', label: 'Payments', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER', 'PARENT'] },
@@ -268,6 +271,9 @@
       fees: { termId: '', wardId: '', schedule: null, list: [], form: null, settings: null },
       receipt: null,
       analytics: { termId: '', data: null },
+      messages: { to: 'PARENTS', section: '', classArmId: '', channel: 'EMAIL', subject: '', body: '', threshold: 75, audience: null, flash: null },
+      staffReg: { date: todayISO(), records: null },
+      timetable: { classArmId: '', termId: '', data: null, form: null },
       admin: { tab: 'ClassLevels', rows: [], form: null, parentUsers: [], studentsList: [] },
       users: { list: [], form: null, audit: [], flash: null },
       pwForm: false,
@@ -338,6 +344,9 @@
       else if (v === 'attendance') body = viewAttendance();
       else if (v === 'results') body = viewResults();
       else if (v === 'statistics') body = viewAnalytics();
+      else if (v === 'messages') body = viewMessages();
+      else if (v === 'staff-register') body = viewStaffRegister();
+      else if (v === 'timetable') body = viewTimetable();
       else if (v === 'reportcard') body = viewReport();
       else if (v === 'staff') body = viewStaff();
       else if (v === 'teachers') body = viewTeachers();
@@ -360,6 +369,9 @@
       if (view === 'attendance') return loadRoster();
       if (view === 'results') return loadResults();
       if (view === 'statistics') return loadAnalytics();
+      if (view === 'messages') return loadMessageAudience();
+      if (view === 'staff-register') return loadStaffRegister();
+      if (view === 'timetable') return loadTimetable();
       if (view === 'staff') return loadStaff();
       if (view === 'teachers') return loadTeachers();
       if (view === 'applications') return loadApplications();
@@ -449,6 +461,164 @@
         (d.trends.length ? '<div class="table-wrap"><table><thead><tr><th>Term</th><th style="text-align:right">Attendance</th><th style="text-align:right">Average score</th><th style="text-align:right">Fee billed</th><th style="text-align:right">Collected</th><th style="text-align:right">Collection</th></tr></thead><tbody>' +
           d.trends.map(function (t) { return '<tr><td><strong>' + esc(t.label) + '</strong></td><td style="text-align:right">' + t.attendanceRate + '%</td><td style="text-align:right">' + t.avgScore + '%</td><td style="text-align:right">₦' + fmtMoney(t.billed) + '</td><td style="text-align:right">₦' + fmtMoney(t.collected) + '</td><td style="text-align:right">' + t.collectionRate + '%</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">No termly data yet.</div>') + '</div>';
       return head + cards + grid2([enrollment, attendanceTrend]) + grid2([performance, finance]) + (d.trends.length ? '<div style="margin-top:20px">' + trends + '</div>' : '');
+    }
+
+    /* ---------------- messages (bulk email / SMS) ---------------- */
+    function audienceQuery() { return { to: state.messages.to, section: state.messages.section, classArmId: state.messages.classArmId }; }
+    function loadMessageAudience() {
+      state.busy = true; render();
+      authed('api_messageAudience', audienceQuery()).then(function (a) { state.messages.audience = a; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewMessages() {
+      var m = state.messages, a = m.audience;
+      var body = '<div class="section-head"><h3>Messages</h3><span class="muted small">Email parents/guardians or staff in your scope. SMS is sent through email-to-SMS gateways when configured.</span></div>';
+      if (m.flash) body += '<div class="alert ' + (m.flash.error ? 'error' : 'success') + '">' + esc(m.flash.message) + '</div>';
+      var secOpts = '<option value="">All my sections</option>' + (state.boot.sections || []).map(function (s) { return '<option value="' + esc(s) + '"' + (String(s) === String(m.section) ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
+      var armOpts = '<option value="">All classes</option>' + optionsHtml(state.boot.classArms || [], function (x) { return x.id; }, m.classArmId, armLabel);
+      var chOpts = ['EMAIL', 'SMS', 'BOTH'].map(function (c) { return '<option value="' + c + '"' + (c === m.channel ? ' selected' : '') + '>' + (c === 'EMAIL' ? 'Email' : c === 'SMS' ? 'SMS (via gateway)' : 'Email + SMS') + '</option>'; }).join('');
+      body += '<div class="card"><form id="msg-form"><div class="grid cols-3">' +
+        '<div class="field"><label>Send to</label><select data-field="msg-to">' + ['PARENTS', 'STAFF', 'BOTH'].map(function (x) { return '<option value="' + x + '"' + (x === m.to ? ' selected' : '') + '>' + (x === 'PARENTS' ? 'Parents / guardians' : x === 'STAFF' ? 'Staff' : 'Parents &amp; staff') + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Section</label><select data-field="msg-section">' + secOpts + '</select></div>' +
+        '<div class="field"><label>Class <span class="muted small">(parents only)</span></label><select data-field="msg-class">' + armOpts + '</select></div></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Channel</label><select data-field="msg-channel">' + chOpts + '</select></div>' +
+        '<div class="field"><label>Subject *</label><input name="subject" type="text" required value="' + esc(m.subject) + '"></div></div>' +
+        '<div class="field"><label>Message *</label><textarea name="body" required>' + esc(m.body) + '</textarea></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Send message</button><button class="btn btn-outline" type="button" data-action="msg-preview">Refresh audience</button></div></form></div>';
+      body += '<div class="card" style="margin-top:20px"><div class="section-head"><h3>Audience</h3><span class="muted small">who will receive this</span></div>';
+      if (!a) body += '<div class="page-loading"><span class="spinner"></span> Counting recipients…</div>';
+      else {
+        body += '<div class="grid cols-4">' + statCard('Guardians', a.guardianCount, a.guardianEmailCount + ' email · ' + a.guardianPhoneCount + ' phone') + statCard('Staff', a.staffCount, a.staffEmailCount + ' email · ' + a.staffPhoneCount + ' phone') + statCard('Sections', (a.sections || []).length, (a.sections || []).join(', ') || '—') + statCard('Per-send cap', a.cap, 'recipients') + '</div>';
+        body += '<div class="muted small" style="margin-top:10px">' + (a.smsGateway ? 'SMS gateway: ' + esc(a.smsGateway) : 'No SMS gateway configured — SMS recipients are skipped unless you set <strong>SMS_EMAIL_GATEWAY</strong> in Fees → Settings.') + '</div>';
+        if (a.sample && a.sample.length) body += '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Name</th><th>Guardian / role</th><th>Class / section</th><th>Email</th><th>Phone</th></tr></thead><tbody>' + a.sample.map(function (x) { return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.guardianName || '—') + '</td><td>' + esc(x.classArm || '—') + '</td><td>' + esc(x.email || '—') + '</td><td>' + esc(x.phone || '—') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      }
+      body += '</div>';
+      body += '<div class="card" style="margin-top:20px"><div class="section-head"><h3>Quick actions</h3><span class="muted small">targeted, automatic messages</span></div>' +
+        '<div class="row"><button class="btn btn-outline" data-action="msg-fee-remind">Send fee reminders</button><button class="btn btn-outline" data-action="msg-att-alert">Send attendance alerts</button>' +
+        '<div class="spacer"></div><div class="field" style="max-width:200px;margin:0"><label>Attendance threshold %</label><input type="number" min="1" max="100" data-field="msg-threshold" value="' + esc(m.threshold || 75) + '"></div></div>' +
+        '<div class="muted small" style="margin-top:8px">Fee reminders email guardians with an outstanding balance this term. Attendance alerts email guardians of students below the threshold (min 3 recorded days). Both ask for confirmation first.</div></div>';
+      return body;
+    }
+    function sendMessage(form) {
+      var m = state.messages;
+      m.subject = form.subject.value; m.body = form.body.value;
+      state.busy = true; m.flash = null; render();
+      authed('api_sendMessage', { to: m.to, section: m.section, classArmId: m.classArmId, channel: m.channel, subject: m.subject, body: m.body }).then(function (r) {
+        state.busy = false;
+        m.flash = { message: 'Sent ' + r.sent + ' message(s)' + (r.failed ? ', ' + r.failed + ' failed' : '') + (r.skipped ? ', ' + r.skipped + ' skipped (no address / no SMS gateway)' : '') + (r.capped ? ', ' + r.capped + ' over the ' + r.total + '-recipient cap' : '') + '. Remaining email quota today: ' + (r.quota >= 0 ? r.quota : 'n/a') + '.', error: false };
+        render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function runFeeReminders() {
+      var m = state.messages; state.busy = true; m.flash = null; render();
+      authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section, dryRun: true }).then(function (p) {
+        if (!confirm('Send fee reminders to ' + p.debtors + ' guardian(s) with a total outstanding of ₦' + fmtMoney(p.totalOutstanding) + '?')) { state.busy = false; render(); return null; }
+        return authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section });
+      }).then(function (r) {
+        if (!r) return;
+        state.busy = false; m.flash = { message: 'Fee reminders: ' + r.sent + ' sent, ' + r.skipped + ' skipped, ' + r.failed + ' failed (' + r.debtors + ' debtor(s)).', error: false }; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function runAttendanceAlerts() {
+      var m = state.messages, th = Number(m.threshold) || 75; state.busy = true; m.flash = null; render();
+      authed('api_sendAttendanceAlerts', { section: m.section, threshold: th, dryRun: true }).then(function (p) {
+        if (!confirm('Send attendance alerts to ' + p.count + ' guardian(s) below ' + p.threshold + '%?')) { state.busy = false; render(); return null; }
+        return authed('api_sendAttendanceAlerts', { section: m.section, threshold: th });
+      }).then(function (r) {
+        if (!r) return;
+        state.busy = false; m.flash = { message: 'Attendance alerts: ' + r.sent + ' sent, ' + r.skipped + ' skipped, ' + r.failed + ' failed (' + r.count + ' at risk).', error: false }; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+
+    /* ---------------- staff attendance register ---------------- */
+    function loadStaffRegister() {
+      state.busy = true; render();
+      authed('api_getStaffRoster', state.staffReg.date).then(function (r) { state.staffReg.records = r; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewStaffRegister() {
+      var s = state.staffReg;
+      var body = '<div class="section-head"><h3>Staff register</h3><span class="muted small">Daily staff attendance</span><button class="btn btn-primary btn-sm" data-action="staff-reg-save">Save register</button></div>';
+      body += '<div class="card"><div class="row"><div class="field" style="max-width:220px;margin:0"><label>Date</label><input type="date" data-field="staff-reg-date" value="' + esc(s.date) + '"></div><div class="spacer"></div><div class="muted small">P / A / L / E — Present, Absent, Late, Excused</div></div>';
+      if (state.busy || !s.records) return body + '<div class="page-loading"><span class="spinner"></span> Loading roster…</div></div>';
+      if (!s.records.records.length) return body + '<div class="empty">No staff in your scope.</div></div>';
+      body += '<div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Staff</th><th>Designation</th><th>Section</th><th>Status</th><th>Note</th></tr></thead><tbody>' +
+        s.records.records.map(function (r) {
+          return '<tr data-srid="' + esc(r.staffId) + '"><td><strong>' + esc(r.name) + '</strong><div class="muted small">' + esc(r.staffNo || '') + '</div></td><td>' + esc(r.designation || '—') + '</td><td>' + esc(r.section || '—') + '</td>' +
+            '<td><div class="seg">' + s.records.statuses.map(function (x) { return '<button type="button" data-action="sta-status" data-sid="' + esc(r.staffId) + '" data-status="' + x + '" class="' + (String(r.status) === x ? 'on' : '') + '">' + x.charAt(0) + '</button>'; }).join('') + '</div></td>' +
+            '<td><input type="text" data-action="sta-note" data-sid="' + esc(r.staffId) + '" value="' + esc(r.note) + '" placeholder="optional"></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+      return body;
+    }
+    function setStaStatus(sid, status) {
+      var r = state.staffReg.records; if (!r) return;
+      r.records.forEach(function (x) { if (String(x.staffId) === String(sid)) x.status = status; });
+      var tr = document.querySelector('tr[data-srid="' + sid + '"]');
+      if (tr) tr.querySelectorAll('[data-action="sta-status"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-status') === status); });
+    }
+    function setStaNote(sid, note) { var r = state.staffReg.records; if (r) r.records.forEach(function (x) { if (String(x.staffId) === String(sid)) x.note = note; }); }
+    function saveStaffRegister() {
+      var r = state.staffReg.records; if (!r) return;
+      var records = r.records.map(function (x) { return { staffId: x.staffId, status: x.status || 'PRESENT', note: x.note || '' }; });
+      act(authed('api_saveStaffAttendance', state.staffReg.date, records), 'Staff register saved.', loadStaffRegister);
+    }
+
+    /* ---------------- timetable / exams ---------------- */
+    function loadTimetable() {
+      state.busy = true; render();
+      authed('api_listTimetable', { classArmId: state.timetable.classArmId, termId: state.timetable.termId }).then(function (d) {
+        state.timetable.data = d;
+        if (d.classArmId) state.timetable.classArmId = d.classArmId;
+        if (d.termId) state.timetable.termId = d.termId;
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function timetableCanEdit() { return roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']); }
+    function timetableEntry(id) { var d = state.timetable.data; if (!d) return null; for (var i = 0; i < d.entries.length; i++) if (String(d.entries[i].id) === String(id)) return d.entries[i]; return null; }
+    function viewTimetable() {
+      var tt = state.timetable, d = tt.data, canEdit = timetableCanEdit();
+      var body = '<div class="section-head"><h3>Timetable &amp; exams</h3><span class="muted small">Weekly class timetable and exam schedule</span>' + (canEdit ? '<button class="btn btn-primary btn-sm" data-action="tt-new">+ Add entry</button>' : '') + '</div>';
+      if (state.busy || !d) return body + '<div class="page-loading"><span class="spinner"></span> Loading timetable…</div>';
+      body += '<div class="card"><div class="grid cols-2">' +
+        '<div class="field"><label>Class</label><select data-field="tt-class">' + optionsHtml(d.arms, function (x) { return x.id; }, tt.classArmId, function (x) { return x.label; }) + '</select></div>' +
+        '<div class="field"><label>Term</label><select data-field="tt-term">' + optionsHtml(d.terms, function (x) { return x.id; }, tt.termId, function (x) { return x.label; }) + '</select></div></div></div>';
+      if (tt.form) body += timetableFormHtml(tt.form);
+      if (!d.entries.length) return body + '<div style="margin-top:20px"><div class="empty">No timetable entries for ' + esc(d.classArm || 'this class') + ' yet.</div></div>';
+      var byDay = {}; d.entries.forEach(function (e) { byDay[e.dayOfWeek] = byDay[e.dayOfWeek] || []; byDay[e.dayOfWeek].push(e); });
+      body += '<div style="margin-top:20px">';
+      d.days.forEach(function (day) {
+        var list = byDay[day]; if (!list || !list.length) return;
+        body += '<div class="card" style="margin-bottom:14px"><div class="section-head"><h3>' + day.charAt(0) + day.slice(1).toLowerCase() + '</h3><span class="muted small">' + list.length + ' session(s)</span></div>' +
+          list.map(function (e) {
+            return '<div class="dir-item"><div style="min-width:92px"><strong>' + esc(e.startTime || '--:--') + '</strong><div class="muted small">' + (e.endTime ? '– ' + esc(e.endTime) : '') + '</div></div>' +
+              '<div><strong>' + esc(e.title) + '</strong><div class="muted small">' + esc(e.teacher || '—') + (e.room ? ' · ' + esc(e.room) : '') + '</div></div><div class="spacer"></div>' +
+              '<span class="badge">' + esc(e.kind) + '</span>' +
+              (canEdit ? ' <button class="btn btn-outline btn-sm" data-action="tt-edit" data-id="' + esc(e.id) + '">Edit</button> <button class="btn btn-danger btn-sm" data-action="tt-delete" data-id="' + esc(e.id) + '">Delete</button>' : '') + '</div>';
+          }).join('') + '</div>';
+      });
+      return body + '</div>';
+    }
+    function timetableFormHtml(f) {
+      var d = state.timetable.data, armId = f.classArmId || state.timetable.classArmId;
+      return '<div class="card" style="margin-top:20px"><h3 style="margin-top:0">' + (f.id ? 'Edit entry' : 'Add entry') + '</h3><form id="tt-form" data-id="' + esc(f.id || '') + '">' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Day</label><select name="dayOfWeek">' + d.days.map(function (x) { return '<option value="' + x + '"' + (x === f.dayOfWeek ? ' selected' : '') + '>' + x.charAt(0) + x.slice(1).toLowerCase() + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Start</label><input name="startTime" type="time" value="' + esc(f.startTime || '') + '"></div>' +
+        '<div class="field"><label>End</label><input name="endTime" type="time" value="' + esc(f.endTime || '') + '"></div></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Type</label><select name="kind">' + d.kinds.map(function (k) { return '<option value="' + k + '"' + (k === (f.kind || 'CLASS') ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Subject</label><select name="subjectId"><option value="">—</option>' + optionsHtml(subjectsForArm(armId), function (x) { return x.id; }, f.subjectId, function (x) { return x.name; }) + '</select></div>' +
+        '<div class="field"><label>Title / activity</label><input name="title" type="text" value="' + esc(f.title || '') + '" placeholder="e.g. Mathematics"></div></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Teacher</label><input name="teacher" type="text" value="' + esc(f.teacher || '') + '"></div>' +
+        '<div class="field"><label>Room</label><input name="room" type="text" value="' + esc(f.room || '') + '"></div>' +
+        '<div class="field"><label>Note</label><input name="note" type="text" value="' + esc(f.note || '') + '"></div></div>' +
+        '<div class="row"><button class="btn btn-primary" type="submit">Save entry</button><button class="btn btn-outline" type="button" data-action="tt-cancel">Cancel</button></div></form></div>';
+    }
+    function saveTimetableEntry(form) {
+      var data = collect(form);
+      data.classArmId = state.timetable.classArmId;
+      data.termId = state.timetable.termId;
+      state.busy = true; clearMessages(); render();
+      authed('api_saveTimetableEntry', data).then(function () { state.timetable.form = null; state.notice = 'Timetable entry saved.'; state.busy = false; loadTimetable(); }).catch(function (err) { state.busy = false; setError(err); });
     }
     function fmtMoney(n) { n = Number(n) || 0; var parts = (Math.round(n * 100) / 100).toString().split('.'); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); return parts.join('.'); }
     function statCard(label, value, sub, icon) {
@@ -1234,6 +1404,15 @@
         case 'fee-edit': var ffe = findIn(state.fees.list, id); if (ffe) { state.fees.form = JSON.parse(JSON.stringify(ffe)); clearMessages(); render(); } return;
         case 'fee-delete': if (confirm('Delete this fee/charge? Parents\u2019 saved selections for it remain in the log.')) act(authed('api_deleteFee', id), 'Fee deleted.', loadFees); return;
         case 'fees-save-settings': var ems = String((document.querySelector('[data-field="adm-emails"]') || {}).value || ''); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', ') }), 'Settings saved.', loadFees); return;
+        case 'msg-preview': loadMessageAudience(); return;
+        case 'msg-fee-remind': runFeeReminders(); return;
+        case 'msg-att-alert': runAttendanceAlerts(); return;
+        case 'staff-reg-save': saveStaffRegister(); return;
+        case 'sta-status': setStaStatus(el.getAttribute('data-sid'), el.getAttribute('data-status')); return;
+        case 'tt-new': state.timetable.form = { classArmId: state.timetable.classArmId, termId: state.timetable.termId, dayOfWeek: 'MONDAY', kind: 'CLASS' }; clearMessages(); render(); return;
+        case 'tt-edit': var tte = timetableEntry(id); if (tte) { state.timetable.form = JSON.parse(JSON.stringify(tte)); clearMessages(); render(); } return;
+        case 'tt-cancel': state.timetable.form = null; render(); return;
+        case 'tt-delete': if (confirm('Delete this timetable entry?')) act(authed('api_deleteTimetableEntry', id), 'Entry deleted.', loadTimetable); return;
       }
     });
     function act(promise, notice, reload) { state.busy = true; clearMessages(); render(); promise.then(function () { state.notice = notice; state.busy = false; reload(); }).catch(function (err) { state.busy = false; setError(err); }); }
@@ -1249,6 +1428,14 @@
       else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-student') { state.results.studentId = t.value; state.results.grades = null; clearMessages(); loadResults(); }
       else if (f === 'an-term') { state.analytics.termId = t.value; clearMessages(); loadAnalytics(); }
+      else if (f === 'msg-to') { state.messages.to = t.value; clearMessages(); loadMessageAudience(); }
+      else if (f === 'msg-section') { state.messages.section = t.value; clearMessages(); loadMessageAudience(); }
+      else if (f === 'msg-class') { state.messages.classArmId = t.value; clearMessages(); loadMessageAudience(); }
+      else if (f === 'msg-channel') { state.messages.channel = t.value; }
+      else if (f === 'msg-threshold') { state.messages.threshold = t.value; }
+      else if (f === 'staff-reg-date') { state.staffReg.date = t.value; clearMessages(); loadStaffRegister(); }
+      else if (f === 'tt-class') { state.timetable.classArmId = t.value; state.timetable.form = null; clearMessages(); loadTimetable(); }
+      else if (f === 'tt-term') { state.timetable.termId = t.value; state.timetable.form = null; clearMessages(); loadTimetable(); }
       else if (f === 'pay-status') { state.payments.status = t.value; clearMessages(); loadPayments(); }
       else if (f === 'fees-ward') { state.fees.wardId = t.value; state.fees.schedule = null; loadMyFees(); }
       else if (f === 'fees-term') { state.fees.termId = t.value; state.fees.schedule = null; loadMyFees(); }
@@ -1260,6 +1447,7 @@
       var t = e.target;
       if (t.getAttribute && t.getAttribute('data-field') === 'dash-search') { scheduleDashSearch(t.value); return; }
       if (t.getAttribute('data-action') === 'att-note') setAttNote(t.getAttribute('data-sid'), t.value);
+      if (t.getAttribute('data-action') === 'sta-note') setStaNote(t.getAttribute('data-sid'), t.value);
       if (t.getAttribute('data-score')) { var rowEl = t.closest('tr'), sid = t.getAttribute('data-sid'), total = 0; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = rowEl.querySelector('[data-score="' + k + '"]'); total += inp && inp.value !== '' ? Number(inp.value) : 0; }); var cell = document.querySelector('[data-total-for="' + sid + '"]'); if (cell) cell.textContent = total; }
       if (t.getAttribute('data-gscore')) { var grow = t.closest('[data-grow]'), gsub = grow.getAttribute('data-grow'), gtotal = 0; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = grow.querySelector('[data-gscore="' + k + '"]'); gtotal += inp && inp.value !== '' ? Number(inp.value) : 0; }); var gcell = document.querySelector('[data-gtotal-for="' + gsub + '"]'); if (gcell) gcell.textContent = gtotal; }
     });
@@ -1277,6 +1465,8 @@
       else if (form.id === 'remarks-form') saveRemarks(form);
       else if (form.id === 'user-form') addUserSubmit(form);
       else if (form.id === 'pw-form') changePwSubmit(form);
+      else if (form.id === 'msg-form') sendMessage(form);
+      else if (form.id === 'tt-form') saveTimetableEntry(form);
     });
 
     /* ---------------- form actions ---------------- */

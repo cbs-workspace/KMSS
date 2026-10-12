@@ -33,6 +33,8 @@ Everything else — config, database layer, auth, reference data, students, staf
 - **Users** — admin-only panel to add users and manage access, plus self-service password change (see below)
 - **Modern dashboards** — role-aware statistics and directory search (see below)
 - **Statistics & analytics** — a whole-school (section-scoped) analytics page for Admin/Principal/Headmaster/Bursar: enrollment, attendance trends, term performance, fee collection and termly trends (see below)
+- **Messaging** — bulk email (and optional SMS-via-gateway) to parents/staff, plus automatic **fee reminders** and **attendance alerts** (see below)
+- **Staff register & timetable** — a daily staff-attendance register and a weekly class/subject timetable & exam schedule (see below)
 
 ## Dashboards
 
@@ -75,7 +77,7 @@ The directory search matches students and staff by name, admission/staff number,
 
 5. Run the setup function once: in the editor choose `setUp` and click **Run**. Approve the permissions prompt. **`setUp()` is destructive — it clears every tab and re-seeds the reference data and the owner administrator** (reset & re-seed). Only run it when you want a clean slate.
 
-   Existing deployment upgrading to **Phase 1 (fees/settings)**? Do **not** run `setUp()` — run `ensureFeeTables()` instead. It **non-destructively** creates the `Fees`, `FeeSelections`, `FeePlans` and `Settings` tabs and extends the `Payments` columns (adding receipt/installment fields).
+   Existing deployment upgrading to **Phase 1 (fees/settings)**? Do **not** run `setUp()` — run `ensureFeeTables()` instead. It **non-destructively** creates the `Fees`, `FeeSelections`, `FeePlans` and `Settings` tabs and extends the `Payments` columns (adding receipt/installment fields). The same `ensureFeeTables()` also creates the Phase 4 `StaffAttendance` and `Timetable` tabs, so it is the safe migration for any existing sheet.
 6. **Deploy → New deployment → Web app**
    - *Execute as*: **Me**
    - *Who has access*: **Anyone** (or *Anyone with Google account*)
@@ -188,6 +190,7 @@ A small key/value `Settings` tab. Current settings:
 | Key | Default | Purpose |
 | --- | --- | --- |
 | `ADMISSION_NOTIFY_EMAILS` | owner admin email | Extra recipients of admission-application notifications (the applicant + every active ADMIN/PRINCIPAL user are always notified) |
+| `SMS_EMAIL_GATEWAY` | *(blank)* | Carrier email-to-SMS suffix (e.g. `@vtext.com`). When set, the Messages page can deliver SMS as `number@gateway`; when blank, SMS recipients are reported as skipped |
 
 Editable from the portal **Fees → Settings** card, or directly in the `Settings` tab. Mail is sent via MailApp (counts against the Gmail quota — keep the list small).
 
@@ -216,6 +219,21 @@ The **Statistics** page (Admin, Principal, Headmaster, Bursar) is a management o
 
 Everything is aggregated from the existing `Students`, `Attendance`, `Scores`, `ResultSheets`, `Fees`, `FeeSelections`, `Payments` and `Staff` tabs — no extra sheets are required.
 
+## Messages, reminders & alerts
+
+The **Messages** page (Admin, Principal, Headmaster, Bursar) sends bulk email to **parents/guardians**, **staff**, or **both**, optionally narrowed to a section or class arm. A live **Audience** card shows how many addresses will receive it and a short sample before you send. Addresses are de-duplicated (a parent with several wards receives one copy) and capped at 300 recipients per send to protect the Gmail daily quota; every send is logged.
+
+- **SMS** — set `SMS_EMAIL_GATEWAY` on **Fees → Settings** (a carrier email-to-SMS suffix such as `@vtext.com`). Phone numbers are then delivered as `number@gateway`. Leave it blank to send email only (SMS recipients are reported as skipped).
+- **Quick actions** — *Send fee reminders* emails guardians of students with an outstanding balance for the current term (bill computed from the fee catalogue minus non-rejected payments); *Send attendance alerts* emails guardians of students below a present-rate threshold (default 75%, min 3 recorded days). Both show a confirmation with the recipient count first.
+
+## Staff register
+
+The **Staff register** page (Admin, Principal, Headmaster) records daily staff attendance — Present / Absent / Late / Excused plus an optional note — for the staff in your section scope, stored in the `StaffAttendance` tab keyed by staff and date.
+
+## Timetable & exams
+
+The **Timetable** page (staff) manages a weekly class schedule per class arm and term: day, start/end time, subject (or free-text title), teacher, room and type (`CLASS` or `EXAM`). Entries are stored in the `Timetable` tab. Teachers may edit their own classes; parents with a ward in the arm get a read-only view.
+
 ## Data model (spreadsheet tabs)
 
 | Tab | Purpose |
@@ -237,7 +255,9 @@ Everything is aggregated from the existing `Students`, `Attendance`, `Scores`, `
 | `Fees` | Fee/charge catalogue (category, section/level/session/term scope, amount, mandatory, active) |
 | `FeeSelections` | Which optional fees a parent has selected per student/term |
 | `FeePlans` | Installment plan (1/2/3) per student/term |
-| `Settings` | Key/value school settings (`ADMISSION_NOTIFY_EMAILS`, …) |
+| `StaffAttendance` | Daily staff attendance (Present/Absent/Late/Excused + note) keyed by date + staff |
+| `Timetable` | Weekly class timetable & exam schedule per class arm/term (day, times, subject/title, teacher, room, kind) |
+| `Settings` | Key/value school settings (`ADMISSION_NOTIFY_EMAILS`, `SMS_EMAIL_GATEWAY`, …) |
 | `Files` | Uploaded file index (Drive file id, url, owner, size) |
 | `Applications` | Public admission applications (ref, child, guardian, class level, files, status workflow) |
 | `Announcements` | Posts with audience targeting; `category` (badge) and `link` are optional extra columns |
@@ -260,7 +280,7 @@ Embed options (query parameters on the `/exec` URL):
 
 | Parameter | Effect |
 | --- | --- |
-| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `statistics`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `fees`, `users`, `admin`, `announcements` |
+| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `statistics`, `messages`, `staff-register`, `timetable`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `fees`, `users`, `admin`, `announcements` |
 | `embed=1` | Compact mode: hides the CBS footer and tightens page padding to blend into the host page |
 | `admission=1` | Show the **public admission application form** (`Admission.html`), no login required — embed it on the website alongside the portal |
 | `public=announcements&callback=<fn>` | **Public, no login** — returns the website announcements as JS (JSONP) for the landing-page marquee. Only active posts with audience `WEBSITE` are returned. |
