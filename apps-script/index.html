@@ -488,14 +488,16 @@
       if (!a) body += '<div class="page-loading"><span class="spinner"></span> Counting recipients…</div>';
       else {
         body += '<div class="grid cols-4">' + statCard('Guardians', a.guardianCount, a.guardianEmailCount + ' email · ' + a.guardianPhoneCount + ' phone') + statCard('Staff', a.staffCount, a.staffEmailCount + ' email · ' + a.staffPhoneCount + ' phone') + statCard('Sections', (a.sections || []).length, (a.sections || []).join(', ') || '—') + statCard('Per-send cap', a.cap, 'recipients') + '</div>';
-        body += '<div class="muted small" style="margin-top:10px">' + (a.smsGateway ? 'SMS gateway: ' + esc(a.smsGateway) : 'No SMS gateway configured — SMS recipients are skipped unless you set <strong>SMS_EMAIL_GATEWAY</strong> in Fees → Settings.') + '</div>';
+        var smsBits = [a.smsProvider ? ('provider: ' + a.smsProvider) : '', a.smsGateway ? ('gateway: ' + a.smsGateway) : ''].filter(Boolean).join(' · ');
+        var smsNote = a.smsReady ? ('SMS ready' + (smsBits ? ' — ' + smsBits : '') + '.') : 'No SMS channel configured — SMS recipients are skipped unless you set an SMS provider (API key) or an email-to-SMS gateway in Fees → Settings.';
+        body += '<div class="muted small" style="margin-top:10px">' + esc(smsNote) + '</div>';
         if (a.sample && a.sample.length) body += '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Name</th><th>Guardian / role</th><th>Class / section</th><th>Email</th><th>Phone</th></tr></thead><tbody>' + a.sample.map(function (x) { return '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.guardianName || '—') + '</td><td>' + esc(x.classArm || '—') + '</td><td>' + esc(x.email || '—') + '</td><td>' + esc(x.phone || '—') + '</td></tr>'; }).join('') + '</tbody></table></div>';
       }
       body += '</div>';
       body += '<div class="card" style="margin-top:20px"><div class="section-head"><h3>Quick actions</h3><span class="muted small">targeted, automatic messages</span></div>' +
         '<div class="row"><button class="btn btn-outline" data-action="msg-fee-remind">Send fee reminders</button><button class="btn btn-outline" data-action="msg-att-alert">Send attendance alerts</button>' +
         '<div class="spacer"></div><div class="field" style="max-width:200px;margin:0"><label>Attendance threshold %</label><input type="number" min="1" max="100" data-field="msg-threshold" value="' + esc(m.threshold || 75) + '"></div></div>' +
-        '<div class="muted small" style="margin-top:8px">Fee reminders email guardians with an outstanding balance this term. Attendance alerts email guardians of students below the threshold (min 3 recorded days). Both ask for confirmation first.</div></div>';
+        '<div class="muted small" style="margin-top:8px">Fee reminders contact guardians with an outstanding balance this term. Attendance alerts contact guardians of students below the threshold (min 3 recorded days). Both use the <strong>Channel</strong> selected above and ask for confirmation first.</div></div>';
       return body;
     }
     function sendMessage(form) {
@@ -504,15 +506,15 @@
       state.busy = true; m.flash = null; render();
       authed('api_sendMessage', { to: m.to, section: m.section, classArmId: m.classArmId, channel: m.channel, subject: m.subject, body: m.body }).then(function (r) {
         state.busy = false;
-        m.flash = { message: 'Sent ' + r.sent + ' message(s)' + (r.failed ? ', ' + r.failed + ' failed' : '') + (r.skipped ? ', ' + r.skipped + ' skipped (no address / no SMS gateway)' : '') + (r.capped ? ', ' + r.capped + ' over the ' + r.total + '-recipient cap' : '') + '. Remaining email quota today: ' + (r.quota >= 0 ? r.quota : 'n/a') + '.', error: false };
+        m.flash = { message: 'Sent ' + r.sent + ' message(s) — ' + (r.emailSent || 0) + ' email, ' + (r.smsSent || 0) + ' SMS' + (r.failed ? ', ' + r.failed + ' failed' : '') + (r.skipped ? ', ' + r.skipped + ' skipped (no address / SMS not configured)' : '') + (r.capped ? ', ' + r.capped + ' over the ' + r.total + '-recipient cap' : '') + '. Remaining email quota today: ' + (r.quota >= 0 ? r.quota : 'n/a') + '.', error: false };
         render();
       }).catch(function (err) { state.busy = false; setError(err); });
     }
     function runFeeReminders() {
       var m = state.messages; state.busy = true; m.flash = null; render();
-      authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section, dryRun: true }).then(function (p) {
+      authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section, channel: m.channel, dryRun: true }).then(function (p) {
         if (!confirm('Send fee reminders to ' + p.debtors + ' guardian(s) with a total outstanding of ₦' + fmtMoney(p.totalOutstanding) + '?')) { state.busy = false; render(); return null; }
-        return authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section });
+        return authed('api_sendFeeReminders', state.boot.currentTermId, { section: m.section, channel: m.channel });
       }).then(function (r) {
         if (!r) return;
         state.busy = false; m.flash = { message: 'Fee reminders: ' + r.sent + ' sent, ' + r.skipped + ' skipped, ' + r.failed + ' failed (' + r.debtors + ' debtor(s)).', error: false }; render();
@@ -520,9 +522,9 @@
     }
     function runAttendanceAlerts() {
       var m = state.messages, th = Number(m.threshold) || 75; state.busy = true; m.flash = null; render();
-      authed('api_sendAttendanceAlerts', { section: m.section, threshold: th, dryRun: true }).then(function (p) {
+      authed('api_sendAttendanceAlerts', { section: m.section, threshold: th, channel: m.channel, dryRun: true }).then(function (p) {
         if (!confirm('Send attendance alerts to ' + p.count + ' guardian(s) below ' + p.threshold + '%?')) { state.busy = false; render(); return null; }
-        return authed('api_sendAttendanceAlerts', { section: m.section, threshold: th });
+        return authed('api_sendAttendanceAlerts', { section: m.section, threshold: th, channel: m.channel });
       }).then(function (r) {
         if (!r) return;
         state.busy = false; m.flash = { message: 'Attendance alerts: ' + r.sent + ' sent, ' + r.skipped + ' skipped, ' + r.failed + ' failed (' + r.count + ' at risk).', error: false }; render();
@@ -1103,7 +1105,16 @@
         }).join('') + '</tbody></table></div>';
       body += '<div class="card" style="margin-top:24px"><div class="section-head"><h3>Settings</h3></div>' +
         '<div class="grid cols-2"><div class="field"><label>Admission notification emails <span class="muted small">(comma-separated — the applicant plus all admin/principal users are always notified)</span></label><input data-field="adm-emails" type="text" value="' + esc(f.settings.ADMISSION_NOTIFY_EMAILS || '') + '"></div>' +
-        '<div class="field"><label>SMS email-to-SMS gateway <span class="muted small">(carrier suffix, e.g. @vtext.com — leave blank to disable SMS)</span></label><input data-field="sms-gateway" type="text" value="' + esc(f.settings.SMS_EMAIL_GATEWAY || '') + '" placeholder="@vtext.com"></div></div>' +
+        '<div class="field"><label>Email-to-SMS gateway <span class="muted small">(carrier suffix, e.g. @vtext.com — optional fallback when no API provider is set)</span></label><input data-field="sms-gateway" type="text" value="' + esc(f.settings.SMS_EMAIL_GATEWAY || '') + '" placeholder="@vtext.com"></div></div>' +
+        '<div class="section-head" style="margin-top:16px"><h3 style="font-size:15px">SMS provider</h3><span class="muted small">recommended — delivers SMS directly</span></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Provider</label><select data-field="sms-provider">' + ['', 'TERMII'].map(function (p) { return '<option value="' + p + '"' + (String(f.settings.SMS_PROVIDER || '') === p ? ' selected' : '') + '>' + (p === '' ? 'None' : p) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>API key <span class="muted small">(Termii dashboard)</span></label><input data-field="sms-api-key" type="text" value="' + esc(f.settings.SMS_API_KEY || '') + '" placeholder="TL…"></div>' +
+        '<div class="field"><label>Sender ID <span class="muted small">(3–11 chars, e.g. KMS)</span></label><input data-field="sms-sender" type="text" value="' + esc(f.settings.SMS_SENDER_ID || 'KMS') + '" placeholder="KMS"></div></div>' +
+        '<div class="grid cols-3">' +
+        '<div class="field"><label>Route</label><select data-field="sms-channel">' + ['generic', 'dnd'].map(function (c) { return '<option value="' + c + '"' + (String(f.settings.SMS_CHANNEL || 'generic') === c ? ' selected' : '') + '>' + (c === 'generic' ? 'Generic (promotional, not on DND numbers)' : 'DND (transactional, all numbers)') + '</option>'; }).join('') + '</select></div>' +
+        '<div class="field"><label>Default country code</label><input data-field="sms-country" type="text" value="' + esc(f.settings.SMS_COUNTRY_CODE || '234') + '" placeholder="234"></div>' +
+        '<div class="field" style="align-self:end"><div class="muted small">Set the provider to <strong>TERMII</strong> and paste your API key to send SMS to any network. Sender ID must be approved in Termii.</div></div></div>' +
         '<button class="btn btn-primary" data-action="fees-save-settings">Save settings</button></div>';
       return body;
     }
@@ -1404,7 +1415,7 @@
         case 'fee-cancel': state.fees.form = null; render(); return;
         case 'fee-edit': var ffe = findIn(state.fees.list, id); if (ffe) { state.fees.form = JSON.parse(JSON.stringify(ffe)); clearMessages(); render(); } return;
         case 'fee-delete': if (confirm('Delete this fee/charge? Parents\u2019 saved selections for it remain in the log.')) act(authed('api_deleteFee', id), 'Fee deleted.', loadFees); return;
-        case 'fees-save-settings': var ems = String((document.querySelector('[data-field="adm-emails"]') || {}).value || ''); var sgw = String((document.querySelector('[data-field="sms-gateway"]') || {}).value || '').trim(); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', '), SMS_EMAIL_GATEWAY: sgw }), 'Settings saved.', loadFees); return;
+        case 'fees-save-settings': var lf = function (n) { return String((document.querySelector('[data-field="' + n + '"]') || {}).value || '').trim(); }; var ems = lf('adm-emails'); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', '), SMS_EMAIL_GATEWAY: lf('sms-gateway'), SMS_PROVIDER: lf('sms-provider'), SMS_API_KEY: lf('sms-api-key'), SMS_SENDER_ID: lf('sms-sender') || 'KMS', SMS_CHANNEL: lf('sms-channel') || 'generic', SMS_COUNTRY_CODE: lf('sms-country') || '234' }), 'Settings saved.', loadFees); return;
         case 'msg-preview': loadMessageAudience(); return;
         case 'msg-fee-remind': runFeeReminders(); return;
         case 'msg-att-alert': runAttendanceAlerts(); return;

@@ -33,7 +33,7 @@ Everything else — config, database layer, auth, reference data, students, staf
 - **Users** — admin-only panel to add users and manage access, plus self-service password change (see below)
 - **Modern dashboards** — role-aware statistics and directory search (see below)
 - **Statistics & analytics** — a whole-school (section-scoped) analytics page for Admin/Principal/Headmaster/Bursar: enrollment, attendance trends, term performance, fee collection and termly trends (see below)
-- **Messaging** — bulk email (and optional SMS-via-gateway) to parents/staff, plus automatic **fee reminders** and **attendance alerts** (see below)
+- **Messaging** — bulk email and SMS (via the Termii provider, or a gateway fallback) to parents/staff, plus automatic **fee reminders** and **attendance alerts** (see below)
 - **Staff register & timetable** — a daily staff-attendance register and a weekly class/subject timetable & exam schedule (see below)
 
 ## Dashboards
@@ -190,9 +190,14 @@ A small key/value `Settings` tab. Current settings:
 | Key | Default | Purpose |
 | --- | --- | --- |
 | `ADMISSION_NOTIFY_EMAILS` | owner admin email | Extra recipients of admission-application notifications (the applicant + every active ADMIN/PRINCIPAL user are always notified) |
-| `SMS_EMAIL_GATEWAY` | *(blank)* | Carrier email-to-SMS suffix (e.g. `@vtext.com`). When set, the Messages page can deliver SMS as `number@gateway`; when blank, SMS recipients are reported as skipped |
+| `SMS_PROVIDER` | *(blank)* | SMS API provider. Currently `TERMII` (auto-selected if an API key is present) |
+| `SMS_API_KEY` | *(blank)* | Provider API key (Termii dashboard) |
+| `SMS_SENDER_ID` | `KMS` | Approved alphanumeric sender ID (3–11 chars) |
+| `SMS_CHANNEL` | `generic` | Termii route: `generic` (promotional) or `dnd` (transactional, all numbers) |
+| `SMS_COUNTRY_CODE` | `234` | Default country code used to normalise local phone numbers |
+| `SMS_EMAIL_GATEWAY` | *(blank)* | Fallback carrier email-to-SMS suffix (e.g. `@vtext.com`) used only when no provider is configured |
 
-Editable from the portal **Fees → Settings** card, or directly in the `Settings` tab. Mail is sent via MailApp (counts against the Gmail quota — keep the list small).
+Editable from the portal **Fees → Settings** card, or directly in the `Settings` tab. Admission mail is sent via MailApp (counts against the Gmail quota — keep the list small); SMS is sent via the provider and is billed separately.
 
 ## Results & report cards
 
@@ -221,10 +226,13 @@ Everything is aggregated from the existing `Students`, `Attendance`, `Scores`, `
 
 ## Messages, reminders & alerts
 
-The **Messages** page (Admin, Principal, Headmaster, Bursar) sends bulk email to **parents/guardians**, **staff**, or **both**, optionally narrowed to a section or class arm. A live **Audience** card shows how many addresses will receive it and a short sample before you send. Addresses are de-duplicated (a parent with several wards receives one copy) and capped at 300 recipients per send to protect the Gmail daily quota; every send is logged.
+The **Messages** page (Admin, Principal, Headmaster, Bursar) sends bulk messages to **parents/guardians**, **staff**, or **both**, optionally narrowed to a section or class arm, over **Email**, **SMS**, or **both**. A live **Audience** card shows how many addresses will receive it, whether SMS is configured, and a short sample before you send. Addresses are de-duplicated (a parent with several wards receives one copy) and capped at 300 recipients per send to protect the Gmail daily quota; every send is logged.
 
-- **SMS** — set `SMS_EMAIL_GATEWAY` on **Fees → Settings** (a carrier email-to-SMS suffix such as `@vtext.com`). Phone numbers are then delivered as `number@gateway`. Leave it blank to send email only (SMS recipients are reported as skipped).
-- **Quick actions** — *Send fee reminders* emails guardians of students with an outstanding balance for the current term (bill computed from the fee catalogue minus non-rejected payments); *Send attendance alerts* emails guardians of students below a present-rate threshold (default 75%, min 3 recorded days). Both show a confirmation with the recipient count first.
+- **SMS provider (recommended)** — create a [Termii](https://termii.com) account, get an **API key** and an approved **Sender ID**, then on **Fees → Settings** set **Provider = TERMII**, paste the **API key** and **Sender ID**. Messages are sent directly to any Nigerian network. Choose the route: **Generic** (promotional; will not reach DND numbers) or **DND** (transactional; reaches all numbers — needs DND enabled on your Termii account). Phone numbers are normalised automatically (local `0803…` or `+234…` → `234803…`); set **Default country code** if you are not in Nigeria.
+- **Email-to-SMS gateway (fallback)** — if no provider is set, an optional `SMS_EMAIL_GATEWAY` suffix (e.g. `@vtext.com`) routes each SMS as `number@gateway`. Leave both blank to send email only (SMS recipients are reported as skipped).
+- **Quick actions** — *Send fee reminders* contacts guardians of students with an outstanding balance for the current term (bill computed from the fee catalogue minus non-rejected payments); *Send attendance alerts* contacts guardians of students below a present-rate threshold (default 75%, min 3 recorded days). Both honour the selected **Channel** and show a confirmation with the recipient count first.
+
+> SMS is billed by the provider and is **not** limited by the Gmail quota. Test with a small audience first.
 
 ## Staff register
 
@@ -257,7 +265,7 @@ The **Timetable** page (staff) manages a weekly class schedule per class arm and
 | `FeePlans` | Installment plan (1/2/3) per student/term |
 | `StaffAttendance` | Daily staff attendance (Present/Absent/Late/Excused + note) keyed by date + staff |
 | `Timetable` | Weekly class timetable & exam schedule per class arm/term (day, times, subject/title, teacher, room, kind) |
-| `Settings` | Key/value school settings (`ADMISSION_NOTIFY_EMAILS`, `SMS_EMAIL_GATEWAY`, …) |
+| `Settings` | Key/value school settings (`ADMISSION_NOTIFY_EMAILS`, `SMS_PROVIDER`, `SMS_API_KEY`, …) |
 | `Files` | Uploaded file index (Drive file id, url, owner, size) |
 | `Applications` | Public admission applications (ref, child, guardian, class level, files, status workflow) |
 | `Announcements` | Posts with audience targeting; `category` (badge) and `link` are optional extra columns |

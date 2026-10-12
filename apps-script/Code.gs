@@ -1901,34 +1901,101 @@ function uniqAddresses_(list) {
   list.forEach(function (x) { var v = String(x || '').trim(); if (!v) return; var k = v.toLowerCase(); if (!seen[k]) { seen[k] = true; out.push(v); } });
   return out;
 }
-/** Sends one message per address (email and/or SMS-via-email-gateway). Never throws on a single failure. */
-function dispatchMessages_(emails, phones, channel, subject, body, html) {
-  var toEmails = (channel === 'EMAIL' || channel === 'BOTH') ? uniqAddresses_(emails) : [];
+/** Default dialling country code for normalising phone numbers (Settings key SMS_COUNTRY_CODE). */
+function smsCountryCode_() {
+  var cc = String(getSetting_('SMS_COUNTRY_CODE', '234')).replace(/[^0-9]/g, '');
+  return cc || '234';
+}
+/** Normalise a phone number to international digit form (no +). e.g. 0801… -> 234801… */
+function normalizePhone_(raw, cc) {
+  var d = String(raw || '').replace(/[^0-9]/g, '');
+  if (!d) return '';
+  cc = String(cc || smsCountryCode_()).replace(/[^0-9]/g, '') || '234';
+  if (d.indexOf('00') === 0) d = d.slice(2);
+  if (d.indexOf(cc) === 0 && d.length >= cc.length + 7) return d;
+  if (d.charAt(0) === '0') d = d.slice(1);
+  if (d.length <= 10) return cc + d;
+  return d;
+}
+/** SMS configuration: an API provider (Termii) and/or the legacy email-to-SMS gateway. */
+function smsProviderConfig_() {
+  var provider = String(getSetting_('SMS_PROVIDER', '')).trim().toUpperCase();
+  var apiKey = String(getSetting_('SMS_API_KEY', '')).trim();
+  if (!provider && apiKey) provider = 'TERMII';
+  var senderId = String(getSetting_('SMS_SENDER_ID', 'KMS')).trim() || 'KMS';
+  var channel = String(getSetting_('SMS_CHANNEL', 'generic')).trim().toLowerCase();
+  if (['generic', 'dnd', 'voice', 'whatsapp'].indexOf(channel) === -1) channel = 'generic';
   var gateway = String(getSetting_('SMS_EMAIL_GATEWAY', '')).trim();
-  var smsAddrs = [];
-  var wantsSms = (channel === 'SMS' || channel === 'BOTH');
-  if (wantsSms && gateway) {
-    uniqAddresses_(phones).forEach(function (p) { var d = p.replace(/[^0-9]/g, ''); if (d.length >= 5) smsAddrs.push(d + gateway); });
-    smsAddrs = uniqAddresses_(smsAddrs);
+  return {
+    provider: provider, apiKey: apiKey, senderId: senderId, channel: channel,
+    countryCode: smsCountryCode_(), gateway: gateway,
+    configured: !!(apiKey && provider), ready: !!(apiKey && provider) || !!gateway
+  };
+}
+/** Send a single SMS via the configured provider (Termii) or the email-to-SMS gateway. Never throws. */
+function sendSmsText_(phone, text, subject) {
+  var cfg = smsProviderConfig_();
+  var to = normalizePhone_(phone, cfg.countryCode);
+  if (!to) return { ok: false, reason: 'no-phone' };
+  if (cfg.provider === 'TERMII' && cfg.apiKey) {
+    try {
+      var resp = UrlFetchApp.fetch('https://api.ng.termii.com/api/sms/send', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        payload: JSON.stringify({ api_key: cfg.apiKey, to: to, from: cfg.senderId, sms: String(text).slice(0, 1000), type: 'plain', channel: cfg.channel })
+      });
+      var status = 0; try { status = resp.getResponseCode(); } catch (e) { /* ignore */ }
+      var raw = ''; try { raw = resp.getContentText(); } catch (e) { /* ignore */ }
+      var json = {}; try { json = JSON.parse(raw); } catch (e) { /* ignore */ }
+      if (status >= 200 && status < 300 && String(json.code || '').toLowerCase() === 'ok') return { ok: true, provider: 'TERMII', id: json.message_id || '' };
+      return { ok: false, reason: 'provider-error', status: status, detail: String(json.message || raw || '').slice(0, 200) };
+    } catch (e) { return { ok: false, reason: 'fetch-failed', detail: String(e && e.message || e) }; }
   }
-  var skipped = (wantsSms && !gateway) ? uniqAddresses_(phones).length : 0;
-  var addresses = uniqAddresses_(toEmails.concat(smsAddrs));
-  var capped = 0;
-  if (addresses.length > MAX_MESSAGE_RECIPIENTS) { capped = addresses.length - MAX_MESSAGE_RECIPIENTS; addresses = addresses.slice(0, MAX_MESSAGE_RECIPIENTS); }
-  var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
+  if (cfg.gateway) {
+    try { MailApp.sendEmail({ to: to + cfg.gateway, subject: subject || CFG.APP_NAME, body: String(text) }); return { ok: true, provider: 'EMAIL_GATEWAY' }; }
+    catch (e) { return { ok: false, reason: 'mail-failed', detail: String(e && e.message || e) }; }
+  }
+  return { ok: false, reason: 'not-configured' };
+}
+/** Sends one message per recipient (email and/or SMS). Never throws on a single failure. */
+function dispatchMessages_(emails, phones, channel, subject, body, html) {
+  var cfg = smsProviderConfig_();
+  var wantsEmail = (channel === 'EMAIL' || channel === 'BOTH');
+  var wantsSms = (channel === 'SMS' || channel === 'BOTH');
+  var emailList = wantsEmail ? uniqAddresses_(emails) : [];
+  var phoneList = wantsSms ? uniqAddresses_(phones).filter(function (p) { return normalizePhone_(p, cfg.countryCode); }) : [];
+  var capped = 0, budget = MAX_MESSAGE_RECIPIENTS, totalUnits = emailList.length + phoneList.length;
+  if (totalUnits > budget) capped = totalUnits - budget;
+  if (emailList.length > budget) emailList = emailList.slice(0, budget);
+  var remaining = Math.max(0, budget - emailList.length);
+  if (phoneList.length > remaining) phoneList = phoneList.slice(0, remaining);
   var htmlBody = '<div style="font-family:Arial,Helvetica,sans-serif;color:#1b2a26;font-size:14px">' + (html || escHtml_(body).replace(/\n/g, '<br>')) + '</div>';
-  var sent = 0, failed = 0;
-  addresses.forEach(function (addr) {
-    try { MailApp.sendEmail({ to: addr, subject: subject, body: body, htmlBody: htmlBody }); sent++; }
-    catch (e) { failed++; }
+  var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
+  var emailSent = 0, emailFailed = 0;
+  emailList.forEach(function (addr) {
+    try { MailApp.sendEmail({ to: addr, subject: subject, body: body, htmlBody: htmlBody }); emailSent++; }
+    catch (e) { emailFailed++; }
   });
-  return { sent: sent, failed: failed, skipped: skipped, capped: capped, total: addresses.length, quota: quota, smsGateway: !!gateway };
+  var smsSent = 0, smsFailed = 0, smsSkipped = 0;
+  if (wantsSms) {
+    if (!cfg.ready) smsSkipped = phoneList.length;
+    else phoneList.forEach(function (p) {
+      var r = sendSmsText_(p, body, subject);
+      if (r.ok) smsSent++; else if (r.reason === 'not-configured' || r.reason === 'no-phone') smsSkipped++; else smsFailed++;
+    });
+  }
+  return {
+    sent: emailSent + smsSent, failed: emailFailed + smsFailed, skipped: smsSkipped, capped: capped,
+    total: emailList.length + phoneList.length, quota: quota,
+    emailSent: emailSent, emailFailed: emailFailed, smsSent: smsSent, smsFailed: smsFailed,
+    smsGateway: cfg.gateway, smsProvider: cfg.provider, smsReady: cfg.ready
+  };
 }
 function assertComms_(user) { assertRole_(user, COMMS_ROLES, 'Messaging is for school leadership and finance.'); }
 
 function api_messageAudience(token, opts) {
   var user = requireUser_(token);
   assertComms_(user);
+  var cfg = smsProviderConfig_();
   var r = resolveMessageRecipients_(user, opts);
   var guardianEmails = uniqAddresses_(r.guardians.map(function (g) { return g.email; }));
   var guardianPhones = uniqAddresses_(r.guardians.map(function (g) { return g.phone; }));
@@ -1940,6 +2007,7 @@ function api_messageAudience(token, opts) {
     guardianCount: r.guardians.length, guardianEmailCount: guardianEmails.length, guardianPhoneCount: guardianPhones.length,
     staffCount: r.staff.length, staffEmailCount: staffEmails.length, staffPhoneCount: staffPhones.length,
     smsGateway: String(getSetting_('SMS_EMAIL_GATEWAY', '')),
+    smsProvider: cfg.provider, smsReady: cfg.ready,
     cap: MAX_MESSAGE_RECIPIENTS,
     sample: r.guardians.slice(0, 6).map(function (g) { return { name: g.student, guardianName: g.guardianName, classArm: g.classArm, email: g.email, phone: g.phone }; })
       .concat(r.staff.slice(0, 4).map(function (s) { return { name: s.name, guardianName: s.designation, classArm: s.section, email: s.email, phone: s.phone }; }))
@@ -2000,14 +2068,17 @@ function api_sendFeeReminders(token, termId, opts) {
   }).filter(Boolean);
   var totalOutstanding = round2_(debtors.reduce(function (t, d) { return t + d.balance; }, 0));
   if (opts.dryRun) return { term: termRef_(term.id), debtors: debtors.length, totalOutstanding: totalOutstanding, sample: debtors.slice(0, 10) };
+  var channel = MESSAGE_CHANNELS.indexOf(opts.channel) !== -1 ? opts.channel : 'EMAIL';
+  var wantsEmail = (channel === 'EMAIL' || channel === 'BOTH');
+  var wantsSms = (channel === 'SMS' || channel === 'BOTH');
   var contacts = guardianContactsForStudents_(students);
-  var emailByStudent = {}; contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; });
+  var emailByStudent = {}, phoneByStudent = {};
+  contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; phoneByStudent[c.studentId] = c.phone; });
   var subject = 'Outstanding school fees \u2014 ' + termLabel_(term);
   var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
   var sent = 0, skipped = 0, failed = 0;
   debtors.forEach(function (d) {
-    var email = emailByStudent[d.studentId];
-    if (!email) { skipped++; return; }
+    var email = emailByStudent[d.studentId], phone = phoneByStudent[d.studentId], delivered = false;
     var bodyText = [
       'Dear Guardian,', '',
       'Our records show an outstanding balance on school fees for ' + d.student + (d.classArm ? ' (' + d.classArm + ')' : '') + ' for ' + termLabel_(term) + '.', '',
@@ -2017,11 +2088,12 @@ function api_sendFeeReminders(token, termId, opts) {
       'Kindly settle this balance at the school office. If you have already paid, please disregard this message.', '',
       CFG.APP_NAME + ' \u00B7 Finance Office'
     ].join('\n');
-    try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; }
-    catch (e) { failed++; }
+    if (wantsEmail && email) { try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; delivered = true; } catch (e) { failed++; } }
+    if (wantsSms && phone) { var sr = sendSmsText_(phone, bodyText, subject); if (sr.ok) { sent++; delivered = true; } else if (sr.reason !== 'not-configured' && sr.reason !== 'no-phone') failed++; }
+    if (!delivered) skipped++;
   });
-  logAudit_(user, 'SEND_FEE_REMINDERS', term.id, 'sent=' + sent + ' skipped=' + skipped);
-  return { term: termRef_(term.id), debtors: debtors.length, sent: sent, skipped: skipped, failed: failed, totalOutstanding: totalOutstanding, quota: quota };
+  logAudit_(user, 'SEND_FEE_REMINDERS', term.id, channel + ' sent=' + sent + ' skipped=' + skipped);
+  return { term: termRef_(term.id), channel: channel, debtors: debtors.length, sent: sent, skipped: skipped, failed: failed, totalOutstanding: totalOutstanding, quota: quota };
 }
 function api_sendAttendanceAlerts(token, opts) {
   var user = requireUser_(token);
@@ -2053,25 +2125,29 @@ function api_sendAttendanceAlerts(token, opts) {
     return { studentId: sid, student: s ? fullNameOf_(s) : '\u2014', classArm: s ? classArmLabel_(s.classArmId) : '', rate: rate, present: a.present, absences: a.total - a.present, total: a.total };
   }).filter(Boolean).sort(function (x, y) { return x.rate - y.rate; });
   if (opts.dryRun) return { term: term ? termRef_(term.id) : null, threshold: threshold, minDays: minDays, count: atRisk.length, sample: atRisk.slice(0, 10) };
+  var channel = MESSAGE_CHANNELS.indexOf(opts.channel) !== -1 ? opts.channel : 'EMAIL';
+  var wantsEmail = (channel === 'EMAIL' || channel === 'BOTH');
+  var wantsSms = (channel === 'SMS' || channel === 'BOTH');
   var contacts = guardianContactsForStudents_(students);
-  var emailByStudent = {}; contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; });
+  var emailByStudent = {}, phoneByStudent = {};
+  contacts.forEach(function (c) { emailByStudent[c.studentId] = c.email; phoneByStudent[c.studentId] = c.phone; });
   var subject = 'Attendance alert \u2014 ' + (term ? termLabel_(term) : CFG.APP_NAME);
   var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
   var sent = 0, skipped = 0, failed = 0;
   atRisk.forEach(function (d) {
-    var email = emailByStudent[d.studentId];
-    if (!email) { skipped++; return; }
+    var email = emailByStudent[d.studentId], phone = phoneByStudent[d.studentId], delivered = false;
     var bodyText = [
       'Dear Guardian,', '',
       'Our records show that ' + d.student + (d.classArm ? ' (' + d.classArm + ')' : '') + ' has attended ' + d.rate + '% of school days this term (' + d.absences + ' absence(s) in ' + d.total + ' recorded days).', '',
       'We are concerned about this level of attendance. Kindly ensure regular attendance and contact the school office if there are difficulties.', '',
       CFG.APP_NAME + ' \u00B7 School Office'
     ].join('\n');
-    try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; }
-    catch (e) { failed++; }
+    if (wantsEmail && email) { try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; delivered = true; } catch (e) { failed++; } }
+    if (wantsSms && phone) { var sr = sendSmsText_(phone, bodyText, subject); if (sr.ok) { sent++; delivered = true; } else if (sr.reason !== 'not-configured' && sr.reason !== 'no-phone') failed++; }
+    if (!delivered) skipped++;
   });
-  logAudit_(user, 'SEND_ATTENDANCE_ALERTS', term ? term.id : '', 'sent=' + sent + ' skipped=' + skipped);
-  return { term: term ? termRef_(term.id) : null, threshold: threshold, minDays: minDays, count: atRisk.length, sent: sent, skipped: skipped, failed: failed, quota: quota };
+  logAudit_(user, 'SEND_ATTENDANCE_ALERTS', term ? term.id : '', channel + ' sent=' + sent + ' skipped=' + skipped);
+  return { term: term ? termRef_(term.id) : null, channel: channel, threshold: threshold, minDays: minDays, count: atRisk.length, sent: sent, skipped: skipped, failed: failed, quota: quota };
 }
 
 /* ---- staff attendance register ---- */
