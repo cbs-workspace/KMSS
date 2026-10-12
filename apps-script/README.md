@@ -32,6 +32,7 @@ Everything else — config, database layer, auth, reference data, students, staf
 - **Setup** — maintain class levels, class arms, subjects, subject↔class mapping, terms, grade scale, parent↔ward links
 - **Users** — admin-only panel to add users and manage access, plus self-service password change (see below)
 - **Modern dashboards** — role-aware statistics and directory search (see below)
+- **Statistics & analytics** — a whole-school (section-scoped) analytics page for Admin/Principal/Headmaster/Bursar: enrollment, attendance trends, term performance, fee collection and termly trends (see below)
 
 ## Dashboards
 
@@ -202,6 +203,19 @@ Subjects are validated against the student's own curriculum, entry requires teac
 
 The **report card** (`Report card` on any sheet/row, or from a parent's **My Wards**) prints a clean terminal report: school logo and motto, student/term/attendance meta, position/total/average/status, a striped score table with a totals row, teacher & principal remarks with signature lines, the grading-scale key, and an official sign-off. It carries **no CBS/designer branding** and needs no counter-signature.
 
+## Statistics & analytics
+
+The **Statistics** page (Admin, Principal, Headmaster, Bursar) is a management overview powered by `api_getAnalytics`, scoped to the signed-in role (admin = whole school, principal = SECONDARY, headmaster = PRIMARY+KG, bursar = school-wide finance). Pick a **term of focus** and the performance and finance blocks recompute.
+
+- **Headline cards** — total students, attendance rate, average score and fee-collection rate.
+- **Enrollment** — by section and gender bars, plus a per-class-level table.
+- **Attendance trend** — present-rate by month.
+- **Performance (focus term)** — grade distribution, per-subject averages, and the top-10 students (each with a report-card link).
+- **Fees & collections (focus term)** — billed vs collected vs outstanding, payment status counts and naira totals, a per-section breakdown, and monthly collections. The "billed" figure is derived from the fee catalogue (mandatory fees + each student's saved optional selections), so it matches parents' schedules.
+- **Termly trends** — attendance rate, average score, billed, collected and collection rate across the most recent terms.
+
+Everything is aggregated from the existing `Students`, `Attendance`, `Scores`, `ResultSheets`, `Fees`, `FeeSelections`, `Payments` and `Staff` tabs — no extra sheets are required.
+
 ## Data model (spreadsheet tabs)
 
 | Tab | Purpose |
@@ -246,7 +260,7 @@ Embed options (query parameters on the `/exec` URL):
 
 | Parameter | Effect |
 | --- | --- |
-| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `fees`, `users`, `admin`, `announcements` |
+| `view=<key>` | Open directly on a page — `dashboard`, `students`, `attendance`, `results`, `statistics`, `staff`, `teachers`, `applications`, `payments`, `my-wards`, `fees`, `users`, `admin`, `announcements` |
 | `embed=1` | Compact mode: hides the CBS footer and tightens page padding to blend into the host page |
 | `admission=1` | Show the **public admission application form** (`Admission.html`), no login required — embed it on the website alongside the portal |
 | `public=announcements&callback=<fn>` | **Public, no login** — returns the website announcements as JS (JSONP) for the landing-page marquee. Only active posts with audience `WEBSITE` are returned. |

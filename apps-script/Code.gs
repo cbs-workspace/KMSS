@@ -1653,6 +1653,181 @@ function api_searchDirectory(token, query) {
   return out;
 }
 
+/* =========================== 14b. ANALYTICS / STATISTICS =========================== */
+
+var ANALYTICS_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
+/** Active terms oldest → newest, optionally limited to the most recent N. */
+function analyticsTerms_(limit) {
+  var terms = getTerms_();
+  terms.sort(function (a, b) {
+    var s = String(a.sessionName).localeCompare(String(b.sessionName));
+    if (s) return s;
+    return CFG.TERM_NAMES.indexOf(a.termName) - CFG.TERM_NAMES.indexOf(b.termName);
+  });
+  if (limit && terms.length > limit) terms = terms.slice(terms.length - limit);
+  return terms;
+}
+/** Total bill vs collected for one term across scoped students (bill from level fees + per-student selections). */
+function collectionForTerm_(term, students, levelById, armById, selByStudent, payByStudentTerm) {
+  var feesByLevel = {};
+  var billed = 0, collected = 0, bySection = {};
+  CFG.SECTIONS.forEach(function (s) { bySection[s] = { billed: 0, collected: 0 }; });
+  students.forEach(function (st) {
+    var arm = armById[st.classArmId], level = arm ? levelById[arm.classLevelId] : null;
+    if (!level) return;
+    if (!feesByLevel[level.id]) feesByLevel[level.id] = applicableFeesForLevel_(level, term);
+    var sel = selByStudent[st.id] || {}, bill = 0;
+    feesByLevel[level.id].forEach(function (f) {
+      var r = sel[f.id], mandatory = toBool_(f.mandatory);
+      var selected = r === undefined ? mandatory : (mandatory || toBool_(r));
+      if (selected) bill += numOrZero_(f.amount);
+    });
+    var paid = payByStudentTerm[st.id + '|' + term.id] || 0;
+    billed += bill; collected += paid;
+    if (bySection[level.section]) { bySection[level.section].billed += bill; bySection[level.section].collected += paid; }
+  });
+  return { billed: round2_(billed), collected: round2_(collected), outstanding: round2_(Math.max(0, billed - collected)), rate: billed ? round2_(collected / billed * 100) : 0, bySection: bySection };
+}
+function api_getAnalytics(token, opts) {
+  opts = opts || {};
+  var user = requireUser_(token);
+  assertRole_(user, ANALYTICS_ROLES, 'Statistics are for school leadership and finance.');
+  var arms = armsMap_(user);
+  var sections = user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(arms);
+  var levelById = indexById_(readTable_('ClassLevels'));
+  var armById = indexById_(readTable_('ClassArms'));
+  var students = readTable_('Students').filter(function (s) { return !!arms[s.classArmId]; });
+  var studentIds = {}; students.forEach(function (s) { studentIds[String(s.id)] = true; });
+
+  /* enrollment */
+  var bySection = { KG: 0, PRIMARY: 0, SECONDARY: 0 }, byLevelMap = {}, total = 0, active = 0, male = 0, female = 0;
+  students.forEach(function (s) {
+    total++;
+    if (String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE') {} else active++;
+    var g = String(s.gender || '').trim();
+    if (/^m/i.test(g)) male++; else if (/^f/i.test(g)) female++;
+    var arm = arms[s.classArmId];
+    if (arm && arm.classLevel) {
+      if (bySection[arm.classLevel.section] != null) bySection[arm.classLevel.section]++;
+      var ln = arm.classLevel.name;
+      if (!byLevelMap[ln]) byLevelMap[ln] = { level: ln, section: arm.classLevel.section, count: 0 };
+      byLevelMap[ln].count++;
+    }
+  });
+  var byLevel = Object.keys(byLevelMap).map(function (k) { return byLevelMap[k]; }).sort(function (a, b) {
+    if (a.section !== b.section) return CFG.SECTIONS.indexOf(a.section) - CFG.SECTIONS.indexOf(b.section);
+    return String(a.level).localeCompare(String(b.level), undefined, { numeric: true });
+  });
+
+  var staffAll = readTable_('Staff');
+  var staffScoped = user.role === 'ADMIN' ? staffAll : staffAll.filter(function (st) { return sections.indexOf(st.section) !== -1; });
+  var staffBySection = { KG: 0, PRIMARY: 0, SECONDARY: 0, Unassigned: 0 };
+  staffScoped.forEach(function (st) { var sec = (st.section && staffBySection[st.section] != null) ? st.section : 'Unassigned'; staffBySection[sec]++; });
+
+  /* attendance (all scoped rows) + monthly series */
+  var att = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0, total: 0 }, attMonthly = {};
+  readTable_('Attendance').forEach(function (a) {
+    if (!arms[a.classArmId]) return;
+    var st = String(a.status || '').toUpperCase();
+    if (att[st] == null) return;
+    att[st]++; att.total++;
+    var m = String(a.date || '').slice(0, 7);
+    if (m) { attMonthly[m] = attMonthly[m] || { month: m, present: 0, total: 0 }; attMonthly[m].present += (st === 'PRESENT' ? 1 : 0); attMonthly[m].total++; }
+  });
+  var attendanceMonthly = Object.keys(attMonthly).sort().map(function (m) { var r = attMonthly[m]; r.rate = r.total ? round2_(r.present / r.total * 100) : 0; return r; });
+  var attendanceRate = att.total ? round2_(att.PRESENT / att.total * 100) : 0;
+
+  /* performance — focus term */
+  var focus = opts.termId ? findById_('Terms', opts.termId) : getCurrentTerm_();
+  var subjectsById = indexById_(readTable_('Subjects'));
+  var gradeCount = {}, subjAgg = {};
+  readTable_('Scores').forEach(function (s) {
+    if (!studentIds[String(s.studentId)]) return;
+    if (focus && String(s.termId) !== String(focus.id)) return;
+    if (s.grade) gradeCount[s.grade] = (gradeCount[s.grade] || 0) + 1;
+    var sid = String(s.subjectId); subjAgg[sid] = subjAgg[sid] || { subjectId: sid, count: 0, sum: 0 };
+    if (s.total !== '' && s.total !== null && s.total !== undefined) { subjAgg[sid].count++; subjAgg[sid].sum += numOrZero_(s.total); }
+  });
+  var subjectAverages = Object.keys(subjAgg).map(function (k) {
+    var a = subjAgg[k], sub = subjectsById[k];
+    return { subjectId: k, subject: sub ? sub.name : '—', count: a.count, average: a.count ? round2_(a.sum / a.count) : 0 };
+  }).sort(function (x, y) { return y.average - x.average; });
+  var sheets = readTable_('ResultSheets').filter(function (r) { return studentIds[String(r.studentId)] && focus && String(r.termId) === String(focus.id) && r.average !== '' && r.average !== null && r.average !== undefined; });
+  var avgScore = sheets.length ? round2_(sheets.reduce(function (t, r) { return t + numOrZero_(r.average); }, 0) / sheets.length) : 0;
+  var passRate = sheets.length ? round2_(sheets.filter(function (r) { return numOrZero_(r.average) >= 40; }).length / sheets.length * 100) : 0;
+  var studentsById = indexById_(students);
+  var topStudents = sheets.slice().sort(function (a, b) { return numOrZero_(b.totalScore) - numOrZero_(a.totalScore); }).slice(0, 10).map(function (r) {
+    var s = studentsById[r.studentId];
+    return { studentId: r.studentId, name: s ? fullNameOf_(s) : '—', admissionNo: s ? s.admissionNo : '', classArm: s ? classArmLabel_(s.classArmId) : '', totalScore: r.totalScore, average: r.average, position: r.position };
+  });
+
+  /* finance */
+  var paymentsAll = readTable_('Payments').filter(function (p) { return studentIds[String(p.studentId)]; });
+  var payByStudentTerm = {}, statusCounts = { PENDING: 0, VERIFIED: 0, REJECTED: 0 }, statusAmounts = { PENDING: 0, VERIFIED: 0, REJECTED: 0 }, monthly = {};
+  paymentsAll.forEach(function (p) {
+    var st = String(p.status || '').toUpperCase() || 'PENDING', amt = numOrZero_(p.amount);
+    if (statusCounts[st] == null) { statusCounts[st] = 0; statusAmounts[st] = 0; }
+    statusCounts[st]++; statusAmounts[st] += amt;
+    if (st !== 'REJECTED') {
+      if (p.termId) { var k = p.studentId + '|' + p.termId; payByStudentTerm[k] = round2_((payByStudentTerm[k] || 0) + amt); }
+      var m = String(p.createdAt || '').slice(0, 7);
+      if (m) { monthly[m] = monthly[m] || { month: m, amount: 0, count: 0 }; monthly[m].amount = round2_(monthly[m].amount + amt); monthly[m].count++; }
+    }
+  });
+  var monthlyCollections = Object.keys(monthly).sort().map(function (m) { return monthly[m]; });
+  var selByTerm = {};
+  readTableSafe_('FeeSelections').forEach(function (r) {
+    if (!studentIds[String(r.studentId)]) return;
+    var tm = String(r.termId); selByTerm[tm] = selByTerm[tm] || {};
+    selByTerm[tm][r.studentId] = selByTerm[tm][r.studentId] || {};
+    selByTerm[tm][r.studentId][r.feeId] = r.selected;
+  });
+  var finance = focus ? collectionForTerm_(focus, students, levelById, armById, selByTerm[String(focus.id)] || {}, payByStudentTerm)
+    : { billed: 0, collected: 0, outstanding: 0, rate: 0, bySection: {} };
+
+  /* trends — last 6 active terms oldest → newest */
+  var trends = analyticsTerms_(6).map(function (tm) {
+    var c = collectionForTerm_(tm, students, levelById, armById, selByTerm[String(tm.id)] || {}, payByStudentTerm);
+    var from = tm.startDate || '', to = tm.endDate || '', tp = 0, tt = 0;
+    readTable_('Attendance').forEach(function (a) {
+      if (!arms[a.classArmId]) return;
+      var d = String(a.date || ''); if (from && d < from) return; if (to && d > to) return;
+      tt++; if (String(a.status || '').toUpperCase() === 'PRESENT') tp++;
+    });
+    var sh = readTable_('ResultSheets').filter(function (r) { return studentIds[String(r.studentId)] && String(r.termId) === String(tm.id) && r.average !== '' && r.average !== null && r.average !== undefined; });
+    var avg = sh.length ? round2_(sh.reduce(function (t, r) { return t + numOrZero_(r.average); }, 0) / sh.length) : 0;
+    return { termId: tm.id, label: termLabel_(tm), termName: tm.termName, sessionName: tm.sessionName, attendanceRate: tt ? round2_(tp / tt * 100) : 0, avgScore: avg, billed: c.billed, collected: c.collected, collectionRate: c.rate };
+  });
+  var termsList = getTerms_().map(function (t) { return { id: t.id, label: termLabel_(t) }; });
+
+  return {
+    role: user.role,
+    sections: sections,
+    scopeLabel: user.role === 'ADMIN' ? 'All sections' : (sections.map(sectionLabel_).join(' & ') || 'No scope assigned'),
+    generatedAt: nowIso_(),
+    overview: {
+      students: { total: total, active: active, male: male, female: female, bySection: bySection, byLevel: byLevel },
+      classes: { arms: Object.keys(arms).length },
+      staff: { total: staffScoped.length, bySection: staffBySection },
+      attendance: { counts: att, rate: attendanceRate, monthly: attendanceMonthly }
+    },
+    performance: {
+      term: focus ? { id: focus.id, label: termLabel_(focus) } : null,
+      average: avgScore, passRate: passRate, studentsAssessed: sheets.length,
+      gradeDistribution: Object.keys(gradeCount).map(function (g) { return { grade: g, count: gradeCount[g] }; }).sort(function (a, b) { return String(a.grade).localeCompare(String(b.grade)); }),
+      subjectAverages: subjectAverages, topStudents: topStudents
+    },
+    finance: {
+      term: focus ? { id: focus.id, label: termLabel_(focus) } : null,
+      billed: finance.billed, collected: finance.collected, outstanding: finance.outstanding, collectionRate: finance.rate,
+      bySection: CFG.SECTIONS.map(function (s) { var r = finance.bySection[s] || { billed: 0, collected: 0 }; return { section: s, label: sectionLabel_(s), billed: round2_(r.billed), collected: round2_(r.collected), outstanding: round2_(Math.max(0, r.billed - r.collected)) }; }),
+      statusCounts: statusCounts, statusAmounts: statusAmounts, monthly: monthlyCollections
+    },
+    trends: trends,
+    terms: termsList
+  };
+}
+
 /* =========================== 15. BOOTSTRAP / ADMIN =========================== */
 
 function sanitizeUser_(u) {

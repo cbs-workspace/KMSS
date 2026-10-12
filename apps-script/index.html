@@ -235,6 +235,7 @@
       { key: 'students', label: 'Students', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'attendance', label: 'Attendance', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'results', label: 'Results', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
+      { key: 'statistics', label: 'Statistics', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'] },
       { key: 'teachers', label: 'Teachers', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'applications', label: 'Applications', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'staff', label: 'Staff', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
@@ -266,6 +267,7 @@
       wards: { list: [], payments: [] },
       fees: { termId: '', wardId: '', schedule: null, list: [], form: null, settings: null },
       receipt: null,
+      analytics: { termId: '', data: null },
       admin: { tab: 'ClassLevels', rows: [], form: null, parentUsers: [], studentsList: [] },
       users: { list: [], form: null, audit: [], flash: null },
       pwForm: false,
@@ -335,6 +337,7 @@
       else if (v === 'students') body = viewStudents();
       else if (v === 'attendance') body = viewAttendance();
       else if (v === 'results') body = viewResults();
+      else if (v === 'statistics') body = viewAnalytics();
       else if (v === 'reportcard') body = viewReport();
       else if (v === 'staff') body = viewStaff();
       else if (v === 'teachers') body = viewTeachers();
@@ -356,6 +359,7 @@
       if (view === 'students') return loadStudents();
       if (view === 'attendance') return loadRoster();
       if (view === 'results') return loadResults();
+      if (view === 'statistics') return loadAnalytics();
       if (view === 'staff') return loadStaff();
       if (view === 'teachers') return loadTeachers();
       if (view === 'applications') return loadApplications();
@@ -387,6 +391,64 @@
       if (d.role === 'PARENT') return parentDashboard(d);
       if (d.role === 'BURSAR' || d.role === 'ACCOUNT_OFFICER') return financeDashboard(d);
       return staffDashboard(d);
+    }
+
+    /* ---------------- statistics / analytics ---------------- */
+    function loadAnalytics() {
+      state.busy = true; render();
+      authed('api_getAnalytics', { termId: state.analytics.termId }).then(function (d) {
+        state.analytics.data = d;
+        if (!state.analytics.termId && d.performance.term) state.analytics.termId = d.performance.term.id;
+        state.busy = false; render();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function viewAnalytics() {
+      if (state.busy || !state.analytics.data) return '<div class="page-loading"><span class="spinner"></span> Loading statistics…</div>';
+      var d = state.analytics.data, o = d.overview, p = d.performance, f = d.finance;
+      function anBar(label, display, pct, cls) { var w = Math.max(0, Math.min(100, Math.round(Number(pct) || 0))); return '<div class="bar-row"><div class="top"><span>' + esc(label) + '</span><span>' + esc(display) + '</span></div><div class="bar ' + (cls || '') + '"><span style="width:' + w + '%"></span></div></div>'; }
+      var gMax = 1; p.gradeDistribution.forEach(function (g) { if (g.count > gMax) gMax = g.count; });
+      var cMax = 1; f.monthly.forEach(function (m) { if (m.amount > cMax) cMax = m.amount; });
+      var head = '<div class="toolbar no-print"><div class="field" style="min-width:240px"><label>Term of focus</label><select data-field="an-term">' + optionsHtml(state.boot.terms, function (t) { return t.id; }, state.analytics.termId, termText) + '</select></div>' +
+        '<div class="spacer"></div><span class="muted small">' + esc(d.scopeLabel) + ' · updated ' + esc(String(d.generatedAt).slice(0, 10)) + '</span></div>';
+      var cards = '<div class="cards">' + [
+        statCard('Students', fmtMoney(o.students.total), (o.students.active + ' active · ' + o.students.male + ' male / ' + o.students.female + ' female'), ICONS.students),
+        statCard('Attendance rate', o.attendance.rate + '%', (o.attendance.counts.total + ' records captured'), ICONS.attendance),
+        statCard('Average score', p.average + '%', (p.studentsAssessed + ' assessed · ' + p.passRate + '% at/above 40%'), ICONS.term),
+        statCard('Fee collection', f.collectionRate + '%', ('₦' + fmtMoney(f.collected) + ' of ₦' + fmtMoney(f.billed)), ICONS.money)
+      ].join('') + '</div>';
+      var enrollment = '<div class="card"><div class="section-head"><h3>Enrollment</h3><span class="muted small">by section &amp; gender</span></div><div class="bars">' +
+        SECTIONS.map(function (s) { return anBar(sectionLabel_(s), o.students.bySection[s] || 0, ((o.students.bySection[s] || 0) / (o.students.total || 1)) * 100, s.toLowerCase()); }).join('') +
+        anBar('Male', o.students.male, (o.students.male / ((o.students.male + o.students.female) || 1)) * 100, 'primary') +
+        anBar('Female', o.students.female, (o.students.female / ((o.students.male + o.students.female) || 1)) * 100, 'secondary') + '</div>' +
+        '<div class="dir-head" style="margin-top:14px">By class level</div>' +
+        (o.students.byLevel.length ? '<div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Section</th><th>Class level</th><th style="text-align:right">Students</th></tr></thead><tbody>' +
+          o.students.byLevel.map(function (r) { return '<tr><td>' + esc(r.section) + '</td><td><strong>' + esc(r.level) + '</strong></td><td style="text-align:right">' + r.count + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">No students yet.</div>') + '</div>';
+      var attendanceTrend = '<div class="card"><div class="section-head"><h3>Attendance trend</h3><span class="muted small">present rate by month</span></div>' +
+        (o.attendance.monthly && o.attendance.monthly.length ? '<div class="bars">' + o.attendance.monthly.slice(-6).map(function (m) { return anBar(m.month, m.rate + '%', m.rate, 'primary'); }).join('') + '</div>' : '<div class="empty">No attendance recorded yet.</div>') + '</div>';
+      var performance = '<div class="card"><div class="section-head"><h3>Performance · ' + esc(p.term ? p.term.label : '—') + '</h3><span class="muted small">grades, subjects &amp; top students</span></div>' +
+        '<div class="grid cols-2" style="gap:20px"><div><div class="dir-head">Grade distribution</div>' +
+        (p.gradeDistribution.length ? '<div class="bars" style="margin-top:8px">' + p.gradeDistribution.map(function (g) { return anBar(g.grade, g.count, (g.count / gMax) * 100, 'plain'); }).join('') + '</div>' : '<div class="muted small">No graded scores this term.</div>') + '</div>' +
+        '<div><div class="dir-head">Subject averages</div>' +
+        (p.subjectAverages.length ? '<div class="bars" style="margin-top:8px">' + p.subjectAverages.map(function (s) { return anBar(s.subject, s.average + '%', s.average, 'plain'); }).join('') + '</div>' : '<div class="muted small">No scores yet.</div>') + '</div></div>' +
+        '<div class="dir-head" style="margin-top:16px">Top students</div>' +
+        (p.topStudents.length ? '<div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>#</th><th>Student</th><th>Class</th><th>Total</th><th>Average</th><th></th></tr></thead><tbody>' +
+          p.topStudents.map(function (s, i) { return '<tr><td>' + (i + 1) + '</td><td><strong>' + esc(s.name) + '</strong> <span class="muted small">' + esc(s.admissionNo) + '</span></td><td>' + esc(s.classArm) + '</td><td>' + s.totalScore + '</td><td>' + s.average + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(s.studentId) + '">Report</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="muted small">No result sheets for this term yet.</div>') + '</div>';
+      var finance = '<div class="card"><div class="section-head"><h3>Fees &amp; collections · ' + esc(f.term ? f.term.label : '—') + '</h3><span class="muted small">bill vs collected</span></div>' +
+        '<div class="grid cols-3" style="gap:18px;margin-bottom:14px"><div class="kv-big"><div class="k">Billed</div><div class="v">₦' + fmtMoney(f.billed) + '</div></div>' +
+        '<div class="kv-big"><div class="k">Collected</div><div class="v">₦' + fmtMoney(f.collected) + '</div></div>' +
+        '<div class="kv-big"><div class="k">Outstanding</div><div class="v">₦' + fmtMoney(f.outstanding) + '</div></div></div>' +
+        '<div class="grid cols-3" style="gap:14px"><div class="kv-big"><div class="k">Pending</div><div class="v">' + f.statusCounts.PENDING + '</div><div class="muted small">₦' + fmtMoney(f.statusAmounts.PENDING) + '</div></div>' +
+        '<div class="kv-big"><div class="k">Verified</div><div class="v">' + f.statusCounts.VERIFIED + '</div><div class="muted small">₦' + fmtMoney(f.statusAmounts.VERIFIED) + '</div></div>' +
+        '<div class="kv-big"><div class="k">Rejected</div><div class="v">' + f.statusCounts.REJECTED + '</div><div class="muted small">₦' + fmtMoney(f.statusAmounts.REJECTED) + '</div></div></div>' +
+        '<div class="dir-head" style="margin-top:16px">By section</div>' +
+        (f.bySection.length ? '<div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Section</th><th style="text-align:right">Billed</th><th style="text-align:right">Collected</th><th style="text-align:right">Outstanding</th></tr></thead><tbody>' +
+          f.bySection.map(function (r) { return '<tr><td>' + esc(r.label) + '</td><td style="text-align:right">₦' + fmtMoney(r.billed) + '</td><td style="text-align:right">₦' + fmtMoney(r.collected) + '</td><td style="text-align:right">₦' + fmtMoney(r.outstanding) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+        '<div class="dir-head" style="margin-top:16px">Monthly collections</div>' +
+        (f.monthly.length ? '<div class="bars" style="margin-top:8px">' + f.monthly.slice(-6).map(function (m) { return anBar(m.month, '₦' + fmtMoney(m.amount), (m.amount / cMax) * 100, 'kg'); }).join('') + '</div>' : '<div class="muted small">No payments recorded yet.</div>') + '</div>';
+      var trends = '<div class="card"><div class="section-head"><h3>Termly trends</h3><span class="muted small">attendance · scores · fees across recent terms</span></div>' +
+        (d.trends.length ? '<div class="table-wrap"><table><thead><tr><th>Term</th><th style="text-align:right">Attendance</th><th style="text-align:right">Average score</th><th style="text-align:right">Fee billed</th><th style="text-align:right">Collected</th><th style="text-align:right">Collection</th></tr></thead><tbody>' +
+          d.trends.map(function (t) { return '<tr><td><strong>' + esc(t.label) + '</strong></td><td style="text-align:right">' + t.attendanceRate + '%</td><td style="text-align:right">' + t.avgScore + '%</td><td style="text-align:right">₦' + fmtMoney(t.billed) + '</td><td style="text-align:right">₦' + fmtMoney(t.collected) + '</td><td style="text-align:right">' + t.collectionRate + '%</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">No termly data yet.</div>') + '</div>';
+      return head + cards + grid2([enrollment, attendanceTrend]) + grid2([performance, finance]) + (d.trends.length ? '<div style="margin-top:20px">' + trends + '</div>' : '');
     }
     function fmtMoney(n) { n = Number(n) || 0; var parts = (Math.round(n * 100) / 100).toString().split('.'); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); return parts.join('.'); }
     function statCard(label, value, sub, icon) {
@@ -1129,7 +1191,7 @@
         case 'grades-save': saveGrades(); return;
         case 'results-compute': act(authed('api_computeResults', state.results.classArmId, state.results.termId), 'Results computed.', function () { state.results.tab = 'sheets'; loadResults(); }); return;
         case 'results-publish': if (confirm('Publish results for this class/term?')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, true), 'Results published.', loadResults); return;
-        case 'open-report': case 'open-report-ward': state.report.studentId = id; state.report.termId = state.results.termId; navigate('reportcard'); return;
+        case 'open-report': case 'open-report-ward': state.report.studentId = id; state.report.termId = state.results.termId || state.analytics.termId; navigate('reportcard'); return;
         case 'back-results': navigate(state.user.role === 'PARENT' ? 'my-wards' : 'results'); return;
         case 'print-report': window.print(); return;
         case 'staff-new': state.staff.form = { status: 'ACTIVE' }; clearMessages(); render(); return;
@@ -1186,6 +1248,7 @@
       else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-student') { state.results.studentId = t.value; state.results.grades = null; clearMessages(); loadResults(); }
+      else if (f === 'an-term') { state.analytics.termId = t.value; clearMessages(); loadAnalytics(); }
       else if (f === 'pay-status') { state.payments.status = t.value; clearMessages(); loadPayments(); }
       else if (f === 'fees-ward') { state.fees.wardId = t.value; state.fees.schedule = null; loadMyFees(); }
       else if (f === 'fees-term') { state.fees.termId = t.value; state.fees.schedule = null; loadMyFees(); }
