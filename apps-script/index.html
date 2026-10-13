@@ -109,7 +109,6 @@
     .seg button.on[data-status=ABSENT] { background: var(--red); } .seg button.on[data-status=LATE] { background: var(--amber); }
     .thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--slate-100); }
     .ph { width: 40px; height: 40px; border-radius: 6px; background: var(--slate-200); display: inline-block; }
-    /* ---- dashboard ---- */
     .dash-hero { background: linear-gradient(135deg, #064e3b 0%, #059669 100%); color: #fff; border-radius: 16px; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; box-shadow: 0 8px 24px rgba(5,150,105,.25); }
     .dash-hero h2 { margin: 0; font-size: 22px; }
     .dash-hero .sub { opacity: .9; font-size: 13px; margin-top: 2px; }
@@ -138,7 +137,6 @@
     .kv-big .k { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     .kv-big .v { font-size: 22px; font-weight: 700; }
     body.embed .footer { display: none; } body.embed .content { padding: 16px; }
-    /* ---- mobile nav ---- */
     .nav-toggle { display: none; background: transparent; border: 1px solid var(--slate-300); border-radius: 8px; padding: 7px 11px; font-size: 18px; line-height: 1; color: var(--slate-700); }
     .sidebar-backdrop { display: none; }
     .topbar .tb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -171,7 +169,6 @@
       .report-head { gap: 10px; }
       .report-head .school { font-size: 16px; }
     }
-    /* ---- fees ---- */
     .fee-sheet { border: 1px solid var(--slate-200); border-radius: 12px; background: #fff; overflow: hidden; }
     .fee-sheet .sheet-head { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .fee-sum { display: flex; gap: 18px; padding: 14px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--slate-100); }
@@ -258,6 +255,8 @@
     var state = {
       token: sessionStorage.getItem('kms_token') || '', user: null, boot: null, view: 'dashboard',
       error: null, notice: null, busy: false, dashboard: null,
+      lastTypedUser: '',
+      rememberMe: true,
       dashboardSearch: { q: '', students: [], staff: [], ran: false, loading: false },
       students: { classArmId: '', search: '', list: [], form: null },
       attendance: { classArmId: '', date: todayISO(), roster: null },
@@ -310,15 +309,77 @@
     }
 
     /* ---------------- login / shell ---------------- */
+    /* Eye icon for the password reveal toggle. */
+    function eyeIcon(shown) {
+      if (shown) {
+        return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ' +
+               'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+               '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>' +
+               '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
+      }
+      return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ' +
+             'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+             '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+             '<circle cx="12" cy="12" r="3"/></svg>';
+    }
+
     function renderLogin() {
-      document.getElementById('app').innerHTML = '<div class="login-wrap"><div class="login-card"><div class="head">' +
-        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KM</div>') +
-        '<div class="kicker">' + esc(BRAND.schoolName) + '</div><h1>Portal Sign In</h1><div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div></div>' +
-        (state.error ? '<div class="alert error">' + esc(state.error) + '</div>' : '') +
+      // --- read persisted preferences ---
+      var savedUser = state.lastTypedUser || '';
+      var remember  = state.rememberMe;
+      var showPw    = false;
+      try {
+        if (!savedUser) savedUser = localStorage.getItem('kms_last_user') || '';
+        var rm = localStorage.getItem('kms_remember_me');
+        if (rm === '0') { remember = false; state.rememberMe = false; }
+        showPw = localStorage.getItem('kms_show_pw') === '1';
+      } catch (e) {}
+
+      document.getElementById('app').innerHTML =
+        '<div class="login-wrap"><div class="login-card"><div class="head">' +
+          (BRAND.logoUrl
+            ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">'
+            : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KM</div>') +
+          '<div class="kicker">' + esc(BRAND.schoolName) + '</div>' +
+          '<h1>Portal Sign In</h1>' +
+          '<div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div>' +
+        '</div>' +
+        (state.error  ? '<div class="alert error">'   + esc(state.error)  + '</div>' : '') +
         (state.notice ? '<div class="alert success">' + esc(state.notice) + '</div>' : '') +
-        '<form id="login-form"><div class="field"><label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" required></div>' +
-        '<div class="field"><label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>' +
-        '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Sign in</button></form></div>' +
+        '<form id="login-form">' +
+
+          '<div class="field"><label for="u">Username</label>' +
+            '<input id="u" name="username" type="text" autocomplete="username" required ' +
+                   'value="' + esc(savedUser) + '"></div>' +
+
+          '<div class="field"><label for="p">Password</label>' +
+            '<div style="position:relative">' +
+              '<input id="p" name="password" type="' + (showPw ? 'text' : 'password') + '" ' +
+                     'autocomplete="current-password" required style="padding-right:44px">' +
+              '<button type="button" data-action="toggle-pw" ' +
+                      'aria-label="' + (showPw ? 'Hide password' : 'Show password') + '" ' +
+                      'style="position:absolute;right:6px;top:50%;transform:translateY(-50%);' +
+                             'border:0;background:transparent;padding:6px;cursor:pointer;' +
+                             'color:var(--slate-500);display:flex;align-items:center">' +
+                eyeIcon(showPw) +
+              '</button>' +
+            '</div></div>' +
+
+          '<label for="remember-me" style="display:flex;align-items:center;gap:8px;' +
+                 'font-weight:500;margin:4px 0 16px;cursor:pointer;color:var(--slate-700);font-size:13px">' +
+            '<input type="checkbox" id="remember-me" name="rememberMe" ' +
+                   'style="width:16px;height:16px;accent-color:var(--emerald);margin:0"' +
+                   (remember ? ' checked' : '') + '>' +
+            '<span>Remember me on this device</span>' +
+          '</label>' +
+
+          '<button class="btn btn-primary" style="width:100%;justify-content:center" ' +
+                  'type="submit"' + (state.busy ? ' disabled' : '') + '>' +
+            (state.busy
+              ? '<span class="spinner" style="border-top-color:#fff"></span> Signing in…'
+              : 'Sign in') +
+          '</button>' +
+        '</form></div>' +
         '<div class="login-footer">' + footerHtml(true) + '</div></div>';
     }
     function footerHtml(dark) { return '<div class="footer' + (dark ? ' dark' : '') + '">' + (BRAND.cbsLogoUrl ? '<img src="' + esc(BRAND.cbsLogoUrl) + '" alt="CBS">' : '') + '<span class="text">' + esc(BRAND.footerText) + '</span></div>'; }
@@ -1361,6 +1422,16 @@
       switch (a) {
         case 'toggle-nav': document.body.classList.toggle('nav-open'); return;
         case 'close-nav': document.body.classList.remove('nav-open'); return;
+        case 'toggle-pw': {
+          var pin = document.getElementById('p');
+          if (!pin) return;
+          var nowShown = pin.type === 'password';
+          pin.type = nowShown ? 'text' : 'password';
+          try { localStorage.setItem('kms_show_pw', nowShown ? '1' : '0'); } catch (e) {}
+          el.innerHTML = eyeIcon(nowShown);
+          el.setAttribute('aria-label', nowShown ? 'Hide password' : 'Show password');
+          return;
+        }
         case 'signout': authed('api_logout').catch(function () {}); state.token = ''; state.user = null; state.boot = null; sessionStorage.removeItem('kms_token'); clearMessages(); document.body.classList.remove('nav-open'); render(); return;
         case 'student-new': state.students.form = { classArmId: state.students.classArmId, status: 'ACTIVE' }; clearMessages(); render(); return;
         case 'cancel-student': state.students.form = null; render(); return;
@@ -1430,6 +1501,11 @@
     function act(promise, notice, reload) { state.busy = true; clearMessages(); render(); promise.then(function () { state.notice = notice; state.busy = false; reload(); }).catch(function (err) { state.busy = false; setError(err); }); }
     document.addEventListener('change', function (e) {
       var t = e.target, f = t.getAttribute && t.getAttribute('data-field');
+      if (t && t.id === 'remember-me') {
+        state.rememberMe = !!t.checked;
+        try { localStorage.setItem('kms_remember_me', t.checked ? '1' : '0'); } catch (err) {}
+        return;
+      }
       if (f === 'students-class') { state.students.classArmId = t.value; clearMessages(); loadStudents(); }
       else if (f === 'students-search') { state.students.search = t.value; loadStudents(); }
       else if (f === 'staff-search') { state.staff.search = t.value; loadStaff(); }
@@ -1482,7 +1558,38 @@
     });
 
     /* ---------------- form actions ---------------- */
-    function doLogin(form) { state.busy = true; state.error = null; render(); call('api_login', form.username.value.trim(), form.password.value).then(function (r) { state.token = r.token; sessionStorage.setItem('kms_token', r.token); state.user = r.user; return authed('api_bootstrap'); }).then(afterBoot).catch(function (err) { state.busy = false; state.error = err.message; render(); }); }
+    function doLogin(form) {
+      var uname = form.username.value.trim();
+      var rememberBox = form.querySelector('#remember-me');
+      var remember = rememberBox ? !!rememberBox.checked : true;
+
+      state.lastTypedUser = uname;
+      state.rememberMe = remember;
+      state.busy = true; state.error = null; render();
+
+      call('api_login', uname, form.password.value).then(function (r) {
+        state.token = r.token;
+        sessionStorage.setItem('kms_token', r.token);
+        state.user = r.user;
+
+        try {
+          localStorage.setItem('kms_remember_me', remember ? '1' : '0');
+          if (remember) {
+            localStorage.setItem('kms_last_user', uname);
+          } else {
+            localStorage.removeItem('kms_last_user');
+            localStorage.removeItem('kms_show_pw');
+          }
+        } catch (e) {}
+
+        state.lastTypedUser = '';
+        return authed('api_bootstrap');
+      }).then(afterBoot).catch(function (err) {
+        state.busy = false;
+        state.error = err.message;
+        render();
+      });
+    }
     function collect(form) { var data = {}; form.querySelectorAll('[name]').forEach(function (el) { if (el.type !== 'file') data[el.getAttribute('name')] = el.value; }); if (form.getAttribute('data-id')) data.id = form.getAttribute('data-id'); return data; }
     function saveStudent(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=photo]')).then(function (file) { if (file) data.photo = file; return authed('api_saveStudent', data); }).then(function () { state.students.form = null; state.notice = 'Student saved.'; loadStudents(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function saveStaff(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=photo]')).then(function (file) { if (file) data.photo = file; return authed('api_saveStaff', data); }).then(function () { state.staff.form = null; state.notice = 'Staff saved.'; loadStaff(); }).catch(function (err) { state.busy = false; setError(err); }); }

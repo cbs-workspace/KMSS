@@ -20,10 +20,10 @@ var DEFAULT_SPREADSHEET_ID = '1LYulfTSNfV2rnXdiZem_nWU_7kBHi1NjvHEK5llzuR4'; // 
 var DEFAULT_DRIVE_FOLDER_ID = '1AztVRdRQJ_FdcLE2Eyk9XDlP93PWYKUP'; // uploaded files / logos folder
 var PROP_SHEET_ID = 'SPREADSHEET_ID';
 var PROP_DRIVE_ID = 'DRIVE_FOLDER_ID';
-var OWNER_ADMIN_USERNAME = 'cbs4u4me@gmail.com'; // primary/only default admin (replaces the old 'admin')
+var OWNER_ADMIN_USERNAME = 'cbs4u4me@gmail.com'; // primary/only default admin
 var OWNER_ADMIN_EMAIL = 'cbs4u4me@gmail.com';
 var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-var DEMO_PASSWORD = 'Demo@1234'; // shared password for the demo accounts (see createDemoUsers); disable accounts before go-live
+var DEMO_PASSWORD = 'Demo@1234';
 
 var CFG = {
   APP_NAME: 'Kings Metro School Sokoto',
@@ -112,8 +112,22 @@ function parseCsv_(value) {
   return String(value).split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
 }
 function fullNameOf_(rec) { return [rec.lastName, rec.firstName, rec.middleName].filter(Boolean).join(' '); }
+function numOrZero_(v) { var n = Number(v); return isNaN(n) ? 0 : n; }
 
 /* =========================== 3. DATABASE =========================== */
+/**
+ * Per-execution memoisation. Apps Script has a hard 6-minute execution budget
+ * and each SpreadsheetApp.getDataRange().getValues() costs 200-400ms on a
+ * 5 000-row tab. Caching every tab once per execution and keeping the cache
+ * coherent on writes collapses multi-hundred-read flows (dashboard, results
+ * computation, per-student grade entry) into a handful of round trips.
+ */
+var __ss = null, __sheets = {}, __tables = {};
+
+function invalidateTable_(name) {
+  if (!name) { __tables = {}; }
+  else { delete __tables[name]; }
+}
 
 function getSpreadsheetId_() {
   var id = PropertiesService.getScriptProperties().getProperty(PROP_SHEET_ID);
@@ -128,11 +142,8 @@ function getDriveFolderId_() {
   return id;
 }
 function tryFolder_(id) { try { return id ? DriveApp.getFolderById(id) : null; } catch (e) { return null; } }
-/**
- * Returns the Drive folder that holds uploads, creating it when needed.
- * Resilient: if the configured id is not a folder (e.g. it is the Sheet's id),
- * it falls back to the parent folder of that file, then to a new folder.
- */
+
+/** Returns the Drive folder that holds uploads, creating it when needed. */
 function resolveRootFolder_() {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty(PROP_DRIVE_ID) || DEFAULT_DRIVE_FOLDER_ID;
@@ -147,23 +158,33 @@ function resolveRootFolder_() {
   if (folder.getId() !== id) props.setProperty(PROP_DRIVE_ID, folder.getId());
   return folder;
 }
-function getSpreadsheet_() { return SpreadsheetApp.openById(getSpreadsheetId_()); }
+
+function getSpreadsheet_() {
+  if (!__ss) __ss = SpreadsheetApp.openById(getSpreadsheetId_());
+  return __ss;
+}
 function getSheet_(name) {
-  var sheet = getSpreadsheet_().getSheetByName(name);
-  if (!sheet) throw new Error('Missing sheet tab: ' + name);
-  return sheet;
+  if (!__sheets[name]) {
+    var s = getSpreadsheet_().getSheetByName(name);
+    if (!s) throw new Error('Missing sheet tab: ' + name);
+    __sheets[name] = s;
+  }
+  return __sheets[name];
 }
 function readTable_(name) {
+  if (__tables[name]) return __tables[name];
   var values = getSheet_(name).getDataRange().getValues();
-  if (values.length < 2) return [];
-  var headers = values[0], rows = [];
-  for (var i = 1; i < values.length; i++) {
-    if (values[i].join('').toString().trim() === '') continue;
-    var obj = {};
-    for (var c = 0; c < headers.length; c++) obj[headers[c]] = values[i][c];
-    obj._row = i + 1;
-    rows.push(obj);
+  var rows = [];
+  if (values.length >= 2) {
+    var headers = values[0];
+    for (var i = 1; i < values.length; i++) {
+      if (values[i].join('').toString().trim() === '') continue;
+      var obj = { _row: i + 1 };
+      for (var c = 0; c < headers.length; c++) obj[headers[c]] = values[i][c];
+      rows.push(obj);
+    }
   }
+  __tables[name] = rows;
   return rows;
 }
 function readTableSafe_(name) { try { return readTable_(name); } catch (e) { return []; } }
@@ -174,9 +195,17 @@ function findById_(name, id) {
 }
 function findWhere_(name, predicate) { var rows = readTable_(name); for (var i = 0; i < rows.length; i++) if (predicate(rows[i])) return rows[i]; return null; }
 function filterWhere_(name, predicate) { return readTable_(name).filter(predicate); }
+
 function appendRow_(name, obj) {
-  var headers = HEADERS[name];
-  getSheet_(name).appendRow(headers.map(function (h) { return obj[h] === undefined || obj[h] === null ? '' : obj[h]; }));
+  var headers = HEADERS[name], sheet = getSheet_(name);
+  var rowNum = sheet.getLastRow() + 1;
+  sheet.appendRow(headers.map(function (h) { return obj[h] === undefined || obj[h] === null ? '' : obj[h]; }));
+  if (__tables[name]) {
+    var copy = {};
+    Object.keys(obj).forEach(function (k) { copy[k] = obj[k]; });
+    copy._row = rowNum;
+    __tables[name].push(copy);
+  }
   return obj;
 }
 function bulkAppend_(name, rows) {
@@ -184,29 +213,36 @@ function bulkAppend_(name, rows) {
   var sheet = getSheet_(name), headers = HEADERS[name];
   var out = rows.map(function (r) { return headers.map(function (h) { return r[h] === undefined || r[h] === null ? '' : r[h]; }); });
   sheet.getRange(sheet.getLastRow() + 1, 1, out.length, headers.length).setValues(out);
+  invalidateTable_(name);
 }
 function updateRow_(name, id, patch) {
-  var sheet = getSheet_(name), headers = HEADERS[name], values = sheet.getDataRange().getValues();
-  for (var i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(id)) {
-      for (var c = 0; c < headers.length; c++) {
-        if (Object.prototype.hasOwnProperty.call(patch, headers[c])) {
-          sheet.getRange(i + 1, c + 1).setValue(patch[headers[c]] === null ? '' : patch[headers[c]]);
-        }
-      }
-      return true;
+  var rows = readTable_(name), target = null;
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].id) === String(id)) { target = rows[i]; break; }
+  if (!target) return false;
+  var sheet = getSheet_(name), headers = HEADERS[name];
+  for (var c = 0; c < headers.length; c++) {
+    if (Object.prototype.hasOwnProperty.call(patch, headers[c])) {
+      var v = patch[headers[c]] === null ? '' : patch[headers[c]];
+      sheet.getRange(target._row, c + 1).setValue(v);
+      target[headers[c]] = v; // keep cache hot
     }
   }
-  return false;
+  return true;
 }
 function deleteRow_(name, id) {
   var sheet = getSheet_(name), values = sheet.getDataRange().getValues();
-  for (var i = 1; i < values.length; i++) if (String(values[i][0]) === String(id)) { sheet.deleteRow(i + 1); return true; }
+  for (var i = 1; i < values.length; i++) if (String(values[i][0]) === String(id)) { sheet.deleteRow(i + 1); invalidateTable_(name); return true; }
   return false;
 }
 function stripRow_(obj) { var c = {}; Object.keys(obj).forEach(function (k) { if (k !== '_row') c[k] = obj[k]; }); return c; }
 
 /* =========================== 4. AUTH =========================== */
+
+/** CacheService.put() hard-caps expiration at 21 600s (6h). Passing a larger
+ *  value throws 'Invalid argument'; this bit every password-reset and
+ *  deactivation flow until it was clamped. bumpSessionEpoch_ now swallows
+ *  its own errors so a cache hiccup cannot abort the calling operation. */
+var SESSION_EPOCH_TTL = 21600;
 
 function makeSalt_() { return Utilities.getUuid().replace(/-/g, ''); }
 function makePassword_() {
@@ -234,10 +270,6 @@ function sendCredentials_(to, username, password, subject) {
     return false;
   }
 }
-/**
- * Editor helper: check why credential emails are not arriving.
- * Run from the editor and read View → Logs / Execution log.
- */
 function diagnoseMail() {
   var quota = -1;
   try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { Logger.log('getRemainingDailyQuota failed: ' + e); }
@@ -277,8 +309,13 @@ function sessionEpoch_(userId) {
   var v = CacheService.getScriptCache().get('ue_' + userId);
   return v ? String(v) : '0';
 }
+/** Invalidates every session token previously issued to this user. */
 function bumpSessionEpoch_(userId) {
-  CacheService.getScriptCache().put('ue_' + userId, String(new Date().getTime()), CFG.SESSION_TTL_SECONDS * 2);
+  try {
+    CacheService.getScriptCache().put('ue_' + userId, String(new Date().getTime()), SESSION_EPOCH_TTL);
+  } catch (e) {
+    Logger.log('bumpSessionEpoch_ failed (non-fatal): ' + (e && e.message ? e.message : e));
+  }
 }
 function isLoginLocked_(key) {
   var v = CacheService.getScriptCache().get('lck_' + key);
@@ -311,12 +348,8 @@ function userSections_(user) { return user ? parseCsv_(user.sectionScope) : []; 
 
 /* =========================== 5. SETUP / SEED =========================== */
 
-/**
- * Creates any missing tabs, then CLEARS every tab and re-seeds the full
- * reference data set and the default admin. This is destructive by design
- * (Run setup / re-seed from the editor or the sheet menu).
- */
 function setUp() {
+  invalidateTable_();
   var props = PropertiesService.getScriptProperties();
   var sheetId = props.getProperty(PROP_SHEET_ID) || DEFAULT_SPREADSHEET_ID;
   var ss;
@@ -419,28 +452,62 @@ function seedGradeScale_() {
   });
 }
 /**
- * Sample fee catalogue so new school fee schedules are non-empty.
- * All amounts are placeholders — edit them in the sheet or the Fees page.
- * A blank section/level/term means "applies to every section/level/term".
+ * Sample fee catalogue. Every amount is a placeholder — edit in the sheet
+ * or via Fees. A blank section / level / term means "applies everywhere".
+ * NOTE: an accidental generic ₦60 000 "School fees" TUITION row was removed
+ * here because it double-billed alongside the per-section "Tuition" rows.
+ * If your live sheet still has it, run cleanupDuplicateSchoolFees() once.
  */
 function seedFees_() {
   var definitions = [
-    { name: 'School fees', category: 'TUITION', amount: 60000, mandatory: true, orderIndex: 1 },
-    { name: 'Tuition', category: 'TUITION', amount: 120000, section: 'SECONDARY', mandatory: true, orderIndex: 1 },
-    { name: 'Tuition', category: 'TUITION', amount: 90000, section: 'PRIMARY', mandatory: true, orderIndex: 1 },
-    { name: 'Tuition', category: 'TUITION', amount: 70000, section: 'KG', mandatory: true, orderIndex: 1 },
-    { name: 'Books & stationery', category: 'BOOKS', amount: 25000, mandatory: false, orderIndex: 2 },
-    { name: 'Uniform (pair)', category: 'UNIFORM', amount: 15000, mandatory: false, orderIndex: 3 },
-    { name: 'Sports', category: 'SPORT', amount: 8000, mandatory: false, orderIndex: 4 },
-    { name: 'Practical materials', category: 'PRACTICAL', amount: 6000, mandatory: false, orderIndex: 5 },
-    { name: 'Laboratory', category: 'LABORATORY', amount: 10000, section: 'SECONDARY', mandatory: false, orderIndex: 6 },
-    { name: 'Transport', category: 'TRANSPORT', amount: 18000, mandatory: false, orderIndex: 7 },
-    { name: 'ICT', category: 'ICT', amount: 7000, mandatory: false, orderIndex: 8 },
-    { name: 'Excursion', category: 'EXCURSION', amount: 5000, mandatory: false, orderIndex: 9 }
+    { name: 'Tuition',              category: 'TUITION',    amount: 120000, section: 'SECONDARY', mandatory: true,  orderIndex: 1 },
+    { name: 'Tuition',              category: 'TUITION',    amount:  90000, section: 'PRIMARY',   mandatory: true,  orderIndex: 1 },
+    { name: 'Tuition',              category: 'TUITION',    amount:  70000, section: 'KG',        mandatory: true,  orderIndex: 1 },
+    { name: 'Books & stationery',   category: 'BOOKS',      amount:  25000, mandatory: false, orderIndex: 2 },
+    { name: 'Uniform (pair)',       category: 'UNIFORM',    amount:  15000, mandatory: false, orderIndex: 3 },
+    { name: 'Sports',               category: 'SPORT',      amount:   8000, mandatory: false, orderIndex: 4 },
+    { name: 'Practical materials',  category: 'PRACTICAL',  amount:   6000, mandatory: false, orderIndex: 5 },
+    { name: 'Laboratory',           category: 'LABORATORY', amount:  10000, section: 'SECONDARY', mandatory: false, orderIndex: 6 },
+    { name: 'Transport',            category: 'TRANSPORT',  amount:  18000, mandatory: false, orderIndex: 7 },
+    { name: 'ICT',                  category: 'ICT',        amount:   7000, mandatory: false, orderIndex: 8 },
+    { name: 'Excursion',            category: 'EXCURSION',  amount:   5000, mandatory: false, orderIndex: 9 }
   ];
   definitions.forEach(function (d) {
-    appendRow_('Fees', { id: uuid_(), name: d.name, category: d.category, section: d.section || '', classLevelId: '', sessionName: '', termName: '', amount: d.amount, mandatory: d.mandatory, active: true, orderIndex: d.orderIndex, note: '', updatedAt: nowIso_() });
+    appendRow_('Fees', {
+      id: uuid_(), name: d.name, category: d.category, section: d.section || '',
+      classLevelId: '', sessionName: '', termName: '', amount: d.amount,
+      mandatory: d.mandatory, active: true, orderIndex: d.orderIndex, note: '',
+      updatedAt: nowIso_()
+    });
   });
+}
+/**
+ * One-time, non-destructive cleanup: removes the accidental generic
+ * "School fees" TUITION row (blank section) that was double-billing every
+ * student alongside the per-section Tuition row. Idempotent — does nothing
+ * after the first run on a given sheet.
+ */
+function cleanupDuplicateSchoolFees() {
+  var sheet = getSheet_('Fees');
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) { Logger.log('No Fees rows.'); return 0; }
+  var headers = values[0];
+  var nameIdx = headers.indexOf('name');
+  var catIdx = headers.indexOf('category');
+  var secIdx = headers.indexOf('section');
+  if (nameIdx < 0 || catIdx < 0 || secIdx < 0) throw new Error('Fees headers not recognised.');
+  var removed = 0;
+  for (var r = values.length - 1; r >= 1; r--) {
+    var name = String(values[r][nameIdx] || '').trim().toLowerCase();
+    var cat = String(values[r][catIdx] || '').trim().toUpperCase();
+    var sec = String(values[r][secIdx] || '').trim();
+    if (name === 'school fees' && cat === 'TUITION' && sec === '') {
+      sheet.deleteRow(r + 1); removed++;
+    }
+  }
+  invalidateTable_('Fees');
+  Logger.log('cleanupDuplicateSchoolFees removed ' + removed + ' row(s).');
+  return removed;
 }
 /** Editor helper: create a user quickly. */
 function createUser(username, password, role, fullName, sectionScope, classArmScope) {
@@ -450,21 +517,37 @@ function createUser(username, password, role, fullName, sectionScope, classArmSc
   Logger.log('Created user ' + username);
 }
 /**
- * Editor helper: reset the owner admin's password (use if you are locked out).
- * Generates a new password, emails it to OWNER_ADMIN_EMAIL, ends open sessions,
- * and prints it to the log as a fallback.
+ * Editor helper: reset the owner admin's password. Generates a new password,
+ * emails it (personal-Gmail quota permitting), ends every live session, and
+ * prints the password to the execution log as a fallback. The write/email
+ * ordering is deliberate: the sheet is updated first, the email+log run
+ * before the (now-safe) session-epoch bump, so a cache hiccup cannot swallow
+ * the credentials.
  */
 function resetOwnerAdminPassword() {
   var admin = findWhere_('Users', function (u) { return String(u.username).toLowerCase() === String(OWNER_ADMIN_USERNAME).toLowerCase(); });
   var password = makePassword_(), salt = makeSalt_();
+
   if (admin) {
     updateRow_('Users', admin.id, { passwordHash: hashPassword_(password, salt), salt: salt, active: true, role: 'ADMIN' });
-    bumpSessionEpoch_(admin.id);
-    try { CacheService.getScriptCache().remove('lck_' + OWNER_ADMIN_USERNAME); } catch (e) {}
   } else {
-    appendRow_('Users', { id: uuid_(), username: OWNER_ADMIN_USERNAME, passwordHash: hashPassword_(password, salt), salt: salt, role: 'ADMIN', fullName: 'Administrator', email: OWNER_ADMIN_EMAIL, sectionScope: '', classArmScope: '', active: true, createdAt: nowIso_() });
+    appendRow_('Users', {
+      id: uuid_(), username: OWNER_ADMIN_USERNAME, passwordHash: hashPassword_(password, salt), salt: salt,
+      role: 'ADMIN', fullName: 'Administrator', email: OWNER_ADMIN_EMAIL,
+      sectionScope: '', classArmScope: '', active: true, createdAt: nowIso_()
+    });
   }
+
+  // 1) clear lockout under both casings the app uses
+  try { CacheService.getScriptCache().remove('lck_' + String(OWNER_ADMIN_USERNAME).toLowerCase()); } catch (e) { /* ignore */ }
+  try { CacheService.getScriptCache().remove('lck_' + OWNER_ADMIN_USERNAME); } catch (e) { /* ignore */ }
+
+  // 2) email + log BEFORE anything that can throw
   var emailed = sendCredentials_(OWNER_ADMIN_EMAIL, OWNER_ADMIN_USERNAME, password, 'Your ' + CFG.APP_NAME + ' admin password has been reset');
+
+  // 3) kill live sessions last (bump is internally try/catch)
+  if (admin) bumpSessionEpoch_(admin.id);
+
   Logger.log('=== Kings Metro admin reset ===');
   Logger.log('Username: ' + OWNER_ADMIN_USERNAME);
   Logger.log('Temporary password: ' + password);
@@ -476,14 +559,12 @@ function resetOwnerAdminPassword() {
 /**
  * Demo data — idempotent seeds you can run from the editor.
  *   createDemoStudents()  → 100 students per class arm (all fields filled).
- *   createDemoStaff()     → teaching + admin + non-teaching staff (cleaner, security,
- *                           cook, librarian, etc.) with emails; a login for every staff
- *                           member with a portal role (non-teaching staff are records only).
+ *   createDemoStaff()     → teaching + admin + non-teaching staff with logins.
  *   createDemoUsers()     → logins for the teaching/admin roster (shared DEMO_PASSWORD).
- *   createDemoParents()   → ~10 parent logins (demo.parent1..10) linked to wards.
- *   createDemoData()      → ALL of the above plus attendance, staff attendance, scores +
- *                           auto result sheets, fee plans/payments/receipts, timetable,
- *                           announcements and admission applications — a full test dataset.
+ *   createDemoParents()   → ~10 parent logins linked to wards.
+ *   createDemoData()      → ALL of the above plus attendance, staff attendance, scores,
+ *                           fee plans/payments/receipts, timetable, announcements
+ *                           and admission applications — a full test dataset.
  * Demo accounts use a known password — deactivate them before go-live.
  */
 
@@ -510,14 +591,12 @@ function demoAgeFor_(level) {
 var DEMO_EMAIL_DOMAIN = 'kingsmetro.example';
 function demoPad_(n, width) { var s = String(n); var w = width || 2; while (s.length < w) s = '0' + s; return s; }
 function demoIsoDate_(d) { return d.getFullYear() + '-' + demoPad_(d.getMonth() + 1) + '-' + demoPad_(d.getDate()); }
-/** Unique demo email: first.last<seq>@kingsmetro.example (never a real inbox). */
 function demoEmail_(first, last, seq) {
   var f = String(first || 'user').toLowerCase().replace(/[^a-z]/g, '') || 'user';
   var l = String(last || '').toLowerCase().replace(/[^a-z]/g, '');
   return f + (l ? '.' + l : '') + seq + '@' + DEMO_EMAIL_DOMAIN;
 }
 function demoJoined_(seq) { return (2014 + (seq % 10)) + '-' + demoPad_(1 + (seq % 8)) + '-' + demoPad_(1 + (seq % 27)); }
-/** Last `count` weekday dates (yyyy-MM-dd), oldest first, ending today. */
 function demoRecentSchoolDays_(count) {
   var days = [], d = new Date(), guard = 0;
   while (days.length < count && guard < 60) {
@@ -536,9 +615,7 @@ function demoRemarkFor_(average) {
   if (n >= 40) return 'A fair result. More effort is needed.';
   return 'Needs improvement. Please work harder next term.';
 }
-/** Active admin user id (for seeded recordedBy/createdBy fields), or ''. */
 function demoAdminId_() { var u = findWhere_('Users', function (x) { return x.role === 'ADMIN'; }); return u ? u.id : ''; }
-/** Map classArmId -> first TEACHER user id assigned to it (fallback: admin). */
 function demoTeacherByArm_() {
   var map = {}, adminId = '';
   readTable_('Users').forEach(function (u) {
@@ -549,8 +626,6 @@ function demoTeacherByArm_() {
   map._admin = adminId;
   return map;
 }
-
-/** All active class-arm ids per section, sorted by level order then arm name. */
 function armIdsBySectionAll_() {
   var levelById = indexById_(readTable_('ClassLevels')), order = {};
   Object.keys(levelById).forEach(function (id) { order[id] = Number(levelById[id].orderIndex) || 0; });
@@ -566,8 +641,6 @@ function armIdsBySectionAll_() {
   Object.keys(bySec).forEach(function (k) { out[k] = bySec[k].map(function (x) { return x.id; }); });
   return out;
 }
-
-/** Deterministic roster of people who each get a Staff record and a login. */
 function demoPeople_() {
   var people = [], n = 0;
   function firstName(male) { var arr = male ? DEMO_FIRST_MALE : DEMO_FIRST_FEMALE; return arr[(n * 7 + 3) % arr.length]; }
@@ -597,7 +670,6 @@ function demoPeople_() {
   });
   return people;
 }
-/** Non-teaching support staff — Staff records only (no portal login; no matching role). */
 function demoSupportStaff_() {
   var defs = [
     'Cleaner', 'Cleaner', 'Security Officer', 'Security Officer', 'Cook', 'Librarian',
@@ -735,15 +807,12 @@ function createDemoData() {
     timetable: timetable, announcements: announcements, applications: applications, message: msg
   };
 }
-
-/** Parent logins (demo.parent1..10) linked to 1-3 wards sharing the same surname. */
 function createDemoParents() {
   var created = [];
   var students = readTable_('Students');
   if (!students.length) return { created: created, message: 'No students to link demo parents to.' };
   var target = Math.min(10, students.length);
   var relationships = ['Father', 'Mother', 'Guardian'];
-  /* one parent per distinct surname so every parent's email surfaces as a guardian contact */
   var anchors = [], usedLast = {};
   for (var ai = 0; ai < students.length && anchors.length < target; ai++) {
     var ln = String(students[ai].lastName || '');
@@ -774,8 +843,6 @@ function createDemoParents() {
   Logger.log(msg);
   return { created: created, message: msg };
 }
-
-/** Seeded StaffAttendance for the last 5 school days (skips if any rows exist). */
 function createDemoStaffAttendance_() {
   if (readTableSafe_('StaffAttendance').length > 0) return 0;
   var staff = readTable_('Staff');
@@ -793,8 +860,6 @@ function createDemoStaffAttendance_() {
   Logger.log('Demo staff attendance added: ' + rows.length + ' rows.');
   return rows.length;
 }
-
-/** Seeded student Attendance for the last 5 school days (skips if any rows exist). */
 function createDemoAttendance_() {
   if (readTableSafe_('Attendance').length > 0) return 0;
   var students = readTable_('Students');
@@ -817,8 +882,6 @@ function createDemoAttendance_() {
   Logger.log('Demo attendance added: ' + rows.length + ' rows.');
   return rows.length;
 }
-
-/** Seeded Scores + auto-generated ResultSheets for the current term (skips if any scores exist). */
 function createDemoScores_() {
   if (readTableSafe_('Scores').length > 0) return 0;
   var term = getCurrentTerm_();
@@ -874,8 +937,6 @@ function createDemoScores_() {
   Logger.log('Demo scores added: ' + rows.length + ' score rows, ' + rsRows.length + ' result sheets.');
   return rows.length;
 }
-
-/** Seeded FeeSelections, FeePlans and Payments for ~150 students (skips if any payments exist). */
 function createDemoFinance_() {
   if (readTableSafe_('Payments').length > 0) return 0;
   var term = getCurrentTerm_();
@@ -947,8 +1008,6 @@ function createDemoFinance_() {
   Logger.log('Demo finance added: ' + selRows.length + ' selections, ' + planRows.length + ' plans, ' + payRows.length + ' payments.');
   return payRows.length;
 }
-
-/** Weekly class timetable for every arm for the current term (skips if any entries exist). */
 function createDemoTimetable_() {
   if (readTableSafe_('Timetable').length > 0) return 0;
   var term = getCurrentTerm_();
@@ -981,8 +1040,6 @@ function createDemoTimetable_() {
   Logger.log('Demo timetable added: ' + rows.length + ' rows.');
   return rows.length;
 }
-
-/** A few published announcements (skips if any exist). */
 function createDemoAnnouncements_() {
   if (readTableSafe_('Announcements').length > 0) return 0;
   var adminId = demoAdminId_();
@@ -1000,8 +1057,6 @@ function createDemoAnnouncements_() {
   Logger.log('Demo announcements added: ' + rows.length + '.');
   return rows.length;
 }
-
-/** A handful of admission applications in each status (skips if any exist). */
 function createDemoApplications_() {
   if (readTableSafe_('Applications').length > 0) return 0;
   var levels = readTable_('ClassLevels').filter(function (l) { return toBool_(l.active); });
@@ -1029,8 +1084,6 @@ function createDemoApplications_() {
   Logger.log('Demo applications added: ' + rows.length + '.');
   return rows.length;
 }
-
-/** Seeds a sensible default admission-notification email if none is set. */
 function createDemoSettings_() {
   if (!getSetting_('ADMISSION_NOTIFY_EMAILS', '')) setSetting_('ADMISSION_NOTIFY_EMAILS', OWNER_ADMIN_EMAIL);
   return true;
@@ -1041,7 +1094,7 @@ function createDemoSettings_() {
 var TERM_LABELS = { FIRST: 'First Term', SECOND: 'Second Term', THIRD: 'Third Term' };
 function termLabel_(term) { return term ? ((TERM_LABELS[term.termName] || term.termName) + ' · ' + term.sessionName) : ''; }
 function getClassLevels_(includeInactive) {
-  var levels = readTable_('ClassLevels');
+  var levels = readTable_('ClassLevels').slice(); // slice: keep the memoised array untouched when we sort
   if (!includeInactive) levels = levels.filter(function (l) { return toBool_(l.active); });
   return levels.sort(function (a, b) {
     if (a.section !== b.section) return CFG.SECTIONS.indexOf(a.section) - CFG.SECTIONS.indexOf(b.section);
@@ -1056,7 +1109,6 @@ function getClassArms_(user) {
   });
   if (user) {
     if (user.role === 'PARENT') {
-      // Parents are scoped strictly to the class arms of their linked wards.
       var wardIds = parentStudentIds_(user);
       var wardArm = {};
       if (wardIds.length) readTable_('Students').forEach(function (s) { if (wardIds.indexOf(String(s.id)) !== -1) wardArm[String(s.classArmId)] = true; });
@@ -1530,8 +1582,6 @@ function api_saveAnnouncement(token, payload) {
   appendRow_('Announcements', fields); return { id: fields.id };
 }
 function api_deleteAnnouncement(token, id) { assertRole_(requireUser_(token), ['PRINCIPAL', 'HEADMASTER'], 'You cannot delete announcements.'); deleteRow_('Announcements', id); return true; }
-
-/* Public (no login) feed for the school website marquee — only WEBSITE-targeted, active posts. */
 function publicWebsiteAnnouncements_() {
   var list = readTable_('Announcements').filter(function (a) {
     return toBool_(a.active) && String(a.audience || '') === 'WEBSITE' && String(a.title || '').trim() !== '';
@@ -1547,7 +1597,6 @@ function publicAnnouncementsJsonp_(p) {
   var out = cb ? (cb + '(' + payload + ');') : payload;
   return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
-/* One-time, non-destructive migration: adds any missing Announcements header cells. */
 function ensureAnnouncementColumns() {
   var sheet = getSheet_('Announcements');
   var headers = HEADERS.Announcements;
@@ -1581,12 +1630,6 @@ function ensureColumns_(name, headers) {
     if (current.indexOf(h) === -1) { sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h); current.push(h); }
   });
 }
-/**
- * Non-destructive migration (safe on a live spreadsheet). Creates the new
- * fee/settings, staff-register and timetable tabs and appends the new Payments
- * columns. Run once from the editor after deploying the new version — no data
- * is cleared.
- */
 function ensureFeeTables() {
   var ss = getSpreadsheet_();
   ['Fees', 'FeeSelections', 'FeePlans', 'Settings', 'StaffAttendance', 'Timetable'].forEach(function (name) { ensureSheet_(ss, name); });
@@ -1610,7 +1653,6 @@ function api_saveSettings(token, payload) {
   logAudit_(user, 'UPDATE_SETTINGS', '', Object.keys(payload).join(','));
   return api_getSettings(token);
 }
-
 
 /* =========================== 13. DRIVE / FILES =========================== */
 
@@ -1642,7 +1684,6 @@ function assertCanManageOwner_(user, ownerType, ownerId) {
     return;
   }
 }
-/** Uploads a base64 data-URL to Drive and records it in the Files tab. */
 function storeFile_(user, ownerType, ownerId, filePayload) {
   if (!filePayload || !filePayload.dataUrl) throw new Error('No file provided.');
   assertCanManageOwner_(user, ownerType, ownerId);
@@ -1753,7 +1794,6 @@ function api_verifyPayment(token, id, decision) {
 
 /* ==================== 14a. FEES, SELECTIONS & RECEIPTS ==================== */
 
-/** A fee applies to a class level when section/level/session/term constraints are blank or match. */
 function feeApplies_(fee, level, term) {
   if (!toBool_(fee.active)) return false;
   if (level) {
@@ -1793,7 +1833,6 @@ function classArmLabel_(armId) {
   var a = getArmById_(armId), l = a ? findById_('ClassLevels', a.classLevelId) : null;
   return a && l ? (l.section + ' · ' + l.name + ' ' + a.name) : '';
 }
-/** Reduces a ward + term into a bill: applicable items, mandatory defaults, paid/balance. */
 function buildFeeSchedule_(student, term) {
   var fees = applicableFeesForStudent_(student, term);
   var selMap = {}; feeSelectionsFor_(student.id, term.id).forEach(function (r) { selMap[String(r.feeId)] = r; });
@@ -1954,8 +1993,6 @@ function sectionsFromArms_(arms) {
   CFG.SECTIONS.forEach(function (s) { if (seen[s]) out.push(s); });
   return out;
 }
-function numOrZero_(v) { var n = Number(v); return isNaN(n) ? 0 : n; }
-/** Role-scoped statistics for the management dashboards. */
 function api_dashboard(token) {
   var user = requireUser_(token);
   var arms = armsMap_(user);
@@ -2037,7 +2074,6 @@ function api_dashboard(token) {
     currentTerm: current ? { id: current.id, label: termLabel_(current) } : null
   };
 }
-/** Section-scoped student/staff lookup for the dashboard search box. */
 function api_searchDirectory(token, query) {
   var user = requireUser_(token);
   var q = String(query || '').trim().toLowerCase();
@@ -2066,7 +2102,6 @@ function api_searchDirectory(token, query) {
 /* =========================== 14b. ANALYTICS / STATISTICS =========================== */
 
 var ANALYTICS_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
-/** Active terms oldest → newest, optionally limited to the most recent N. */
 function analyticsTerms_(limit) {
   var terms = getTerms_();
   terms.sort(function (a, b) {
@@ -2077,7 +2112,6 @@ function analyticsTerms_(limit) {
   if (limit && terms.length > limit) terms = terms.slice(terms.length - limit);
   return terms;
 }
-/** Total bill vs collected for one term across scoped students (bill from level fees + per-student selections). */
 function collectionForTerm_(term, students, levelById, armById, selByStudent, payByStudentTerm) {
   var feesByLevel = {};
   var billed = 0, collected = 0, bySection = {};
@@ -2109,7 +2143,6 @@ function api_getAnalytics(token, opts) {
   var students = readTable_('Students').filter(function (s) { return !!arms[s.classArmId]; });
   var studentIds = {}; students.forEach(function (s) { studentIds[String(s.id)] = true; });
 
-  /* enrollment */
   var bySection = { KG: 0, PRIMARY: 0, SECONDARY: 0 }, byLevelMap = {}, total = 0, active = 0, male = 0, female = 0;
   students.forEach(function (s) {
     total++;
@@ -2134,7 +2167,6 @@ function api_getAnalytics(token, opts) {
   var staffBySection = { KG: 0, PRIMARY: 0, SECONDARY: 0, Unassigned: 0 };
   staffScoped.forEach(function (st) { var sec = (st.section && staffBySection[st.section] != null) ? st.section : 'Unassigned'; staffBySection[sec]++; });
 
-  /* attendance (all scoped rows) + monthly series */
   var att = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0, total: 0 }, attMonthly = {};
   readTable_('Attendance').forEach(function (a) {
     if (!arms[a.classArmId]) return;
@@ -2147,7 +2179,6 @@ function api_getAnalytics(token, opts) {
   var attendanceMonthly = Object.keys(attMonthly).sort().map(function (m) { var r = attMonthly[m]; r.rate = r.total ? round2_(r.present / r.total * 100) : 0; return r; });
   var attendanceRate = att.total ? round2_(att.PRESENT / att.total * 100) : 0;
 
-  /* performance — focus term */
   var focus = opts.termId ? findById_('Terms', opts.termId) : getCurrentTerm_();
   var subjectsById = indexById_(readTable_('Subjects'));
   var gradeCount = {}, subjAgg = {};
@@ -2171,7 +2202,6 @@ function api_getAnalytics(token, opts) {
     return { studentId: r.studentId, name: s ? fullNameOf_(s) : '—', admissionNo: s ? s.admissionNo : '', classArm: s ? classArmLabel_(s.classArmId) : '', totalScore: r.totalScore, average: r.average, position: r.position };
   });
 
-  /* finance */
   var paymentsAll = readTable_('Payments').filter(function (p) { return studentIds[String(p.studentId)]; });
   var payByStudentTerm = {}, statusCounts = { PENDING: 0, VERIFIED: 0, REJECTED: 0 }, statusAmounts = { PENDING: 0, VERIFIED: 0, REJECTED: 0 }, monthly = {};
   paymentsAll.forEach(function (p) {
@@ -2195,7 +2225,6 @@ function api_getAnalytics(token, opts) {
   var finance = focus ? collectionForTerm_(focus, students, levelById, armById, selByTerm[String(focus.id)] || {}, payByStudentTerm)
     : { billed: 0, collected: 0, outstanding: 0, rate: 0, bySection: {} };
 
-  /* trends — last 6 active terms oldest → newest */
   var trends = analyticsTerms_(6).map(function (tm) {
     var c = collectionForTerm_(tm, students, levelById, armById, selByTerm[String(tm.id)] || {}, payByStudentTerm);
     var from = tm.startDate || '', to = tm.endDate || '', tp = 0, tt = 0;
@@ -2243,16 +2272,14 @@ function api_getAnalytics(token, opts) {
 var COMMS_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
 var MESSAGE_AUDIENCES = ['PARENTS', 'STAFF', 'BOTH'];
 var MESSAGE_CHANNELS = ['EMAIL', 'SMS', 'BOTH'];
-var MAX_MESSAGE_RECIPIENTS = 300; // safety cap per send (protects the Gmail daily quota)
+var MAX_MESSAGE_RECIPIENTS = 300;
 var DAYS_OF_WEEK = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 var TIMETABLE_KINDS = ['CLASS', 'EXAM'];
 
-/** Students within the caller's section/arm scope. */
 function scopedStudents_(user) {
   var arms = armsMap_(user);
   return readTable_('Students').filter(function (s) { return !!arms[s.classArmId]; });
 }
-/** Staff within the caller's section scope (ADMIN = all). */
 function scopedStaff_(user) {
   var all = readTable_('Staff');
   if (user.role === 'ADMIN' || !userSections_(user).length) return all;
@@ -2264,7 +2291,6 @@ function money_(n) {
   while (s.length > 3) { out = ',' + s.slice(-3) + out; s = s.slice(0, -3); }
   return (neg ? '-' : '') + '\u20A6' + s + out;
 }
-/** Guardians for a set of students: parent-user email + the student's guardian phone. */
 function guardianContactsForStudents_(students) {
   var usersById = indexById_(readTableSafe_('Users'));
   var emailByStudent = {};
@@ -2306,12 +2332,10 @@ function uniqAddresses_(list) {
   list.forEach(function (x) { var v = String(x || '').trim(); if (!v) return; var k = v.toLowerCase(); if (!seen[k]) { seen[k] = true; out.push(v); } });
   return out;
 }
-/** Default dialling country code for normalising phone numbers (Settings key SMS_COUNTRY_CODE). */
 function smsCountryCode_() {
   var cc = String(getSetting_('SMS_COUNTRY_CODE', '234')).replace(/[^0-9]/g, '');
   return cc || '234';
 }
-/** Normalise a phone number to international digit form (no +). e.g. 0801… -> 234801… */
 function normalizePhone_(raw, cc) {
   var d = String(raw || '').replace(/[^0-9]/g, '');
   if (!d) return '';
@@ -2322,7 +2346,6 @@ function normalizePhone_(raw, cc) {
   if (d.length <= 10) return cc + d;
   return d;
 }
-/** SMS configuration: an API provider (Termii) and/or the legacy email-to-SMS gateway. */
 function smsProviderConfig_() {
   var provider = String(getSetting_('SMS_PROVIDER', '')).trim().toUpperCase();
   var apiKey = String(getSetting_('SMS_API_KEY', '')).trim();
@@ -2337,7 +2360,6 @@ function smsProviderConfig_() {
     configured: !!(apiKey && provider), ready: !!(apiKey && provider) || !!gateway
   };
 }
-/** Send a single SMS via the configured provider (Termii) or the email-to-SMS gateway. Never throws. */
 function sendSmsText_(phone, text, subject) {
   var cfg = smsProviderConfig_();
   var to = normalizePhone_(phone, cfg.countryCode);
@@ -2361,7 +2383,6 @@ function sendSmsText_(phone, text, subject) {
   }
   return { ok: false, reason: 'not-configured' };
 }
-/** Sends one message per recipient (email and/or SMS). Never throws on a single failure. */
 function dispatchMessages_(emails, phones, channel, subject, body, html) {
   var cfg = smsProviderConfig_();
   var wantsEmail = (channel === 'EMAIL' || channel === 'BOTH');
@@ -2850,15 +2871,17 @@ function api_resetUserPassword(token, id) {
   var password = makePassword_();
   var salt = makeSalt_();
   updateRow_('Users', id, { passwordHash: hashPassword_(password, salt), salt: salt });
+  try { CacheService.getScriptCache().remove('lck_' + String(u.username).toLowerCase()); } catch (e) { /* ignore */ }
+  var emailed = sendCredentials_(u.email, u.username, password, 'Your ' + CFG.APP_NAME + ' portal password has been reset');
   bumpSessionEpoch_(id);
   logAudit_(caller, 'RESET_USER_PASSWORD', u.username, '');
-  var emailed = sendCredentials_(u.email, u.username, password, 'Your ' + CFG.APP_NAME + ' portal password has been reset');
   return {
     credentialsEmailed: emailed,
     password: emailed ? '' : password,
     message: emailed ? 'A new password was emailed to ' + u.email + '.' : 'No email on file — the new temporary password is shown once below.'
   };
 }
+/** Changes the caller's password and invalidates every other live session. */
 function api_changeOwnPassword(token, oldPassword, newPassword) {
   var caller = requireUser_(token);
   var user = findById_('Users', caller.id);
@@ -2868,22 +2891,22 @@ function api_changeOwnPassword(token, oldPassword, newPassword) {
   if (String(newPassword) === String(oldPassword)) throw new Error('New password must be different from the current one.');
   var salt = makeSalt_();
   updateRow_('Users', user.id, { passwordHash: hashPassword_(newPassword, salt), salt: salt });
-  bumpSessionEpoch_(user.id);
+  // Verify the write landed (schema drift / locked sheet protection)
+  var verify = findById_('Users', user.id);
+  if (!verify || String(verify.passwordHash) !== hashPassword_(newPassword, String(verify.salt))) {
+    throw new Error('Password change could not be saved. Please try again or contact the administrator.');
+  }
+  bumpSessionEpoch_(user.id); // kicks every other device (see requireUser_)
   logAudit_(caller, 'CHANGE_OWN_PASSWORD', user.username, '');
   return true;
 }
 function api_listAudit(token) {
   assertAdminUser_(token);
-  return readTable_('AuditLog').sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+  return readTable_('AuditLog').slice().sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
 }
 
 /* ==================== 15c. TEACHER ASSIGNMENT (role-scoped) ==================== */
 
-/**
- * Assignment scope: ADMIN covers all sections; PRINCIPAL covers SECONDARY;
- * HEADMASTER covers PRIMARY + KG (incl. creche/nursery). Returns the allowed arm ids,
- * or null for ADMIN (unrestricted).
- */
 function teacherScopeArms_(user) {
   if (user.role === 'ADMIN') return null;
   var sections = userSections_(user);
@@ -2906,7 +2929,7 @@ function teacherInScope_(user, t) {
   var allowed = teacherScopeArms_(user);
   if (!allowed) return true;
   var arms = userArmIds_(t);
-  if (!arms.length) return false; // 'all classes' is outside a leader's scope
+  if (!arms.length) return false;
   for (var i = 0; i < arms.length; i++) if (allowed.indexOf(String(arms[i])) === -1) return false;
   return true;
 }
@@ -2992,9 +3015,10 @@ function api_resetTeacherPassword(token, userId) {
   if (!teacherInScope_(user, t)) throw new Error('That teacher is outside your scope.');
   var password = makePassword_(), salt = makeSalt_();
   updateRow_('Users', t.id, { passwordHash: hashPassword_(password, salt), salt: salt });
+  try { CacheService.getScriptCache().remove('lck_' + String(t.username).toLowerCase()); } catch (e) { /* ignore */ }
+  var emailed = sendCredentials_(t.email, t.username, password, 'Your ' + CFG.APP_NAME + ' portal password has been reset');
   bumpSessionEpoch_(t.id);
   logAudit_(user, 'RESET_TEACHER_PASSWORD', t.username, '');
-  var emailed = sendCredentials_(t.email, t.username, password, 'Your ' + CFG.APP_NAME + ' portal password has been reset');
   return {
     credentialsEmailed: emailed, password: emailed ? '' : password,
     message: emailed ? ('A new password was emailed to ' + t.email + '.') : 'No email on file — the new temporary password is shown once below.'
@@ -3004,8 +3028,8 @@ function api_resetTeacherPassword(token, userId) {
 /* ==================== 15d. PUBLIC ADMISSIONS ==================== */
 
 var ADMISSION_STATUSES = ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED'];
-var APP_SUBMIT_COOLDOWN_SECONDS = 300; // per guardian phone/email
-var APP_FILE_MAX_BYTES = 7 * 1024 * 1024; // ~7 MB per uploaded file
+var APP_SUBMIT_COOLDOWN_SECONDS = 300;
+var APP_FILE_MAX_BYTES = 7 * 1024 * 1024;
 
 function admissionLevels_() { return getClassLevels_(); }
 function nextApplicationRef_() {
@@ -3060,8 +3084,6 @@ function assertApplicationScope_(user, a) {
   var sec = level ? level.section : '';
   if (sections.indexOf(sec) === -1) throw new Error('That application is outside your scope (' + (user.role === 'PRINCIPAL' ? 'secondary only' : 'primary & nursery only') + ').');
 }
-
-/** Public — no login required: submit an admission application from the website. */
 function escHtml_(s) {
   return String(s === null || s === undefined ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3097,7 +3119,6 @@ function admissionPdfBlob_(a, level) {
     return blob;
   } catch (e) { Logger.log('admissionPdfBlob_ failed: ' + (e && e.message ? e.message : e)); return null; }
 }
-/** Sends the applicant + all admin/principal recipients a summary of the application (with PDF). */
 function notifyAdmission_(a, level) {
   var subject = 'Admission application received — ' + a.ref + ' (' + [a.childFirstName, a.childLastName].filter(Boolean).join(' ') + ')';
   var text = [
@@ -3137,7 +3158,7 @@ function notifyAdmission_(a, level) {
 }
 function api_applyAdmission(payload) {
   payload = payload || {};
-  if (String(payload.website || '').replace(/\s/g, '')) return { ref: 'KMS/APP/0000', status: 'PENDING', submitted: true, message: 'Your application has been received.' }; // honeypot
+  if (String(payload.website || '').replace(/\s/g, '')) return { ref: 'KMS/APP/0000', status: 'PENDING', submitted: true, message: 'Your application has been received.' };
   var firstName = String(payload.firstName || '').trim(), lastName = String(payload.lastName || '').trim();
   if (!firstName || !lastName) throw new Error('First and last name are required.');
   if (['Male', 'Female'].indexOf(payload.gender) === -1) throw new Error('Select a gender.');
@@ -3232,7 +3253,13 @@ function admissionPage_(p) {
 function onOpen() {
   try {
     SpreadsheetApp.getUi().createMenu('Kings Metro')
-      .addItem('Run setup (RESET & re-seed)', 'setUp')
+      .addItem('Reset owner admin password', 'resetOwnerAdminPassword')
+      .addItem('Run FULL reset & re-seed (destructive)…', 'setUpConfirm')
       .addToUi();
   } catch (e) { /* not container-bound */ }
+}
+function setUpConfirm() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.alert('Destructive', 'This clears ALL data and re-seeds the admin with a NEW password. Continue?', ui.ButtonSet.YES_NO);
+  if (r === ui.Button.YES) { setUp(); ui.alert('Done. A fresh admin password has been emailed (or logged in the execution log).'); }
 }
