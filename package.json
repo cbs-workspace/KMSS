@@ -2,36 +2,11 @@
   "name": "kingsmetroschools",
   "version": "1.0.0",
   "private": true,
-  "description": "School Management System for Kings Metro School Sokoto",
-  "workspaces": [
-    "server",
-    "client"
-  ],
+  "description": "Kings Metro School Sokoto - public website (management portal runs on Google Apps Script)",
   "scripts": {
-    "dev": "concurrently -n site,server,client -c magenta,blue,green \"npm:site\" \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "node tools/serve-site.js",
     "site": "node tools/serve-site.js",
-    "dev:full": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "npm run dev --workspace server",
-    "dev:client": "npm run dev --workspace client",
-    "build": "npm run build --workspace server && npm run build --workspace client",
-    "lint": "npm run lint --workspace server && npm run lint --workspace client",
     "deploy": "npx --yes vercel@latest deploy --prod --yes",
-    "deploy:preview": "npx --yes vercel@latest deploy --yes",
-    "db:migrate": "npm run db:migrate --workspace server",
-    "db:generate": "npm run db:generate --workspace server",
-    "db:push": "npm run db:push --workspace server",
-    "db:seed": "npm run db:seed --workspace server",
-    "db:studio": "npm run db:studio --workspace server",
-    "db:up": "docker compose up -d --wait",
-    "db:down": "docker compose down"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true,
-    "@prisma/engines@6.19.3": true,
-    "prisma@6.19.3": true,
-    "@prisma/client@6.19.3": true
+    "deploy:preview": "npx --yes vercel@latest deploy --yes"
   }
 }
