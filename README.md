@@ -9,7 +9,7 @@ School Sokoto** (combined Creche / KG / Primary / Secondary).
   **already deployed online** under `cbs4u4me@gmail.com`. The website embeds it; users sign
   in through the live deployment link. There is no portal server to run or host.
 
-`apps-script/` in this repo is a **reference-only copy** of that Google Apps Script code, kept
+`Google_App_Script/` in this repo is a **reference-only copy** of that Google Apps Script code, kept
 so portal changes can be planned and version-controlled. It is **never run locally and never
 deployed** by this project — the live code is updated in the `cbs4u4me@gmail.com` Google Drive
 and redeployed on the same deployment link — see
@@ -27,7 +27,7 @@ are not part of the GitHub repository).
 **separate, already-deployed Google Apps Script (GAS) web app** that the website loads in an
 iframe. **You never run the portal/GAS locally — it runs on Google's servers.** Local work
 in this repo means editing `site/` and, when relevant, recording portal changes in
-`apps-script/` so they can be applied in the Apps Script editor.
+`Google_App_Script/` so they can be applied in the Apps Script editor.
 
 ### Two delivery targets (publish them separately)
 
@@ -37,13 +37,13 @@ deploying to Vercel does **not** update GitHub. Do both when a change should be 
 
 | Target | What ships | How to publish |
 | --- | --- | --- |
-| **GitHub** | the deployable code only — `site/`, `apps-script/`, `tools/`, `package.json`, `package-lock.json`, `.gitignore` (docs and legacy files are excluded) | `git add -A` → `git commit -m "..."` → `git push origin main` |
+| **GitHub** | the deployable code only — `site/`, `Google_App_Script/`, `tools/`, `package.json`, `package-lock.json`, `.gitignore` (docs and legacy files are excluded) | `git add -A` → `git commit -m "..."` → `git push origin main` |
 | **Vercel** | only `site/` (the public website) | `npm run deploy` (production) or `npm run deploy:preview` |
 
 ### Standard update loop
 
 ```powershell
-# 1. Edit site/ (and/or apps-script/ to record a portal change — see below)
+# 1. Edit site/ (and/or Google_App_Script/ to record a portal change — see below)
 # 2. Preview locally:  npm run dev   ->  http://localhost:8080
 # 3. Commit and push to GitHub
 git add -A
@@ -55,7 +55,7 @@ npm run deploy
 
 ### Changing the portal (Google Apps Script) — reference only
 
-The Apps Script code under `apps-script/` is a **reference copy for development only**. It is
+The Apps Script code under `Google_App_Script/` is a **reference copy for development only**. It is
 never run or deployed from this repo, and editing it here has **no effect on the live portal**.
 The code that actually runs lives in the Apps Script project in the Google Drive of
 **`cbs4u4me@gmail.com`**. Use the repo copy to plan/record a change, then apply it in that
@@ -63,14 +63,19 @@ Google account and redeploy.
 
 To change the portal:
 
-1. Make the change in the matching file under `apps-script/` (`Code.gs`, `index.html`,
+1. Make the change in the matching file under `Google_App_Script/` (`Code.gs`, `index.html`,
    `Admission.html`, `appsscript.json`) so the intended change is recorded in the repo.
 2. Sign in to <https://script.google.com> (or Google Drive) as **`cbs4u4me@gmail.com`**, open the
    Kings Metro Apps Script project, and apply the same change to the live code.
 3. **Redeploy the *existing* deployment** so its `/exec` link does not change:
    **Deploy → Manage deployments → select the current deployment → Edit (pencil) →
    Version: New version → Deploy.**
-4. Commit the `apps-script/` change and `git push origin main` (records source history only).
+4. Commit the `Google_App_Script/` change and `git push origin main` (records source history only).
+
+> 💡 **Prefer single-file pastes.** The maintainer updates the live project by pasting a file into
+> the Apps Script editor, so implement UI and most logic in **`index.html`** wherever possible
+> (one paste). Edit **`Code.gs`** only when the change genuinely needs server-side logic — such as
+> the email/PDF branding below — and make the `index.html` side self-sufficient where you can.
 
 > ⚠️ **Always create a "New version" on the existing deployment — never a brand-new deployment.**
 > The website's login iframe points at the current deployment's `/exec` URL
@@ -130,12 +135,11 @@ machine and are excluded by [`.gitignore`](.gitignore) — see [Never commit](#n
 │   ├── CBS_Logo_green.png
 │   └── music.mp3
 ├── tools/serve-site.js        # Zero-dependency static server for site/ (npm run site)  [GitHub]
-├── apps-script/               # REFERENCE copy of the deployed Google Apps Script  [GitHub]
-│   ├── Code.gs                # server logic, all api_* endpoints, seeders
-│   ├── index.html             # portal single-page UI
+├── Google_App_Script/         # REFERENCE copy of the deployed Google Apps Script  [GitHub]
+│   ├── Code.gs                # server logic, all api_* endpoints, seeders, email/PDF branding
+│   ├── index.html             # portal single-page UI + printed documents (receipt/report/fee sheet)
 │   ├── Admission.html         # public admission form
-│   ├── appsscript.json        # manifest
-│   └── legacy-modular/        # earlier modular Apps Script split (reference only)
+│   └── appsscript.json        # manifest
 ├── package.json               # root scripts (dev, site, deploy)                 [GitHub]
 ├── package-lock.json          # lockfile for the root scripts                    [GitHub]
 ├── .gitignore                 # excludes the local-only entries below            [GitHub]
@@ -148,7 +152,7 @@ machine and are excluded by [`.gitignore`](.gitignore) — see [Never commit](#n
 └── docker-compose.yml         # legacy compose file                          [LOCAL ONLY]
 ```
 
-`site/`, `tools/` and `apps-script/` are plain files — there are no npm workspaces.
+`site/`, `tools/` and `Google_App_Script/` are plain files — there are no npm workspaces.
 
 ---
 
@@ -255,7 +259,7 @@ The school portal is a Google Apps Script web app:
 
 - **Where it runs:** on Google's servers, bound to the Google Sheet/Drive owned by
   **`cbs4u4me@gmail.com`**. It is **not** run or hosted by this repository.
-- **`apps-script/` here is reference only:** a copy of the deployed source kept for development
+- **`Google_App_Script/` here is reference only:** a copy of the deployed source kept for development
   and history. It is never run or deployed by this repo. Future portal development is done in
   the Google Drive project of **`cbs4u4me@gmail.com`**, then **redeployed as a *New version* on
   the *existing* deployment** so the `/exec` link stays the same — see
@@ -270,12 +274,99 @@ The school portal is a Google Apps Script web app:
 
 ---
 
+## Portal branding — emails, PDFs & printed documents
+
+Every auto-generated message the portal sends, and every document it produces, shares one
+consistent identity (school green `#14532d`). **Keep these rules when adding any new email or
+printable** — never bypass them.
+
+### Outbound email — server-side (`Google_App_Script/Code.gs`)
+
+All portal email is sent through **`sendPortalMail_(opts)`** (near the top of `Code.gs`). It wraps
+every message automatically, so callers pass only the inner content. It guarantees:
+
+- **Hidden sender** — `MailApp` can only send from the script owner's Gmail, so the address is
+  obscured behind a display name: `SENDER_DISPLAY_NAME`
+  (default `"Kings Metro School Sokoto (No-Reply)"`).
+- **Replies routed to enquiries** — `replyTo` is always `ENQUIRIES_EMAIL`
+  (`info@kingsmetroschools.com.ng`).
+- **Auto-generated caveat + contact pointer** — in both the HTML body (red "DO NOT REPLY" banner
+  on top, footer below via `buildBrandedHtml_`) **and** the plain-text body (via `mailTextFooter_`),
+  stating the message is automated and giving the enquiries address and phone.
+- **Real From alias (optional)** — set `NOREPLY_FROM_ALIAS` to an address first added under
+  Gmail/Workspace **"Send mail as"** to send from it; leave blank to use the display name only.
+
+**To brand a new email:** call `sendPortalMail_({ to, subject, body, htmlBody })` where
+`htmlBody = buildBrandedHtml_(innerHtml)` (or `brandedPlainHtml_(text)` for simple text).
+**Never call `MailApp.sendEmail` directly** — that skips the branding. `SENDER_DISPLAY_NAME` and
+`ENQUIRIES_EMAIL` can also be overridden at runtime via Script Properties (no code edit).
+
+> The only intentional exception is the **SMS email-gateway** send inside `sendSmsText_`
+> (`to + gateway`): it is machine-to-machine to the SMS provider and must stay unbranded.
+
+### Admission PDF — server-side (`Google_App_Script/Code.gs`)
+
+`admissionPdfBlob_(a, level)` builds the email attachment with **DocumentApp** (no extra Google
+service needed): logo (fetched from `BRAND.logoUrl` via `brandLogoBlob_`), school name in green,
+subtitle + contact line, a full-width **green band** with the document title, a bordered details
+table, and a footer stating it is auto-generated with the enquiries address. Edit this one
+function to change that PDF.
+
+### Printed documents — client-side (`Google_App_Script/index.html`)
+
+Receipts, report cards and the fee schedule are **not** server PDFs — they are HTML rendered in the
+portal and printed via the browser (`window.print()`). They share two helpers so they match the
+email/PDF look:
+
+- **`docHeaderHtml(kind, brand?)`** — centred logo + school name (green) + subtitle + contact line,
+  followed by a green `.doc-band` carrying the title (e.g. `"Official Receipt"`,
+  `"Terminal Report"`, `"Fee Schedule"`).
+- **`docNoteHtml()`** — footer stating the document was generated automatically and pointing to
+  `info@kingsmetroschools.com.ng`.
+
+Used by `viewReport()` (report card), `receiptHtml()` (wrapped in `.receipt`) and the fee-schedule
+card. Supporting CSS lives in the `index.html` `<style>` block: `.report-head`, `.doc-band`,
+`.doc-note`, `.receipt .r-subtitle`, plus `@media print` rules that force the green colours with
+`print-color-adjust: exact`. **Add any new printable with `docHeaderHtml` + `docNoteHtml`.**
+
+### Applying a branding change
+
+Branding spans both portal files, so paste **both** `Code.gs` and `index.html` into the Apps Script
+editor, then redeploy as a **New version** on the existing deployment (see
+[Changing the portal](#changing-the-portal-google-apps-script-reference-only)). Verify by sending a
+real admission application (check the sender, banner, footer and PDF) and by opening a receipt and a
+report card in the portal and previewing the print output.
+
+---
+
 ## Roles
 
 `ADMIN`, `PRINCIPAL`, `HEADMASTER`, `BURSAR`, `ACCOUNT_OFFICER`, `TEACHER`, `PARENT`.
 Section scoping: Admin → all; Principal → Secondary; Headmaster → Primary + KG. Teachers can
 view students/academics, record attendance and enter scores; only Admin/Principal/Headmaster
 manage staff, admissions, subjects, publishing and announcements.
+
+---
+
+## Demo accounts (testing only)
+
+The `Users` tab ships with seeded demo logins — **every one shares the password `Demo@1234`**.
+They are created by `createDemoUsers()` / `createDemoParents()` in `Code.gs` and are listed live
+in the spreadsheet's `Users` tab and the portal **Users** page (Admin only):
+
+| Username | Role | Scope |
+| --- | --- | --- |
+| `demo.admin` | ADMIN | All sections |
+| `demo.principal` | PRINCIPAL | Secondary |
+| `demo.headmaster` | HEADMASTER | Primary + KG |
+| `demo.bursar` | BURSAR | All sections |
+| `demo.account` | ACCOUNT_OFFICER | All sections |
+| `demo.t.kg.hod`, `demo.t.primary.hod`, `demo.t.secondary.hod` | TEACHER | Their section, all class arms |
+| `demo.t.<sec>.1` … `demo.t.<sec>.N` | TEACHER | Their section, one per active class arm (`<sec>` = `kg` / `primary` / `secondary`) |
+| `demo.parent1` … `demo.parent10` | PARENT | Their linked wards |
+
+The **owner administrator** (`cbs4u4me@gmail.com`) is separate — its password is auto-generated
+and emailed during `setUp()`. **Deactivate every `demo.*` account before go-live.**
 
 ---
 

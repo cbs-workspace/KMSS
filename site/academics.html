@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Academics — Kings Metro School Sokoto</title>
+  <meta name="description" content="Creche & Kindergarten, Primary and Secondary programmes at Kings Metro School Sokoto — one continuous journey.">
+  <link rel="icon" href="/Logo_kmss.png">
+  <link rel="apple-touch-icon" href="/Logo_kmss.png">
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <meta name="theme-color" content="#0b1220">
+  <script>
+    /* Apply theme before first paint to avoid a flash. Default = dark. */
+    (function () {
+      try {
+        var t = localStorage.getItem('kms-theme');
+        var dark = t ? (t === 'dark') : true;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) { document.documentElement.classList.add('dark'); }
+    })();
+  </script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+
+  <div class="marquee" id="marquee" role="region" aria-label="School announcements"></div>
+
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <img src="/Logo_kmss.png" alt="Kings Metro School crest" width="48" height="48" decoding="async">
+        <span>
+          <span class="name" id="brand-name">Kings Metro School Sokoto</span>
+          <span class="tag">Creche &middot; Kindergarten &middot; Primary &middot; Secondary</span>
+        </span>
+      </a>
+      <nav class="main" id="main-nav" aria-label="Primary">
+        <a href="/about.html">About</a>
+        <a href="/academics.html" class="active" aria-current="page">Academics</a>
+        <a href="/admissions.html">Admissions</a>
+        <a href="/gallery.html">Gallery</a>
+        <a href="/contact.html">Contact</a>
+      </nav>
+      <div class="header-actions">
+        <button class="btn btn-outline menu-toggle" id="menu-toggle" type="button" aria-label="Menu">Menu</button>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+        <button class="btn btn-primary" data-login type="button">Staff / Parent Login</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+  <section class="page-head">
+    <div class="wrap">
+      <div class="kicker">Academics</div>
+      <h1>Three stages, one continuous journey</h1>
+      <p>A seamless progression from early years through to school-leaving, with a curriculum suited to each stage.</p>
+    </div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="grid cols-3">
+        <div class="card">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
+          <h3>Creche &amp; Kindergarten</h3>
+          <p class="levels">Creche &middot; Pre-Nursery &middot; Nursery 1 &amp; 2 &middot; KG</p>
+          <p class="muted" style="font-size:14px">A warm, play-based start that builds early language, number sense and social confidence.</p>
+          <div class="tags"><span class="tag">Numeracy</span><span class="tag">Literacy</span><span class="tag">Rhymes</span></div>
+        </div>
+        <div class="card">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          <h3>Primary</h3>
+          <p class="levels">Primary 1 &ndash; Primary 6</p>
+          <p class="muted" style="font-size:14px">A strong foundation in the core subjects, with growing independence and good study habits.</p>
+          <div class="tags"><span class="tag">Mathematics</span><span class="tag">English Studies</span><span class="tag">Basic Science &amp; Technology</span><span class="tag">National Values</span><span class="tag">Cultural &amp; Creative Arts</span></div>
+        </div>
+        <div class="card">
+          <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg></div>
+          <h3>Secondary</h3>
+          <p class="levels">JSS 1 &ndash; 3 &middot; SSS 1 &ndash; 3</p>
+          <p class="muted" style="font-size:14px">Junior and senior secondary studies with strong science, arts and commercial foundations.</p>
+          <div class="tags"><span class="tag">Mathematics</span><span class="tag">English Language</span><span class="tag">Biology</span><span class="tag">Chemistry</span><span class="tag">Physics</span><span class="tag">Economics</span><span class="tag">Government</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <div class="cols">
+        <div>
+          <div class="footer-brand"><img src="/Logo_kmss.png" alt="" width="38" height="38" loading="lazy" decoding="async"><span id="footer-name">Kings Metro School Sokoto</span></div>
+          <p style="margin-top:14px;font-size:14px">Nurturing excellence from Creche to Secondary in Sokoto, Nigeria.</p>
+        </div>
+        <div>
+          <h4>Explore</h4>
+          <a href="/about.html">About</a>
+          <a href="/academics.html">Academics</a>
+          <a href="/admissions.html">Admissions</a>
+          <a href="/gallery.html">Gallery</a>
+          <a href="/contact.html">Contact</a>
+        </div>
+        <div>
+          <h4>Portal</h4>
+          <a href="#" data-login>Staff Login</a>
+          <a href="#" data-login>Parent Login</a>
+          <a href="/contact.html">Enquiries</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div class="cbs"><img src="/CBS_Logo_green.png" alt="CBS" height="26" loading="lazy" decoding="async"><span>&copy; 2026 Capacity Building and Support (CBS). All rights reserved.</span></div>
+        <span>Built for Kings Metro School Sokoto</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- login modal -->
+  <div class="overlay" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="t"><img src="/Logo_kmss.png" alt=""><span id="login-title">Portal Login</span></div>
+        <a id="login-external" href="#" target="_blank" rel="noreferrer">Open in new tab</a>
+        <button type="button" id="login-close" aria-label="Close">Close</button>
+      </div>
+      <div class="modal-body">
+        <iframe id="login-frame" title="Kings Metro Portal" allow="clipboard-write"></iframe>
+      </div>
+      <div class="modal-note">Use the username and password issued by the school office. If you have forgotten your password, please contact the office.</div>
+    </div>
+  </div>
+
+  <!-- background music -->
+  <audio id="bg-music" src="music.mp3" loop preload="auto"></audio>
+  <button class="music-btn" id="music-btn" type="button" aria-label="Toggle background music" aria-pressed="false">
+    <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="label">Music</span>
+  </button>
+
+  <!-- floating quick-access rail -->
+  <nav class="fab-rail" id="fab-rail" aria-label="Quick actions">
+    <a class="fab fab-contact" href="/contact.html" aria-label="Contact the school">
+      <span class="fab-label">Contact</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    </a>
+    <a class="fab fab-apply" href="/admissions.html" aria-label="Apply for admission">
+      <span class="fab-label">Apply</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>
+    </a>
+    <button class="fab fab-portal" data-login type="button" aria-label="Staff and parent portal">
+      <span class="fab-label">Portal</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+    </button>
+    <button class="fab fab-top" id="fab-top" type="button" aria-label="Back to top">
+      <span class="fab-label">Top</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+    </button>
+  </nav>
+
+  <script src="/app.js"></script>
+</body>
+</html>
