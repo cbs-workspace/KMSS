@@ -25,10 +25,21 @@ var OWNER_ADMIN_EMAIL = 'cbs4u4me@gmail.com';
 var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 var DEMO_PASSWORD = 'Demo@1234';
 
+// Outbound-mail branding. MailApp can only send from the script owner's address,
+// so the raw Gmail is hidden behind a display name; replies are routed to the
+// enquiries mailbox. To send from a real alias, add it under Gmail/Workspace
+// "Send mail as" and set NOREPLY_FROM_ALIAS to that address.
+var SENDER_DISPLAY_NAME = 'Kings Metro School Sokoto (No-Reply)';
+var ENQUIRIES_EMAIL = 'info@kingsmetroschools.com.ng';
+var NOREPLY_FROM_ALIAS = '';
+var SCHOOL_PHONE = '+234 812 210 0528';
+var SCHOOL_ADDRESS = 'Sokoto, Sokoto State, Nigeria';
+
 var CFG = {
   APP_NAME: 'Kings Metro School Sokoto',
   APP_SUBTITLE: 'KG · Primary · Secondary',
   DEFAULT_FOOTER_TEXT: '© 2026 Capacity Building and Support (CBS). All rights reserved.',
+  DEFAULT_LOGO_URL: 'https://kingsmetroschools.vercel.app/Logo_kmss.png',
   SESSION_TTL_SECONDS: 21600, // 6 hours
   LOGIN_MAX_FAILURES: 5,
   LOGIN_LOCKOUT_SECONDS: 900, // 15 minutes
@@ -70,14 +81,15 @@ var HEADERS = {
   Payments: ['id', 'studentId', 'parentUserId', 'termId', 'category', 'amount', 'method', 'reference', 'note', 'status', 'evidenceFileId', 'evidenceUrl', 'verifiedBy', 'verifiedAt', 'createdAt', 'updatedAt', 'feePlanId', 'installmentNo', 'amountPaid', 'balanceAfter', 'receiptNo', 'viewfile', 'items'],
   Files: ['id', 'ownerType', 'ownerId', 'name', 'mimeType', 'size', 'driveFileId', 'url', 'uploadedBy', 'createdAt'],
   Announcements: ['id', 'title', 'body', 'audience', 'createdBy', 'createdAt', 'active', 'category', 'link'],
-  Applications: ['id', 'ref', 'childFirstName', 'childMiddleName', 'childLastName', 'gender', 'dateOfBirth', 'classLevelId', 'guardianName', 'guardianPhone', 'guardianEmail', 'address', 'previousSchool', 'notes', 'photoFileId', 'documentFileId', 'status', 'submittedAt', 'reviewedAt', 'reviewedBy', 'remarks'],
+  Applications: ['timestamp', 'ref', 'childNames', 'gender', 'dateOfBirth', 'nationality', 'state', 'lga', 'classLevel', 'guardianName', 'guardianPhone', 'guardianEmail', 'guardianState', 'guardianLga', 'address', 'previousSchool', 'notes', 'photoFileId', 'primaryCertFileId', 'juniorCertFileId', 'applicationFeeFileId', 'status', 'reviewedAt', 'reviewedBy', 'remarks'],
   Fees: ['id', 'name', 'category', 'section', 'classLevelId', 'sessionName', 'termName', 'amount', 'mandatory', 'active', 'orderIndex', 'note', 'updatedAt'],
   FeeSelections: ['id', 'studentId', 'parentUserId', 'termId', 'feeId', 'category', 'name', 'amount', 'mandatory', 'selected', 'createdAt', 'updatedAt'],
   FeePlans: ['id', 'studentId', 'parentUserId', 'termId', 'installments', 'createdAt', 'updatedAt'],
   StaffAttendance: ['id', 'date', 'staffId', 'status', 'note', 'recordedBy', 'createdAt'],
   Timetable: ['id', 'termId', 'classArmId', 'dayOfWeek', 'startTime', 'endTime', 'subjectId', 'title', 'teacher', 'room', 'kind', 'note', 'createdBy', 'createdAt', 'updatedAt'],
   Settings: ['key', 'value', 'updatedAt'],
-  AuditLog: ['id', 'at', 'actorId', 'actorUsername', 'action', 'target', 'detail']
+  AuditLog: ['id', 'at', 'actorId', 'actorUsername', 'action', 'target', 'detail'],
+  AdmissionLetters: ['id', 'ref', 'childName', 'guardianName', 'email', 'sentBy', 'sentAt', 'status', 'letterRef', 'error']
 };
 
 function brand_() {
@@ -86,7 +98,7 @@ function brand_() {
     schoolName: p.getProperty('SCHOOL_NAME') || CFG.APP_NAME,
     subtitle: CFG.APP_SUBTITLE,
     footerText: p.getProperty('FOOTER_TEXT') || CFG.DEFAULT_FOOTER_TEXT,
-    logoUrl: p.getProperty('SCHOOL_LOGO_URL') || '',
+    logoUrl: p.getProperty('SCHOOL_LOGO_URL') || CFG.DEFAULT_LOGO_URL,
     cbsLogoUrl: p.getProperty('CBS_LOGO_URL') || ''
   };
 }
@@ -96,6 +108,7 @@ function brand_() {
 function uuid_() { return Utilities.getUuid(); }
 function nowIso_() { return new Date().toISOString(); }
 function todayIso_() { try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+function nowLocalStamp_() { try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'); } catch (e) { return new Date().toISOString().replace('T', ' ').slice(0, 19); } }
 function toBool_(value) {
   if (value === true || value === false) return value;
   var s = String(value).toLowerCase();
@@ -180,12 +193,18 @@ function readTable_(name) {
     for (var i = 1; i < values.length; i++) {
       if (values[i].join('').toString().trim() === '') continue;
       var obj = { _row: i + 1 };
-      for (var c = 0; c < headers.length; c++) obj[headers[c]] = values[i][c];
+      for (var c = 0; c < headers.length; c++) obj[headers[c]] = sheetCellValue_(values[i][c]);
       rows.push(obj);
     }
   }
   __tables[name] = rows;
   return rows;
+}
+function sheetCellValue_(v) {
+  if (Object.prototype.toString.call(v) !== '[object Date]') return v;
+  var tz = Session.getScriptTimeZone();
+  var hasTime = Utilities.formatDate(v, tz, 'HH:mm:ss') !== '00:00:00';
+  return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd');
 }
 function readTableSafe_(name) { try { return readTable_(name); } catch (e) { return []; } }
 function findById_(name, id) {
@@ -229,6 +248,20 @@ function updateRow_(name, id, patch) {
   }
   return true;
 }
+function updateRowByKey_(name, keyField, keyValue, patch) {
+  var rows = readTable_(name), target = null;
+  for (var i = 0; i < rows.length; i++) if (String(rows[i][keyField]) === String(keyValue)) { target = rows[i]; break; }
+  if (!target) return false;
+  var sheet = getSheet_(name), headers = HEADERS[name];
+  for (var c = 0; c < headers.length; c++) {
+    if (Object.prototype.hasOwnProperty.call(patch, headers[c])) {
+      var v = patch[headers[c]] === null ? '' : patch[headers[c]];
+      sheet.getRange(target._row, c + 1).setValue(v);
+      target[headers[c]] = v; // keep cache hot
+    }
+  }
+  return true;
+}
 function deleteRow_(name, id) {
   var sheet = getSheet_(name), values = sheet.getDataRange().getValues();
   for (var i = 1; i < values.length; i++) if (String(values[i][0]) === String(id)) { sheet.deleteRow(i + 1); invalidateTable_(name); return true; }
@@ -251,10 +284,59 @@ function makePassword_() {
   for (var i = 0; i < 12; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
   return out;
 }
+function mailSenderName_() {
+  try { return PropertiesService.getScriptProperties().getProperty('SENDER_DISPLAY_NAME') || SENDER_DISPLAY_NAME; } catch (e) { return SENDER_DISPLAY_NAME; }
+}
+function mailEnquiriesAddress_() {
+  try { return PropertiesService.getScriptProperties().getProperty('ENQUIRIES_EMAIL') || ENQUIRIES_EMAIL; } catch (e) { return ENQUIRIES_EMAIL; }
+}
+function noReplyBanner_() {
+  return '<div style="max-width:640px;margin:0 auto;background:#b3261e;color:#ffffff;padding:10px 16px;text-align:center;font-size:12.5px;font-weight:700">' +
+    '&#9888; DO NOT REPLY &mdash; this is an automated message from ' + escHtml_(CFG.APP_NAME) + '.</div>';
+}
+function mailFooterBlock_() {
+  var addr = mailEnquiriesAddress_();
+  return '<div style="max-width:640px;margin:0 auto;background:#f4f7f5;border:1px solid #dbe5df;border-top:none;padding:12px 16px;text-align:center">' +
+    '<p style="margin:0;font-size:12px;color:#46584f">This email was generated automatically and cannot receive replies. For all enquiries, contact ' +
+    '<a href="mailto:' + addr + '" style="color:#14532d;font-weight:600;text-decoration:none">' + addr + '</a>.</p>' +
+    '<p style="margin:6px 0 0;font-size:11px;color:#7a8a82">' + escHtml_(CFG.APP_NAME) + ' &middot; ' + escHtml_(CFG.APP_SUBTITLE) + ' &middot; ' + escHtml_(SCHOOL_ADDRESS) + ' &middot; ' + escHtml_(SCHOOL_PHONE) + '</p>' +
+    '</div>';
+}
+function buildBrandedHtml_(innerHtml) {
+  return '<div style="background:#eef2f0;margin:0;padding:0;font-family:Segoe UI,Arial,Helvetica,sans-serif;color:#1b2a26">' +
+    noReplyBanner_() + '<div style="max-width:640px;margin:0 auto">' + (innerHtml || '') + '</div>' + mailFooterBlock_() + '</div>';
+}
+function brandedPlainHtml_(text) {
+  return buildBrandedHtml_('<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px;font-size:14px;line-height:1.5">' + escHtml_(text).replace(/\n/g, '<br>') + '</div>');
+}
+function mailTextFooter_() {
+  return '\n\n—\nThis is an automated message — please do not reply.\nFor all enquiries, contact ' + mailEnquiriesAddress_() + ' or ' + SCHOOL_PHONE + '.';
+}
+function sendPortalMail_(opts) {
+  opts = opts || {};
+  if (!opts.to) return false;
+  var text = String(opts.body || '');
+  if (text.indexOf('automated message') === -1) text += mailTextFooter_();
+  var html = opts.htmlBody || '';
+  if (html && html.indexOf('generated automatically') === -1) {
+    html = buildBrandedHtml_('<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px;font-size:14px;line-height:1.5">' + html + '</div>');
+  }
+  var o = { to: opts.to, subject: opts.subject || CFG.APP_NAME, body: text };
+  if (html) o.htmlBody = html;
+  if (opts.attachments) o.attachments = opts.attachments;
+  if (opts.cc) o.cc = opts.cc;
+  if (opts.bcc) o.bcc = opts.bcc;
+  o.name = opts.name || mailSenderName_();
+  var reply = opts.replyTo || mailEnquiriesAddress_();
+  if (reply && EMAIL_RE.test(reply)) o.replyTo = reply;
+  if (NOREPLY_FROM_ALIAS && EMAIL_RE.test(NOREPLY_FROM_ALIAS)) o.from = NOREPLY_FROM_ALIAS;
+  MailApp.sendEmail(o);
+  return true;
+}
 function sendCredentials_(to, username, password, subject) {
   if (!to) return false;
   try {
-    MailApp.sendEmail(to, subject || 'Your ' + CFG.APP_NAME + ' portal login', [
+    var text = [
       'Your portal sign-in details:',
       '',
       'Username: ' + username,
@@ -263,7 +345,16 @@ function sendCredentials_(to, username, password, subject) {
       'After signing in, use Change password (top right) to set your own password.',
       '',
       CFG.APP_NAME + ' · Portal'
-    ].join('\n'));
+    ].join('\n');
+    var inner = '<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px;font-size:14px;line-height:1.5">' +
+      '<p style="margin:0 0 12px">Your portal sign-in details:</p>' +
+      '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">' +
+      '<tr><td style="padding:6px 12px 6px 0;color:#5c6b63">Username</td><td style="font-weight:600;font-family:Consolas,Menlo,monospace">' + escHtml_(username) + '</td></tr>' +
+      '<tr><td style="padding:6px 12px 6px 0;color:#5c6b63">Password</td><td style="font-weight:600;font-family:Consolas,Menlo,monospace">' + escHtml_(password) + '</td></tr>' +
+      '</table>' +
+      '<p style="margin:16px 0 0">After signing in, use <strong>Change password</strong> to set your own password.</p>' +
+      '</div>';
+    sendPortalMail_({ to: to, subject: subject || ('Your ' + CFG.APP_NAME + ' portal login'), body: text, htmlBody: buildBrandedHtml_(inner) });
     return true;
   } catch (e) {
     Logger.log('sendCredentials_ failed for ' + to + ': ' + (e && e.message ? e.message : e));
@@ -276,7 +367,7 @@ function diagnoseMail() {
   Logger.log('Signed-in account: ' + Session.getActiveUser().getEmail());
   Logger.log('Remaining email quota today: ' + quota + (quota === 0 ? '  (EXHAUSTED — wait ~24h or use a paid Workspace account)' : ''));
   try {
-    MailApp.sendEmail(OWNER_ADMIN_EMAIL, 'Kings Metro test email', 'If you can read this, MailApp works.');
+    sendPortalMail_({ to: OWNER_ADMIN_EMAIL, subject: 'Kings Metro test email', body: 'If you can read this, MailApp works.', htmlBody: brandedPlainHtml_('If you can read this, MailApp works.') });
     Logger.log('Test email sent to ' + OWNER_ADMIN_EMAIL + '.');
   } catch (e) {
     Logger.log('Test email FAILED: ' + (e && e.message ? e.message : e));
@@ -1072,12 +1163,14 @@ function createDemoApplications_() {
     var level = levels.length ? levels[(i * 3) % levels.length] : {};
     seq++;
     rows.push({
-      id: uuid_(), ref: prefix + demoPad_(seq, 4), childFirstName: first, childMiddleName: '', childLastName: last,
-      gender: male ? 'Male' : 'Female', dateOfBirth: demoDob_(5 + (i % 12)), classLevelId: level.id || '',
+      timestamp: now, ref: prefix + demoPad_(seq, 4), childNames: buildChildNames_(first, '', last),
+      gender: male ? 'Male' : 'Female', dateOfBirth: demoDob_(5 + (i % 12)),
+      nationality: 'Nigerian', state: 'Sokoto', lga: 'Sokoto North', classLevel: level.name || '',
       guardianName: DEMO_FIRST_MALE[(i * 4 + 2) % DEMO_FIRST_MALE.length] + ' ' + last, guardianPhone: demoPhone_(),
-      guardianEmail: demoEmail_(first, last, 300 + i), address: DEMO_STREETS[(i * 4) % DEMO_STREETS.length] + ', Sokoto',
-      previousSchool: '', notes: '', photoFileId: '', documentFileId: '', status: status,
-      submittedAt: now, reviewedAt: status === 'PENDING' ? '' : now, reviewedBy: status === 'PENDING' ? '' : adminId, remarks: ''
+      guardianEmail: demoEmail_(first, last, 300 + i), guardianState: 'Sokoto', guardianLga: 'Sokoto North',
+      address: DEMO_STREETS[(i * 4) % DEMO_STREETS.length] + ', Sokoto',
+      previousSchool: '', notes: '', photoFileId: '', primaryCertFileId: '', juniorCertFileId: '', applicationFeeFileId: '',
+      status: status, reviewedAt: status === 'PENDING' ? '' : now, reviewedBy: status === 'PENDING' ? '' : adminId, remarks: ''
     });
   });
   bulkAppend_('Applications', rows);
@@ -1153,7 +1246,8 @@ function decorateStudent_(s, armsById) {
     id: s.id, admissionNo: s.admissionNo, firstName: s.firstName, middleName: s.middleName, lastName: s.lastName,
     gender: s.gender, dateOfBirth: s.dateOfBirth, classArmId: s.classArmId,
     classArm: arm ? { id: arm.id, name: arm.name, classLevel: arm.classLevel } : null,
-    guardianName: s.guardianName, guardianPhone: s.guardianPhone, address: s.address, status: s.status, photoFileId: s.photoFileId
+    guardianName: s.guardianName, guardianPhone: s.guardianPhone, address: s.address, status: s.status, photoFileId: s.photoFileId,
+    createdAt: s.createdAt
   };
 }
 function assertArmAllowed_(user, armId) {
@@ -1198,6 +1292,9 @@ function api_listStudents(token, opts) {
   var q = String(opts.search || '').trim().toLowerCase();
   if (q) list = list.filter(function (s) { return [s.firstName, s.middleName, s.lastName, s.admissionNo].join(' ').toLowerCase().indexOf(q) !== -1; });
   list.sort(function (a, b) { var an = String(a.lastName || '').toLowerCase(), bn = String(b.lastName || '').toLowerCase(); return an !== bn ? (an < bn ? -1 : 1) : (String(a.firstName) < String(b.firstName) ? -1 : 1); });
+  if (user.role === 'BURSAR' || user.role === 'ACCOUNT_OFFICER') {
+    return list.map(function (s) { return { id: s.id, admissionNo: s.admissionNo, firstName: s.firstName, middleName: s.middleName, lastName: s.lastName }; });
+  }
   return list.map(function (s) { return decorateStudent_(s, armsById); });
 }
 function api_getStudent(token, id) {
@@ -1310,6 +1407,7 @@ function api_deleteStaff(token, id) {
 
 function api_getRoster(token, classArmId, date) {
   var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to view the attendance register.');
   assertArmAllowed_(user, classArmId);
   var armsById = armsMap_(user);
   var students = readTable_('Students').filter(function (s) { return String(s.classArmId) === String(classArmId) && String(s.status) !== 'INACTIVE'; });
@@ -1340,6 +1438,7 @@ function api_saveAttendance(token, classArmId, date, records) {
 }
 function api_attendanceSummary(token, classArmId, from, to) {
   var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to view attendance summaries.');
   assertArmAllowed_(user, classArmId);
   var students = readTable_('Students').filter(function (s) { return String(s.classArmId) === String(classArmId); });
   var counts = {}; students.forEach(function (s) { counts[s.id] = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0, total: 0 }; });
@@ -1361,6 +1460,7 @@ function clampScore_(v, max) { if (v === '' || v === null || v === undefined) re
 function totalFor_(s) { return (s.ca1 === '' ? 0 : Number(s.ca1)) + (s.ca2 === '' ? 0 : Number(s.ca2)) + (s.ca3 === '' ? 0 : Number(s.ca3)) + (s.exam === '' ? 0 : Number(s.exam)); }
 function api_getScoreSheet(token, classArmId, termId, subjectId) {
   var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to view score sheets.');
   assertArmAllowed_(user, classArmId);
   var armsById = armsMap_(user);
   var students = readTable_('Students').filter(function (s) { return String(s.classArmId) === String(classArmId) && String(s.status) !== 'INACTIVE'; });
@@ -1483,6 +1583,7 @@ function api_computeResults(token, classArmId, termId) {
 }
 function api_listResultSheets(token, classArmId, termId) {
   var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to view result sheets.');
   assertArmAllowed_(user, classArmId);
   var armsById = armsMap_(user), computed = computeClassResults_(classArmId, termId), sheets = {};
   readTable_('ResultSheets').forEach(function (r) { if (String(r.termId) === String(termId)) sheets[r.studentId] = r; });
@@ -1637,19 +1738,33 @@ function ensureFeeTables() {
   Logger.log('Fee/settings, staff-register and timetable tables ensured. (Run setUp() to clear & re-seed everything.)');
   return true;
 }
+/** Secret Settings keys — never sent in plaintext to the browser. */
+var SECRET_SETTING_KEYS = ['SMS_API_KEY'];
+var SECRET_SETTING_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; // ••••••••
+
 function api_getSettings(token) {
   var user = requireUser_(token);
   assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'], 'You cannot view settings.');
   var out = {};
   readTable_('Settings').forEach(function (r) { out[r.key] = r.value; });
   if (!out.ADMISSION_NOTIFY_EMAILS) out.ADMISSION_NOTIFY_EMAILS = OWNER_ADMIN_EMAIL;
+  // Redact secrets. The UI treats the mask as "unchanged" and skips the write.
+  SECRET_SETTING_KEYS.forEach(function (k) {
+    if (out[k]) out[k] = SECRET_SETTING_MASK;
+  });
   return out;
 }
 function api_saveSettings(token, payload) {
   var user = requireUser_(token);
   assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'You cannot change settings.');
   payload = payload || {};
-  Object.keys(payload).forEach(function (key) { setSetting_(key, String(payload[key] || '')); });
+  Object.keys(payload).forEach(function (key) {
+    var incoming = String(payload[key] || '');
+    // Unchanged secret: the browser only ever sees the mask, so a masked
+    // value on save means "leave the stored secret alone".
+    if (SECRET_SETTING_KEYS.indexOf(key) !== -1 && incoming === SECRET_SETTING_MASK) return;
+    setSetting_(key, incoming);
+  });
   logAudit_(user, 'UPDATE_SETTINGS', '', Object.keys(payload).join(','));
   return api_getSettings(token);
 }
@@ -1906,7 +2021,8 @@ function api_saveFeeSelection(token, studentId, termId, payload) {
 }
 var FEE_WRITE_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
 function api_listFees(token, opts) {
-  requireUser_(token);
+  var user = requireUser_(token);
+  assertRole_(user, ['PRINCIPAL', 'HEADMASTER', 'BURSAR'], 'You do not have permission to view the fee catalogue.');
   opts = opts || {};
   var list = readTableSafe_('Fees');
   if (opts.activeOnly) list = list.filter(function (f) { return toBool_(f.active); });
@@ -2076,6 +2192,7 @@ function api_dashboard(token) {
 }
 function api_searchDirectory(token, query) {
   var user = requireUser_(token);
+  assertRole_(user, ['PRINCIPAL', 'HEADMASTER', 'TEACHER', 'PARENT'], 'Directory search is not available to your role.');
   var q = String(query || '').trim().toLowerCase();
   var arms = armsMap_(user);
   var out = { students: [], staff: [] };
@@ -2394,11 +2511,11 @@ function dispatchMessages_(emails, phones, channel, subject, body, html) {
   if (emailList.length > budget) emailList = emailList.slice(0, budget);
   var remaining = Math.max(0, budget - emailList.length);
   if (phoneList.length > remaining) phoneList = phoneList.slice(0, remaining);
-  var htmlBody = '<div style="font-family:Arial,Helvetica,sans-serif;color:#1b2a26;font-size:14px">' + (html || escHtml_(body).replace(/\n/g, '<br>')) + '</div>';
+  var htmlBody = buildBrandedHtml_('<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px;font-size:14px;line-height:1.5">' + (html || escHtml_(body).replace(/\n/g, '<br>')) + '</div>');
   var quota = -1; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { /* ignore */ }
   var emailSent = 0, emailFailed = 0;
   emailList.forEach(function (addr) {
-    try { MailApp.sendEmail({ to: addr, subject: subject, body: body, htmlBody: htmlBody }); emailSent++; }
+    try { sendPortalMail_({ to: addr, subject: subject, body: body, htmlBody: htmlBody }); emailSent++; }
     catch (e) { emailFailed++; }
   });
   var smsSent = 0, smsFailed = 0, smsSkipped = 0;
@@ -2514,7 +2631,7 @@ function api_sendFeeReminders(token, termId, opts) {
       'Kindly settle this balance at the school office. If you have already paid, please disregard this message.', '',
       CFG.APP_NAME + ' \u00B7 Finance Office'
     ].join('\n');
-    if (wantsEmail && email) { try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; delivered = true; } catch (e) { failed++; } }
+    if (wantsEmail && email) { try { sendPortalMail_({ to: email, subject: subject, body: bodyText, htmlBody: brandedPlainHtml_(bodyText) }); sent++; delivered = true; } catch (e) { failed++; } }
     if (wantsSms && phone) { var sr = sendSmsText_(phone, bodyText, subject); if (sr.ok) { sent++; delivered = true; } else if (sr.reason !== 'not-configured' && sr.reason !== 'no-phone') failed++; }
     if (!delivered) skipped++;
   });
@@ -2568,7 +2685,7 @@ function api_sendAttendanceAlerts(token, opts) {
       'We are concerned about this level of attendance. Kindly ensure regular attendance and contact the school office if there are difficulties.', '',
       CFG.APP_NAME + ' \u00B7 School Office'
     ].join('\n');
-    if (wantsEmail && email) { try { MailApp.sendEmail({ to: email, subject: subject, body: bodyText }); sent++; delivered = true; } catch (e) { failed++; } }
+    if (wantsEmail && email) { try { sendPortalMail_({ to: email, subject: subject, body: bodyText, htmlBody: brandedPlainHtml_(bodyText) }); sent++; delivered = true; } catch (e) { failed++; } }
     if (wantsSms && phone) { var sr = sendSmsText_(phone, bodyText, subject); if (sr.ok) { sent++; delivered = true; } else if (sr.reason !== 'not-configured' && sr.reason !== 'no-phone') failed++; }
     if (!delivered) skipped++;
   });
@@ -2739,10 +2856,29 @@ function api_bootstrap(token) {
     currentTermId: current ? current.id : ''
   };
 }
-var REF_WRITE_ROLES = ['PRINCIPAL', 'HEADMASTER', 'BURSAR'];
+var REF_WRITE_ROLES = ['PRINCIPAL', 'HEADMASTER'];
+/**
+ * Read allow-list for api_listRef. Anything not in this map is refused, so
+ * the setup/admin panel cannot be used to read raw Payments, Scores,
+ * Applications, AuditLog, etc. ADMIN auto-passes hasRole_; the listed roles
+ * mirror what the UI actually needs (ADMIN_TABS + parent-ward linking).
+ */
+var REF_READ_ROLES = {
+  ClassLevels:    ['PRINCIPAL', 'HEADMASTER'],
+  ClassArms:      ['PRINCIPAL', 'HEADMASTER'],
+  Subjects:       ['PRINCIPAL', 'HEADMASTER'],
+  SubjectClass:   ['PRINCIPAL', 'HEADMASTER'],
+  Terms:          ['PRINCIPAL', 'HEADMASTER'],
+  GradeScale:     ['PRINCIPAL', 'HEADMASTER'],
+  ParentStudents: ['PRINCIPAL', 'HEADMASTER'],
+  Users:          ['PRINCIPAL', 'HEADMASTER']  // returns sanitizeUser_ — never passwordHash/salt
+};
+
 function api_listRef(token, name) {
-  requireUser_(token);
+  var user = requireUser_(token);
   if (!HEADERS[name]) throw new Error('Unknown table: ' + name);
+  if (!REF_READ_ROLES[name]) throw new Error('That table is not available through this endpoint.');
+  assertRole_(user, REF_READ_ROLES[name], 'You do not have access to that table.');
   if (name === 'Users') return readTable_('Users').map(sanitizeUser_);
   if (name === 'ParentStudents') {
     var usersById = indexById_(readTable_('Users')), studentsById = indexById_(readTable_('Students'));
@@ -2753,6 +2889,8 @@ function api_listRef(token, name) {
   }
   return readTable_(name).map(stripRow_);
 }
+
+
 function api_saveRef(token, name, payload) {
   var user = requireUser_(token);
   if (!HEADERS[name]) throw new Error('Unknown table: ' + name);
@@ -3029,9 +3167,55 @@ function api_resetTeacherPassword(token, userId) {
 
 var ADMISSION_STATUSES = ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED'];
 var APP_SUBMIT_COOLDOWN_SECONDS = 300;
-var APP_FILE_MAX_BYTES = 7 * 1024 * 1024;
+var APP_FILE_MAX_BYTES = 3 * 1024 * 1024;
+var STATE_LGA_SHEET = '13eOPmME-XQ95Wl23iMDQbFu9Hs04V22f5KkZgqwCToI';
+var APPLICATION_FILES = [
+  { header: 'photoFileId', kind: 'photo', label: 'link to passport photograph' },
+  { header: 'primaryCertFileId', kind: 'primaryCert', label: 'link to primary school certificate' },
+  { header: 'juniorCertFileId', kind: 'juniorCert', label: 'link to junior school certificate' },
+  { header: 'applicationFeeFileId', kind: 'applicationFee', label: 'link to evidence of application fee' }
+];
 
 function admissionLevels_() { return getClassLevels_(); }
+function isSssLevel_(level) { return !!level && String(level.name).toUpperCase().indexOf('SSS') === 0; }
+function applicationDocRequirements_(level) {
+  var secondary = !!level && level.section === 'SECONDARY';
+  return { photo: true, applicationFee: true, primaryCert: secondary, juniorCert: secondary && isSssLevel_(level) };
+}
+function buildChildNames_(first, middle, last) {
+  return [String(last || '').trim().toUpperCase(), String(first || '').trim(), String(middle || '').trim()].filter(Boolean).join(' ');
+}
+/** Applications store the human class name in classLevel; resolve the ClassLevels row by name. */
+function levelFromApplication_(a) {
+  if (!a) return null;
+  return findWhere_('ClassLevels', function (l) { return String(l.name) === String(a.classLevel); });
+}
+function stateLgaMap_() {
+  var cache = CacheService.getScriptCache(), cached = cache.get('STATE_LGA_MAP');
+  if (cached) { try { return JSON.parse(cached); } catch (e) { /* rebuild below */ } }
+  var map = {};
+  try {
+    var values = SpreadsheetApp.openById(STATE_LGA_SHEET).getSheets()[0].getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      var st = String(values[i][0] || '').trim(), lga = String(values[i][1] || '').trim();
+      if (!st || !lga) continue;
+      (map[st] = map[st] || []).push(lga);
+    }
+  } catch (e) { Logger.log('stateLgaMap_ failed: ' + (e && e.message ? e.message : e)); }
+  if (Object.keys(map).length) { try { cache.put('STATE_LGA_MAP', JSON.stringify(map), 21600); } catch (e2) { /* cache optional */ } }
+  return map;
+}
+function api_getStatesLgas() {
+  var map = stateLgaMap_();
+  return { states: Object.keys(map).sort(), lgas: map };
+}
+function assertStateLga_(state, lga) {
+  var map = stateLgaMap_(), states = Object.keys(map);
+  if (!states.length) throw new Error('The state / LGA reference list is temporarily unavailable. Please try again shortly.');
+  if (!state || states.indexOf(state) === -1) throw new Error('Select a valid state of origin.');
+  if (!lga || (map[state] || []).indexOf(lga) === -1) throw new Error('Select a valid local government area for ' + state + '.');
+  return { state: state, lga: lga };
+}
 function nextApplicationRef_() {
   var prefix = 'KMS/APP/' + new Date().getFullYear() + '/', max = 0;
   readTable_('Applications').forEach(function (a) { var v = String(a.ref || ''); if (v.indexOf(prefix) === 0) { var n = parseInt(v.slice(prefix.length), 10); if (!isNaN(n) && n > max) max = n; } });
@@ -3045,7 +3229,7 @@ function assertValidDob_(value) {
 }
 function storePublicFile_(ownerType, ownerId, filePayload) {
   if (!filePayload || !filePayload.dataUrl) return null;
-  if (filePayload.size && Number(filePayload.size) > APP_FILE_MAX_BYTES) throw new Error('Uploaded files must be smaller than 7 MB.');
+  if (filePayload.size && Number(filePayload.size) > APP_FILE_MAX_BYTES) throw new Error('Uploaded files must be smaller than 3 MB.');
   var folder = getOrCreateSubfolder_(resolveRootFolder_(), 'Applications');
   var parts = String(filePayload.dataUrl).split(',');
   var base64 = parts.length > 1 ? parts[1] : parts[0];
@@ -3058,19 +3242,99 @@ function storePublicFile_(ownerType, ownerId, filePayload) {
   appendRow_('Files', { id: uuid_(), ownerType: ownerType, ownerId: ownerId, name: file.getName(), mimeType: mime, size: blob.getBytes().length, driveFileId: file.getId(), url: url, uploadedBy: '', createdAt: nowIso_() });
   return { driveFileId: file.getId(), url: url, name: file.getName() };
 }
-function applicationViewModel_(a) {
-  var levelsById = indexById_(readTable_('ClassLevels'));
-  var l = levelsById[a.classLevelId];
+function applicationViewModel_(a, links) {
+  var l = levelFromApplication_(a);
+  var sent = letterSentInfo_(a.ref);
+  var files = {};
+  APPLICATION_FILES.forEach(function (spec) { files[spec.kind] = applicationFileUrl_(a, spec, links); });
   return {
-    id: a.id, ref: a.ref, childFirstName: a.childFirstName, childMiddleName: a.childMiddleName || '', childLastName: a.childLastName,
-    gender: a.gender, dateOfBirth: a.dateOfBirth, classLevelId: a.classLevelId,
-    applyingClass: l ? (l.section + ' · ' + l.name) : '—',
+    ref: a.ref, childNames: admissionChildName_(a),
+    gender: a.gender, dateOfBirth: a.dateOfBirth, nationality: a.nationality || '', state: a.state || '', lga: a.lga || '',
+    classLevel: a.classLevel || '', applyingClass: l ? (l.section + ' · ' + l.name) : String(a.classLevel || '—'),
     guardianName: a.guardianName, guardianPhone: a.guardianPhone, guardianEmail: a.guardianEmail || '',
+    guardianState: a.guardianState || '', guardianLga: a.guardianLga || '',
     address: a.address || '', previousSchool: a.previousSchool || '', notes: a.notes || '',
-    photoUrl: a.photoFileId ? ('https://drive.google.com/uc?export=view&id=' + a.photoFileId) : '',
-    documentUrl: a.documentFileId ? ('https://drive.google.com/uc?export=view&id=' + a.documentFileId) : '',
-    status: a.status || 'PENDING', submittedAt: a.submittedAt, reviewedAt: a.reviewedAt || '', reviewedBy: a.reviewedBy || '', remarks: a.remarks || ''
+    photoUrl: files.photo, primaryCertUrl: files.primaryCert, juniorCertUrl: files.juniorCert, applicationFeeUrl: files.applicationFee,
+    status: a.status || 'PENDING', timestamp: a.timestamp || '', reviewedAt: a.reviewedAt || '', reviewedBy: a.reviewedBy || '', remarks: a.remarks || '',
+    letterSentAt: sent ? sent.sentAt : '', letterSentBy: sent ? sent.sentBy : ''
   };
+}
+function applicationFileUrl_(a, spec, links) {
+  var link = links && links[a._row] ? links[a._row][spec.kind] : '';
+  if (!link && a._row) link = cellLinkUrl_('Applications', a._row, spec.header);
+  if (link) return link;
+  var v = String(a[spec.header] || '');
+  return /^[A-Za-z0-9_-]{20,}$/.test(v) ? ('https://drive.google.com/uc?export=view&id=' + v) : '';
+}
+function applicationLinks_() {
+  var map = {};
+  try {
+    var values = getSheet_('Applications').getDataRange().getRichTextValues();
+    var headers = HEADERS.Applications;
+    var cols = APPLICATION_FILES.map(function (spec) { return { kind: spec.kind, col: headers.indexOf(spec.header) }; });
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i], entry = {};
+      cols.forEach(function (c) { entry[c.kind] = (c.col >= 0 && row[c.col]) ? (row[c.col].getLinkUrl() || '') : ''; });
+      map[i + 1] = entry;
+    }
+  } catch (e) { /* rich text unavailable */ }
+  return map;
+}
+function cellLinkUrl_(sheetName, rowNumber, header) {
+  if (!rowNumber) return '';
+  var headers = HEADERS[sheetName];
+  var col = headers ? headers.indexOf(header) + 1 : 0;
+  if (!col) return '';
+  try {
+    var rt = getSheet_(sheetName).getRange(rowNumber, col).getRichTextValue();
+    return rt ? (rt.getLinkUrl() || '') : '';
+  } catch (e) { return ''; }
+}
+function setApplicationFileLink_(rowNumber, header, url, label) {
+  if (!rowNumber || !url) return;
+  var col = HEADERS.Applications.indexOf(header) + 1;
+  if (!col) return;
+  try {
+    var rt = SpreadsheetApp.newRichTextValue().setText(label).setLinkUrl(url).build();
+    getSheet_('Applications').getRange(rowNumber, col).setRichTextValue(rt);
+  } catch (e) { Logger.log('setApplicationFileLink_ failed for ' + header + ': ' + (e && e.message ? e.message : e)); }
+}
+function linkApplicationFiles() {
+  var sheet = getSheet_('Applications'), last = sheet.getLastRow();
+  if (last < 2) return;
+  var headers = HEADERS.Applications;
+  var values = sheet.getRange(2, 1, last - 1, headers.length).getValues();
+  var count = 0;
+  for (var i = 0; i < values.length; i++) {
+    var rowNumber = i + 2, row = values[i];
+    APPLICATION_FILES.forEach(function (spec) {
+      var col = headers.indexOf(spec.header) + 1;
+      if (!col) return;
+      var cell = sheet.getRange(rowNumber, col);
+      if (cell.getRichTextValue().getLinkUrl()) return;
+      var v = String(row[col - 1] || '');
+      if (/^[A-Za-z0-9_-]{20,}$/.test(v)) {
+        cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(spec.label).setLinkUrl('https://drive.google.com/uc?export=view&id=' + v).build());
+        count++;
+      }
+    });
+  }
+  Logger.log('linkApplicationFiles: converted ' + count + ' cell(s).');
+}
+/** One-time migration: rebuild the Applications and AdmissionLetters tabs with the new headers.
+ *  Clears all existing application rows and the offer-letter log. Run once from the Apps Script editor. */
+function resetApplicationsSheet() {
+  var ss = getSpreadsheet_();
+  ['Applications', 'AdmissionLetters'].forEach(function (name) {
+    var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+    sheet.clear();
+    var headers = HEADERS[name];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    invalidateTable_(name);
+  });
+  __sheets = {};
+  Logger.log('Applications and AdmissionLetters rebuilt with the new headers.');
 }
 function assertApplicationsAccess_(token) {
   var user = requireUser_(token);
@@ -3080,7 +3344,7 @@ function assertApplicationsAccess_(token) {
 function assertApplicationScope_(user, a) {
   var sections = userSections_(user);
   if (user.role === 'ADMIN' || !sections.length) return;
-  var level = findById_('ClassLevels', a.classLevelId);
+  var level = levelFromApplication_(a);
   var sec = level ? level.section : '';
   if (sections.indexOf(sec) === -1) throw new Error('That application is outside your scope (' + (user.role === 'PRINCIPAL' ? 'secondary only' : 'primary & nursery only') + ').');
 }
@@ -3097,79 +3361,173 @@ function admissionRecipients_(guardianEmail) {
   String(getSetting_('ADMISSION_NOTIFY_EMAILS', '')).split(/[,;\s]+/).forEach(add);
   return list;
 }
+function brandLogoBlob_() {
+  try {
+    var url = brand_().logoUrl;
+    if (!url) return null;
+    var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (resp.getResponseCode() >= 400) return null;
+    var blob = resp.getBlob();
+    if (!blob || !blob.getBytes().length) return null;
+    return blob.setName('logo.png');
+  } catch (e) { Logger.log('brandLogoBlob_ failed: ' + (e && e.message ? e.message : e)); return null; }
+}
+function stylePara_(p, opts) {
+  if (!p) return p;
+  opts = opts || {};
+  if (opts.align) p.setAlignment(opts.align);
+  if (opts.indent != null) p.setIndentStart(opts.indent);
+  var t = p.editAsText();
+  t.setFontFamily(opts.font || 'Arial');
+  if (opts.size) t.setFontSize(opts.size);
+  if (opts.color) t.setForegroundColor(opts.color);
+  if (opts.bold != null) t.setBold(opts.bold);
+  return p;
+}
 function admissionPdfBlob_(a, level) {
   try {
     if (typeof DocumentApp === 'undefined') return null;
+    var brand = brand_();
     var doc = DocumentApp.create('KMS Admission ' + a.ref);
     var body = doc.getBody();
-    body.appendParagraph(CFG.APP_NAME).setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    body.appendParagraph('Admission Application — Reference ' + a.ref);
-    [
-      ['Applying for', level ? (level.section + ' · ' + level.name) : ''],
-      ['Child', [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' ')],
-      ['Gender', a.gender], ['Date of birth', String(a.dateOfBirth || '').slice(0, 10)],
-      ['Guardian name', a.guardianName], ['Guardian phone', a.guardianPhone], ['Guardian email', a.guardianEmail || ''],
-      ['Home address', a.address || ''], ['Previous school', a.previousSchool || ''], ['Notes', a.notes || '']
-    ].forEach(function (r) { body.appendParagraph(r[0] + ':  ' + r[1]); });
-    body.appendParagraph('Status: PENDING (awaiting school review)');
+    body.setMarginTop(40).setMarginBottom(40).setMarginLeft(54).setMarginRight(54);
+    var GREEN = '#14532d', MUTED = '#66756f', LINE = '#dbe5df';
+
+    var logo = brandLogoBlob_();
+    if (logo) {
+      try {
+        var ip = body.appendParagraph('');
+        ip.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+        var img = ip.appendInlineImage(logo);
+        var ow = img.getWidth() || 1, oh = img.getHeight() || 1, w = Math.min(150, ow);
+        img.setWidth(w).setHeight(Math.round(w * (oh / ow)));
+      } catch (e) { Logger.log('admissionPdfBlob_ logo failed: ' + (e && e.message ? e.message : e)); }
+    }
+
+    stylePara_(body.appendParagraph(brand.schoolName), { align: DocumentApp.HorizontalAlignment.CENTER, size: 19, bold: true, color: GREEN });
+    stylePara_(body.appendParagraph(brand.subtitle || ''), { align: DocumentApp.HorizontalAlignment.CENTER, size: 10.5, color: MUTED });
+    stylePara_(body.appendParagraph(SCHOOL_ADDRESS + '  ·  ' + SCHOOL_PHONE + '  ·  ' + mailEnquiriesAddress_()), { align: DocumentApp.HorizontalAlignment.CENTER, size: 9, color: MUTED });
+
+    var band = body.appendTable([['']]);
+    band.setBorderWidth(0);
+    var bandCell = band.getCell(0, 0);
+    bandCell.setBackgroundColor(GREEN);
+    var bandPara = bandCell.getChild(0).asParagraph();
+    bandPara.editAsText().setText('ADMISSION APPLICATION');
+    stylePara_(bandPara, { align: DocumentApp.HorizontalAlignment.CENTER, size: 13, bold: true, color: '#ffffff' });
+
+    stylePara_(body.appendParagraph('Reference: ' + a.ref + '   ·   Submitted: ' + String(a.timestamp || todayIso_()).slice(0, 19)), { align: DocumentApp.HorizontalAlignment.CENTER, size: 10, color: MUTED });
+    body.appendParagraph('').editAsText().setFontSize(4);
+
+    var child = admissionChildName_(a);
+    var rows = [
+      ['Applying for', level ? (level.section + ' · ' + level.name) : '—'],
+      ['Child', child || '—'],
+      ['Gender', a.gender || '—'],
+      ['Date of birth', String(a.dateOfBirth || '').slice(0, 10) || '—'],
+      ['Nationality', a.nationality || '—'],
+      ['State of origin', a.state || '—'],
+      ['LGA', a.lga || '—'],
+      ['Guardian name', a.guardianName || '—'],
+      ['Guardian phone', a.guardianPhone || '—'],
+      ['Guardian email', a.guardianEmail || '—'],
+      ['Guardian state / LGA', (a.guardianState || '—') + ' / ' + (a.guardianLga || '—')],
+      ['Home address', a.address || '—'],
+      ['Previous school', a.previousSchool || '—'],
+      ['Notes', a.notes || '—']
+    ];
+    var tbl = body.appendTable(rows.map(function (r) { return [r[0], r[1]]; }));
+    tbl.setBorderColor(LINE).setBorderWidth(1);
+    for (var i = 0; i < rows.length; i++) {
+      var lc = tbl.getCell(i, 0), vc = tbl.getCell(i, 1);
+      lc.setBackgroundColor('#f4f7f5');
+      stylePara_(lc.getChild(0).asParagraph(), { size: 10.5, bold: true, color: GREEN });
+      stylePara_(vc.getChild(0).asParagraph(), { size: 10.5, color: '#1b2a26' });
+    }
+
+    stylePara_(body.appendParagraph('Status: PENDING — awaiting school review.'), { size: 10.5, bold: true, color: '#8a6d1a' });
+    body.appendHorizontalRule();
+    stylePara_(body.appendParagraph('This document was generated automatically and cannot receive replies. For all enquiries, contact ' + mailEnquiriesAddress_() + ' or ' + SCHOOL_PHONE + '.'), { align: DocumentApp.HorizontalAlignment.CENTER, size: 9, color: MUTED });
+
     doc.saveAndClose();
     var file = DriveApp.getFileById(doc.getId());
-    var blob = file.getAs('application/pdf').setName('KMS-Admission-' + a.ref + '.pdf');
+    var blob = file.getAs('application/pdf').setName('KMS-Admission-' + String(a.ref).replace(/[^\w.-]+/g, '-') + '.pdf');
     file.setTrashed(true);
     return blob;
   } catch (e) { Logger.log('admissionPdfBlob_ failed: ' + (e && e.message ? e.message : e)); return null; }
 }
 function notifyAdmission_(a, level) {
-  var subject = 'Admission application received — ' + a.ref + ' (' + [a.childFirstName, a.childLastName].filter(Boolean).join(' ') + ')';
+  var childName = admissionChildName_(a);
+  var docLinks = APPLICATION_FILES.map(function (spec) {
+    return { label: spec.label.replace(/^link to /, ''), url: applicationFileUrl_(a, spec) };
+  }).filter(function (d) { return !!d.url; });
+  var subject = 'Admission application received — ' + a.ref + ' (' + childName + ')';
   var text = [
     CFG.APP_NAME + ' — Admission application received',
     '', 'Reference: ' + a.ref,
     'Applying for: ' + (level ? (level.section + ' · ' + level.name) : ''),
-    'Child: ' + [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' '),
+    'Child: ' + childName,
     'Gender: ' + a.gender, 'Date of birth: ' + String(a.dateOfBirth || '').slice(0, 10),
+    'Nationality: ' + (a.nationality || '—'), 'State of origin: ' + (a.state || '—'), 'LGA: ' + (a.lga || '—'),
     'Guardian: ' + a.guardianName, 'Phone: ' + a.guardianPhone, 'Email: ' + (a.guardianEmail || '—'),
+    'Guardian state / LGA: ' + (a.guardianState || '—') + ' / ' + (a.guardianLga || '—'),
     'Address: ' + (a.address || '—'), 'Previous school: ' + (a.previousSchool || '—'),
-    'Notes: ' + (a.notes || '—'), '', 'Status: PENDING — the school office will review this application.',
-    ''
-  ].join('\n');
+    'Notes: ' + (a.notes || '—')
+  ].join('\n') + (docLinks.length ? ('\n\nDocuments uploaded:\n' + docLinks.map(function (d) { return '- ' + d.label; }).join('\n')) : '') +
+    '\n\nStatus: PENDING — the school office will review this application.\n';
   var rowHtml = function (label, value) {
     return '<tr><td style="padding:6px 8px;border:1px solid #e2e8e4;background:#f4f7f5;color:#14532d;white-space:nowrap"><strong>' + escHtml_(label) + '</strong></td><td style="padding:6px 8px;border:1px solid #e2e8e4">' + escHtml_(value) + '</td></tr>';
   };
-  var html = '<html><body style="font-family:Arial,Helvetica,sans-serif;color:#1b2a26;max-width:640px;margin:0 auto">' +
-    '<h2 style="color:#14532d;margin:0 0 4px">' + escHtml_(CFG.APP_NAME) + '</h2>' +
-    '<p style="color:#66756f;margin:0 0 16px">Admission application received</p>' +
+  var docHtml = docLinks.length ? ('<tr><td style="padding:6px 8px;border:1px solid #e2e8e4;background:#f4f7f5;color:#14532d;white-space:nowrap"><strong>Documents uploaded</strong></td><td style="padding:6px 8px;border:1px solid #e2e8e4">' + docLinks.map(function (d) { return escHtml_(d.label); }).join(', ') + '</td></tr>') : '';
+  var inner = '<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px">' +
+    '<h2 style="color:#14532d;margin:0 0 4px;font-size:18px">' + escHtml_(CFG.APP_NAME) + '</h2>' +
+    '<p style="color:#66756f;margin:0 0 16px;font-size:13px">Admission application received</p>' +
     '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px">' +
     rowHtml('Reference', a.ref) + rowHtml('Applying for', level ? (level.section + ' · ' + level.name) : '') +
-    rowHtml('Child', [a.childFirstName, a.childMiddleName, a.childLastName].filter(Boolean).join(' ')) +
+    rowHtml('Child', childName) +
     rowHtml('Gender', a.gender) + rowHtml('Date of birth', String(a.dateOfBirth || '').slice(0, 10)) +
+    rowHtml('Nationality', a.nationality || '—') + rowHtml('State of origin', a.state || '—') + rowHtml('LGA', a.lga || '—') +
     rowHtml('Guardian name', a.guardianName) + rowHtml('Guardian phone', a.guardianPhone) +
-    rowHtml('Guardian email', a.guardianEmail || '—') + rowHtml('Home address', a.address || '—') +
+    rowHtml('Guardian email', a.guardianEmail || '—') +
+    rowHtml('Guardian state / LGA', (a.guardianState || '—') + ' / ' + (a.guardianLga || '—')) +
+    rowHtml('Home address', a.address || '—') +
     rowHtml('Previous school', a.previousSchool || '—') + rowHtml('Notes', a.notes || '—') +
-    '</table><p style="color:#66756f;font-size:13px;margin-top:12px">Status: <strong>PENDING</strong> — the school office will review this application shortly.</p></body></html>';
+    docHtml +
+    '</table><p style="color:#66756f;font-size:13px;margin-top:12px">Status: <strong>PENDING</strong> — the school office will review this application shortly.</p></div>';
+  var html = buildBrandedHtml_(inner);
   var recipients = admissionRecipients_(a.guardianEmail);
   if (!recipients.length) { Logger.log('No admission notification recipients configured for ' + a.ref); return; }
   try {
     var opts = { to: recipients.join(','), subject: subject, body: text, htmlBody: html };
     var pdf = admissionPdfBlob_(a, level);
     if (pdf) opts.attachments = [pdf];
-    MailApp.sendEmail(opts);
+    sendPortalMail_(opts);
     Logger.log('Admission notification for ' + a.ref + ' emailed to ' + recipients.length + ' recipient(s).');
   } catch (e) { Logger.log('Admission notification FAILED for ' + a.ref + ': ' + (e && e.message ? e.message : e)); }
 }
 function api_applyAdmission(payload) {
   payload = payload || {};
   if (String(payload.website || '').replace(/\s/g, '')) return { ref: 'KMS/APP/0000', status: 'PENDING', submitted: true, message: 'Your application has been received.' };
-  var firstName = String(payload.firstName || '').trim(), lastName = String(payload.lastName || '').trim();
-  if (!firstName || !lastName) throw new Error('First and last name are required.');
+  var firstName = String(payload.firstName || '').trim(), lastName = String(payload.lastName || '').trim().toUpperCase();
+  if (!firstName || !lastName) throw new Error('First name and surname are required.');
   if (['Male', 'Female'].indexOf(payload.gender) === -1) throw new Error('Select a gender.');
   var dob = assertValidDob_(payload.dateOfBirth);
   var level = findById_('ClassLevels', String(payload.classLevelId || ''));
   if (!level || !toBool_(level.active)) throw new Error('Select the class level you are applying for.');
+  var nationality = String(payload.nationality || '').trim();
+  if (!nationality) throw new Error('Select a nationality.');
+  var loc = assertStateLga_(String(payload.state || '').trim(), String(payload.lga || '').trim());
   if (!String(payload.guardianName || '').trim()) throw new Error('A guardian name is required.');
+  var guardianLoc = assertStateLga_(String(payload.guardianState || '').trim(), String(payload.guardianLga || '').trim());
   var phone = String(payload.guardianPhone || '').trim();
   if (phone.replace(/[^0-9]/g, '').length < 7) throw new Error('A valid guardian phone number is required.');
   var email = String(payload.guardianEmail || '').trim().toLowerCase();
-  if (email && EMAIL_RE.test(email) === false) throw new Error('Enter a valid guardian email (or leave it blank).');
+  if (!email || EMAIL_RE.test(email) === false) throw new Error('A valid guardian email address is required.');
+  var need = applicationDocRequirements_(level);
+  if (need.photo && !(payload.photo && payload.photo.dataUrl)) throw new Error('A passport photograph is required.');
+  if (need.applicationFee && !(payload.applicationFee && payload.applicationFee.dataUrl)) throw new Error('Evidence of the application fee is required.');
+  if (need.primaryCert && !(payload.primaryCert && payload.primaryCert.dataUrl)) throw new Error('A primary school certificate is required for secondary-school applications.');
+  if (need.juniorCert && !(payload.juniorCert && payload.juniorCert.dataUrl)) throw new Error('A junior school certificate is required for SSS applications.');
   var keys = ['app_phone_' + phone.replace(/[^0-9]/g, '')];
   if (email) keys.push('app_email_' + email);
   var cache = CacheService.getScriptCache();
@@ -3177,38 +3535,43 @@ function api_applyAdmission(payload) {
     if (cache.get(key)) throw new Error('Thanks — another application from this contact was just received. Please try again in a few minutes.');
     cache.put(key, '1', APP_SUBMIT_COOLDOWN_SECONDS);
   });
-  var id = uuid_(), ref = nextApplicationRef_();
+  var ref = nextApplicationRef_();
   var fields = {
-    id: id, ref: ref,
-    childFirstName: firstName, childMiddleName: String(payload.middleName || '').trim(), childLastName: lastName,
-    gender: payload.gender, dateOfBirth: dob, classLevelId: level.id,
+    timestamp: nowLocalStamp_(), ref: ref, childNames: buildChildNames_(firstName, payload.middleName, lastName),
+    gender: payload.gender, dateOfBirth: dob, nationality: nationality, state: loc.state, lga: loc.lga, classLevel: level.name,
     guardianName: String(payload.guardianName).trim(), guardianPhone: phone, guardianEmail: email,
+    guardianState: guardianLoc.state, guardianLga: guardianLoc.lga,
     address: String(payload.address || '').trim(), previousSchool: String(payload.previousSchool || '').trim(), notes: String(payload.notes || '').trim(),
-    photoFileId: '', documentFileId: '', status: 'PENDING', submittedAt: nowIso_(), reviewedAt: '', reviewedBy: '', remarks: ''
+    photoFileId: '', primaryCertFileId: '', juniorCertFileId: '', applicationFeeFileId: '',
+    status: 'PENDING', reviewedAt: '', reviewedBy: '', remarks: ''
   };
-  var photo = storePublicFile_('APPLICATION', ref, payload.photo);
-  if (photo) fields.photoFileId = photo.driveFileId;
-  var doc = storePublicFile_('APPLICATION', ref, payload.document);
-  if (doc) fields.documentFileId = doc.driveFileId;
+  var saved = {};
+  APPLICATION_FILES.forEach(function (spec) {
+    var stored = storePublicFile_('APPLICATION', ref, payload[spec.kind]);
+    if (stored) { fields[spec.header] = stored.driveFileId; saved[spec.kind] = stored; }
+  });
   appendRow_('Applications', fields);
-  Logger.log('New admission application ' + ref + ' for ' + firstName + ' ' + lastName);
+  var rowNumber = getSheet_('Applications').getLastRow();
+  APPLICATION_FILES.forEach(function (spec) { if (saved[spec.kind]) setApplicationFileLink_(rowNumber, spec.header, saved[spec.kind].url, spec.label); });
+  Logger.log('New admission application ' + ref + ' for ' + fields.childNames);
   notifyAdmission_(fields, level);
   return { ref: ref, status: 'PENDING', submitted: true, message: 'Your application has been received. A copy has been sent to your email and to the school office.' };
 }
 function api_listApplications(token) {
   var user = assertApplicationsAccess_(token);
+  ensureAdmissionLettersSheet_();
   var sections = userSections_(user), list = readTable_('Applications');
   if (user.role !== 'ADMIN' && sections.length) {
-    var secById = {}; readTable_('ClassLevels').forEach(function (l) { secById[l.id] = l.section; });
-    list = list.filter(function (a) { return sections.indexOf(secById[a.classLevelId]) !== -1; });
+    list = list.filter(function (a) { var l = levelFromApplication_(a); return l && sections.indexOf(l.section) !== -1; });
   }
-  list.sort(function (a, b) { return String(b.submittedAt).localeCompare(String(a.submittedAt)); });
-  return list.map(applicationViewModel_);
+  list.sort(function (a, b) { return String(b.timestamp).localeCompare(String(a.timestamp)); });
+  var links = applicationLinks_();
+  return list.map(function (a) { return applicationViewModel_(a, links); });
 }
-function api_updateApplication(token, id, updates) {
+function api_updateApplication(token, ref, updates) {
   var user = assertApplicationsAccess_(token);
   updates = updates || {};
-  var a = findById_('Applications', id);
+  var a = findWhere_('Applications', function (x) { return String(x.ref) === String(ref); });
   if (!a) throw new Error('Application not found.');
   assertApplicationScope_(user, a);
   var fields = {};
@@ -3220,9 +3583,232 @@ function api_updateApplication(token, id, updates) {
   }
   if (updates.remarks !== undefined) fields.remarks = String(updates.remarks || '');
   if (!Object.keys(fields).length) throw new Error('Nothing to update.');
-  updateRow_('Applications', a.id, fields);
+  updateRowByKey_('Applications', 'ref', a.ref, fields);
   logAudit_(user, 'UPDATE_APPLICATION', a.ref, 'status: ' + (updates.status || a.status));
-  return applicationViewModel_(findById_('Applications', a.id));
+  return applicationViewModel_(findWhere_('Applications', function (x) { return String(x.ref) === String(ref); }));
+}
+
+/* ==================== 15e. ADMISSION OFFER LETTER ==================== */
+
+function admissionLetterDefaults_() {
+  var y = new Date().getFullYear();
+  return {
+    session: y + '/' + (y + 1),
+    resumption: 'the beginning of the next academic session (the exact resumption date will be communicated in due course)',
+    deadline: 'two (2) weeks from the date of this letter',
+    principalName: 'The Principal',
+    feesNote: 'The schedule of fees for the class offered is available at the school office and on request.',
+    nextSteps: 'To accept this offer, kindly pay the required acceptance fee and present this letter, together with the child\u2019s birth certificate and any outstanding documents, at the school office.',
+    intro: ''
+  };
+}
+function admissionLetterSettings_() {
+  var d = admissionLetterDefaults_();
+  return {
+    session: String(getSetting_('ADMISSION_SESSION', '') || d.session),
+    resumption: String(getSetting_('ADMISSION_RESUMPTION_DATE', '') || d.resumption),
+    deadline: String(getSetting_('ADMISSION_ACCEPTANCE_DEADLINE', '') || d.deadline),
+    principalName: String(getSetting_('ADMISSION_PRINCIPAL_NAME', '') || d.principalName),
+    feesNote: String(getSetting_('ADMISSION_LETTER_FEES', '') || d.feesNote),
+    nextSteps: String(getSetting_('ADMISSION_LETTER_NEXT_STEPS', '') || d.nextSteps),
+    intro: String(getSetting_('ADMISSION_LETTER_INTRO', '') || d.intro)
+  };
+}
+function admissionChildName_(a) { return String(a.childNames || [a.childLastName, a.childFirstName, a.childMiddleName].filter(Boolean).join(' ')).trim(); }
+function admissionLevelLabel_(level) { return level ? (level.section + ' · ' + level.name) : '—'; }
+function admissionLetterSubject_(a) { return 'Offer of Admission — ' + a.ref + ' (' + admissionChildName_(a) + ')'; }
+function admissionLetterParagraphs_(a, level, s) {
+  var child = admissionChildName_(a);
+  var paras = [];
+  paras.push('We are pleased to inform you that your child, ' + child + ', has been offered provisional admission into ' + admissionLevelLabel_(level) + ' at ' + CFG.APP_NAME + ' for the ' + s.session + ' academic session.');
+  if (s.intro) paras.push(s.intro);
+  paras.push('Resumption: ' + s.resumption + '.');
+  paras.push('Please confirm acceptance of this offer on or before ' + s.deadline + '.');
+  paras.push(s.feesNote);
+  paras.push(s.nextSteps);
+  paras.push('We look forward to welcoming ' + child + ' to our school community. Thank you for choosing ' + CFG.APP_NAME + '.');
+  return paras;
+}
+function admissionLetterTextBody_(a, level, s) {
+  var lines = [];
+  lines.push('Dear ' + (a.guardianName || 'Parent/Guardian') + ',');
+  lines.push('');
+  admissionLetterParagraphs_(a, level, s).forEach(function (p) { lines.push(p); lines.push(''); });
+  lines.push('Offer reference: ' + a.ref);
+  lines.push('Child: ' + admissionChildName_(a));
+  lines.push('State of origin: ' + (a.state || '—'));
+  lines.push('Class offered: ' + admissionLevelLabel_(level));
+  lines.push('Session: ' + s.session);
+  lines.push('');
+  lines.push('Yours faithfully,');
+  lines.push(s.principalName);
+  lines.push('Principal, ' + CFG.APP_NAME);
+  lines.push(SCHOOL_ADDRESS + '  ·  ' + SCHOOL_PHONE + '  ·  ' + mailEnquiriesAddress_());
+  return lines.join('\n');
+}
+function admissionLetterEmailHtml_(a, level, s) {
+  var child = admissionChildName_(a);
+  var row = function (label, value) {
+    return '<tr><td style="padding:6px 8px;border:1px solid #e2e8e4;background:#f4f7f5;color:#14532d;white-space:nowrap"><strong>' + escHtml_(label) + '</strong></td><td style="padding:6px 8px;border:1px solid #e2e8e4">' + escHtml_(value) + '</td></tr>';
+  };
+  var paras = admissionLetterParagraphs_(a, level, s).map(function (p) {
+    return '<p style="margin:0 0 12px;font-size:14px;line-height:1.55;color:#1b2a26">' + escHtml_(p) + '</p>';
+  }).join('');
+  return '<div style="background:#ffffff;border:1px solid #dbe5df;border-top:none;padding:24px">' +
+    '<h2 style="color:#14532d;margin:0 0 4px;font-size:18px">' + escHtml_(CFG.APP_NAME) + '</h2>' +
+    '<p style="color:#66756f;margin:0 0 16px;font-size:13px">Offer of Admission &middot; ' + escHtml_(s.session) + ' academic session</p>' +
+    '<p style="font-size:14px;line-height:1.55;color:#1b2a26">Dear ' + escHtml_(a.guardianName || 'Parent/Guardian') + ',</p>' +
+    paras +
+    '<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px;margin:6px 0 16px">' +
+    row('Offer reference', a.ref) + row('Child', child) + row('State of origin', a.state || '—') + row('Class offered', admissionLevelLabel_(level)) + row('Session', s.session) +
+    '</table>' +
+    '<p style="margin:18px 0 0;font-size:14px;color:#1b2a26">Yours faithfully,<br><strong>' + escHtml_(s.principalName) + '</strong><br><span style="color:#66756f">Principal, ' + escHtml_(CFG.APP_NAME) + '</span></p>' +
+    '</div>';
+}
+function admissionLetterPdfBlob_(a, level, s) {
+  try {
+    if (typeof DocumentApp === 'undefined') return null;
+    var brand = brand_();
+    var doc = DocumentApp.create('KMS Offer ' + a.ref);
+    var body = doc.getBody();
+    body.setMarginTop(40).setMarginBottom(40).setMarginLeft(54).setMarginRight(54);
+    var GREEN = '#14532d', MUTED = '#66756f', LINE = '#dbe5df';
+
+    var logo = brandLogoBlob_();
+    if (logo) {
+      try {
+        var ip = body.appendParagraph('');
+        ip.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+        var img = ip.appendInlineImage(logo);
+        var ow = img.getWidth() || 1, oh = img.getHeight() || 1, w = Math.min(150, ow);
+        img.setWidth(w).setHeight(Math.round(w * (oh / ow)));
+      } catch (e) { Logger.log('admissionLetterPdfBlob_ logo failed: ' + (e && e.message ? e.message : e)); }
+    }
+
+    stylePara_(body.appendParagraph(brand.schoolName), { align: DocumentApp.HorizontalAlignment.CENTER, size: 19, bold: true, color: GREEN });
+    stylePara_(body.appendParagraph(brand.subtitle || ''), { align: DocumentApp.HorizontalAlignment.CENTER, size: 10.5, color: MUTED });
+    stylePara_(body.appendParagraph(SCHOOL_ADDRESS + '  ·  ' + SCHOOL_PHONE + '  ·  ' + mailEnquiriesAddress_()), { align: DocumentApp.HorizontalAlignment.CENTER, size: 9, color: MUTED });
+
+    var band = body.appendTable([['']]);
+    band.setBorderWidth(0);
+    var bandCell = band.getCell(0, 0);
+    bandCell.setBackgroundColor(GREEN);
+    var bandPara = bandCell.getChild(0).asParagraph();
+    bandPara.editAsText().setText('OFFER OF ADMISSION');
+    stylePara_(bandPara, { align: DocumentApp.HorizontalAlignment.CENTER, size: 13, bold: true, color: '#ffffff' });
+
+    stylePara_(body.appendParagraph('Reference: ' + a.ref + '   ·   Date: ' + todayIso_()), { align: DocumentApp.HorizontalAlignment.CENTER, size: 10, color: MUTED });
+    body.appendParagraph('').editAsText().setFontSize(4);
+
+    stylePara_(body.appendParagraph('Dear ' + (a.guardianName || 'Parent/Guardian') + ','), { size: 11, bold: true, color: '#1b2a26' });
+    admissionLetterParagraphs_(a, level, s).forEach(function (p) {
+      stylePara_(body.appendParagraph(p), { size: 11, color: '#1b2a26' });
+    });
+
+    var rows = [
+      ['Offer reference', a.ref],
+      ['Child', admissionChildName_(a)],
+      ['State of origin', a.state || '—'],
+      ['Class offered', admissionLevelLabel_(level)],
+      ['Session', s.session]
+    ];
+    var tbl = body.appendTable(rows.map(function (r) { return [r[0], r[1]]; }));
+    tbl.setBorderColor(LINE).setBorderWidth(1);
+    for (var i = 0; i < rows.length; i++) {
+      var lc = tbl.getCell(i, 0), vc = tbl.getCell(i, 1);
+      lc.setBackgroundColor('#f4f7f5');
+      stylePara_(lc.getChild(0).asParagraph(), { size: 10.5, bold: true, color: GREEN });
+      stylePara_(vc.getChild(0).asParagraph(), { size: 10.5, color: '#1b2a26' });
+    }
+
+    body.appendParagraph('').editAsText().setFontSize(4);
+    stylePara_(body.appendParagraph('Yours faithfully,'), { size: 11, color: '#1b2a26' });
+    stylePara_(body.appendParagraph(s.principalName), { size: 11, bold: true, color: '#1b2a26' });
+    stylePara_(body.appendParagraph('Principal, ' + CFG.APP_NAME), { size: 10.5, color: MUTED });
+    body.appendHorizontalRule();
+    stylePara_(body.appendParagraph('This document was generated automatically and cannot receive replies. For all enquiries, contact ' + mailEnquiriesAddress_() + ' or ' + SCHOOL_PHONE + '.'), { align: DocumentApp.HorizontalAlignment.CENTER, size: 9, color: MUTED });
+
+    doc.saveAndClose();
+    var file = DriveApp.getFileById(doc.getId());
+    var blob = file.getAs('application/pdf').setName('KMS-Offer-' + String(a.ref).replace(/[^\w.-]+/g, '-') + '.pdf');
+    file.setTrashed(true);
+    return blob;
+  } catch (e) { Logger.log('admissionLetterPdfBlob_ failed: ' + (e && e.message ? e.message : e)); return null; }
+}
+function ensureAdmissionLettersSheet_() {
+  var ss = getSpreadsheet_();
+  ensureSheet_(ss, 'AdmissionLetters');
+  invalidateTable_('AdmissionLetters');
+  return getSheet_('AdmissionLetters');
+}
+function letterSentInfo_(ref) {
+  var rows = readTableSafe_('AdmissionLetters').filter(function (r) {
+    return String(r.ref) === String(ref) && String(r.status) === 'SENT';
+  });
+  if (!rows.length) return null;
+  rows.sort(function (x, y) { return String(y.sentAt).localeCompare(String(x.sentAt)); });
+  return { sentAt: rows[0].sentAt, sentBy: rows[0].sentBy, email: rows[0].email || '' };
+}
+function assertAdmissionApprovalAccess_(token) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL'], 'Only an administrator or principal can approve admissions and send offer letters.');
+  return user;
+}
+function api_previewAdmissionLetter(token, ref) {
+  var user = assertAdmissionApprovalAccess_(token);
+  var a = findWhere_('Applications', function (x) { return String(x.ref) === String(ref); });
+  if (!a) throw new Error('Application not found.');
+  assertApplicationScope_(user, a);
+  var level = levelFromApplication_(a);
+  var s = admissionLetterSettings_();
+  return {
+    ref: a.ref, child: admissionChildName_(a), guardianName: a.guardianName,
+    email: a.guardianEmail || '', applyingFor: admissionLevelLabel_(level),
+    session: s.session, resumption: s.resumption, deadline: s.deadline, principalName: s.principalName,
+    subject: admissionLetterSubject_(a),
+    body: admissionLetterTextBody_(a, level, s),
+    alreadySent: letterSentInfo_(a.ref)
+  };
+}
+function api_sendAdmissionLetter(token, ref, opts) {
+  var user = assertAdmissionApprovalAccess_(token);
+  opts = opts || {};
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Another send is in progress. Please wait a moment.');
+  try {
+    var a = findWhere_('Applications', function (x) { return String(x.ref) === String(ref); });
+    if (!a) throw new Error('Application not found.');
+    assertApplicationScope_(user, a);
+    var email = String(a.guardianEmail || '').trim();
+    if (!email || !EMAIL_RE.test(email)) throw new Error('This application has no valid guardian email address.');
+    var prev = letterSentInfo_(a.ref);
+    if (prev && !opts.confirmResend) {
+      return { needsConfirmation: true, message: 'An admission letter was already sent to ' + email + ' on ' + String(prev.sentAt).slice(0, 10) + '.' };
+    }
+    var level = levelFromApplication_(a);
+    var s = admissionLetterSettings_();
+    var status = 'SENT', errMsg = '';
+    try {
+      var mailOpts = { to: email, subject: admissionLetterSubject_(a), body: admissionLetterTextBody_(a, level, s), htmlBody: admissionLetterEmailHtml_(a, level, s) };
+      var pdf = admissionLetterPdfBlob_(a, level, s);
+      if (pdf) mailOpts.attachments = [pdf];
+      sendPortalMail_(mailOpts);
+    } catch (e) { status = 'FAILED'; errMsg = String(e && e.message ? e.message : e).slice(0, 500); }
+    ensureAdmissionLettersSheet_();
+    appendRow_('AdmissionLetters', {
+      id: uuid_(), ref: a.ref, childName: admissionChildName_(a),
+      guardianName: a.guardianName || '', email: email, sentBy: user.username, sentAt: nowIso_(),
+      status: status, letterRef: 'KMS/OFFER/' + String(a.ref || '').replace(/^KMS\/APP\//, ''), error: errMsg
+    });
+    if (status !== 'SENT') {
+      logAudit_(user, 'SEND_ADMISSION_LETTER_FAILED', a.ref, errMsg);
+      throw new Error('Could not send the admission letter: ' + errMsg);
+    }
+    updateRowByKey_('Applications', 'ref', a.ref, { status: 'OFFERED', reviewedAt: nowIso_(), reviewedBy: user.username });
+    invalidateTable_('Applications');
+    logAudit_(user, 'SEND_ADMISSION_LETTER', a.ref, 'Offer letter emailed to ' + email);
+    return { sent: true, status: 'OFFERED', email: email, message: 'Admission offer letter sent to ' + email + '. Application marked OFFERED.' };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
 /* =========================== 16. WEB ENTRY =========================== */

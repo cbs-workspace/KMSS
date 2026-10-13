@@ -34,6 +34,7 @@
     .field input, .field select, .field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 14px; font-family: inherit; background: #fff; color: var(--ink); }
     .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(45,106,79,.15); }
     .field textarea { min-height: 74px; resize: vertical; }
+    .field input.up { text-transform: uppercase; }
     .row { display: flex; align-items: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
     button.btn { background: var(--green); color: #fff; border: 0; border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
     button.btn:hover { background: var(--green-dark); }
@@ -82,23 +83,30 @@
           <div class="field section"><label>Child's details</label></div>
           <div class="field"><label for="firstName">First name *</label><input id="firstName" type="text" required></div>
           <div class="field"><label for="middleName">Middle name</label><input id="middleName" type="text"></div>
-          <div class="field"><label for="lastName">Last name *</label><input id="lastName" type="text" required></div>
+          <div class="field"><label for="lastName">Surname * <span class="hint">(UPPERCASE)</span></label><input id="lastName" type="text" class="up" required></div>
           <div class="field"><label for="gender">Gender *</label>
             <select id="gender" required><option value="">Select…</option><option>Male</option><option>Female</option></select>
           </div>
           <div class="field"><label for="dob">Date of birth *</label><input id="dob" type="date" required></div>
+          <div class="field"><label for="nationality">Nationality *</label><select id="nationality" required><option value="">Select…</option></select></div>
+          <div class="field"><label for="state">State of origin *</label><select id="state" required><option value="">Select…</option></select></div>
+          <div class="field"><label for="lga">LGA *</label><select id="lga" required><option value="">Select…</option></select></div>
 
           <div class="field section"><label>Guardian details</label></div>
           <div class="field"><label for="guardianName">Full name *</label><input id="guardianName" type="text" required></div>
           <div class="field"><label for="guardianPhone">Phone / WhatsApp *</label><input id="guardianPhone" type="tel" required placeholder="e.g. 0803 000 0000"></div>
-          <div class="field full"><label for="guardianEmail">Email <span class="hint">(for updates)</span></label><input id="guardianEmail" type="email"></div>
+          <div class="field full"><label for="guardianEmail">Email * <span class="hint">(updates &amp; acknowledgement)</span></label><input id="guardianEmail" type="email" required></div>
+          <div class="field"><label for="guardianState">State *</label><select id="guardianState" required><option value="">Select…</option></select></div>
+          <div class="field"><label for="guardianLga">LGA *</label><select id="guardianLga" required><option value="">Select…</option></select></div>
           <div class="field full"><label for="address">Home address</label><textarea id="address"></textarea></div>
           <div class="field full"><label for="prevSchool">Previous school <span class="hint">(if any)</span></label><input id="prevSchool" type="text"></div>
           <div class="field full"><label for="notes">Anything the school should know</label><textarea id="notes"></textarea></div>
 
-          <div class="field section"><label>Attachments <span class="hint">(optional — resized photos upload quickly)</span></label></div>
-          <div class="field"><label for="photo">Passport photo</label><input id="photo" type="file" accept="image/*"></div>
-          <div class="field"><label for="document">Birth certificate / records <span class="hint">&lt; 7 MB</span></label><input id="document" type="file"></div>
+          <div class="field section"><label>Required documents <span class="hint">(passport photo &amp; application fee always; certificates depend on the class)</span></label></div>
+          <div class="field"><label for="photo">Passport photograph *</label><input id="photo" type="file" accept="image/*" required></div>
+          <div class="field"><label for="fee">Evidence of application fee * <span class="hint">(receipt / teller, &lt; 3 MB)</span></label><input id="fee" type="file" accept="image/*,.pdf" required></div>
+          <div class="field" id="primaryCert-field" style="display:none"><label for="primaryCert">Primary school certificate * <span class="hint">(&lt; 3 MB)</span></label><input id="primaryCert" type="file" accept="image/*,.pdf"></div>
+          <div class="field" id="juniorCert-field" style="display:none"><label for="juniorCert">Junior school certificate * <span class="hint">(SSS applications only, &lt; 3 MB)</span></label><input id="juniorCert" type="file" accept="image/*,.pdf"></div>
         </div>
 
         <label class="hp" aria-hidden="true">Leave this empty<input id="website" type="text" tabindex="-1" autocomplete="off"></label>
@@ -114,7 +122,7 @@
       <h2>Review your application</h2>
       <p class="sub">Check everything below before submitting. Use <strong>Back to edit</strong> to change anything.</p>
       <div class="summary" id="review-summary"></div>
-      <p class="notice" style="margin-top:16px">A copy of this application will be emailed to the guardian (if an email was provided) and to the school office.</p>
+      <p class="notice" style="margin-top:16px">A copy of this application will be emailed to the guardian and to the school office.</p>
       <div class="row">
         <button class="btn" id="edit-btn" type="button">&#8592; Back to edit</button>
         <button class="btn" id="confirm-btn" type="button">Confirm &amp; submit</button>
@@ -135,6 +143,9 @@
     var EMBED = <?!= embedJson ?>;
     var LEVELS = <?!= levelOptionsJson ?>;
     var BRAND = <?!= brandJson ?>;
+
+    var STATE_LGA = { states: [], lgas: {} };
+    var NATIONALITIES = ['Nigerian', 'Ghanaian', 'Cameroonian', 'Chadian', 'Nigerien', 'Beninese', 'Togolese', 'Ivorian', 'Senegalese', 'Malian', 'Burkinabé', 'Guinean', 'Liberian', 'Sierra Leonean', 'Gambian', 'Sudanese', 'South Sudanese', 'Egyptian', 'Libyan', 'Tunisian', 'Algerian', 'Moroccan', 'Kenyan', 'Ugandan', 'Tanzanian', 'Rwandan', 'Ethiopian', 'Somali', 'South African', 'Indian', 'Chinese', 'Pakistani', 'Bangladeshi', 'Filipino', 'Indonesian', 'Malaysian', 'British', 'American', 'Canadian', 'French', 'German', 'Italian', 'Spanish', 'Portuguese', 'Dutch', 'Belgian', 'Swiss', 'Russian', 'Ukrainian', 'Turkish', 'Lebanese', 'Syrian', 'Jordanian', 'Saudi Arabian', 'Emirati', 'Brazilian', 'Other'];
 
     var form = document.getElementById('admission-form');
     var msg = document.getElementById('msg');
@@ -162,13 +173,62 @@
         });
         sel.appendChild(opt);
       });
+      var nat = document.getElementById('nationality');
+      NATIONALITIES.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; nat.appendChild(o); });
+      nat.value = 'Nigerian';
+
+      document.getElementById('level').addEventListener('change', updateDocFields);
+      document.getElementById('state').addEventListener('change', function () { onStateChange('state', 'lga'); });
+      document.getElementById('guardianState').addEventListener('change', function () { onStateChange('guardianState', 'guardianLga'); });
+      loadStatesLgas();
+      updateDocFields();
+
       var today = new Date(); var mm = String(today.getMonth() + 1).padStart(2, '0'), dd = String(today.getDate()).padStart(2, '0');
       document.getElementById('dob').max = today.getFullYear() + '-' + mm + '-' + dd;
+
+      var surname = document.getElementById('lastName');
+      surname.addEventListener('input', function () { var p = this.selectionStart; this.value = this.value.toUpperCase(); this.setSelectionRange(p, p); });
+      surname.addEventListener('blur', function () { this.value = this.value.toUpperCase(); });
     })();
 
     function showMsg(kind, text) { msg.innerHTML = '<div class="alert ' + (kind === 'err' ? 'err' : '') + '">' + text + '</div>'; }
     function setBusy(busy) { btn.disabled = busy; btn.innerHTML = busy ? '<span class="spinner"></span> Submitting…' : 'Submit application'; }
     function val(id) { return document.getElementById(id).value.trim(); }
+
+    function currentLevel() { var id = val('level'); return LEVELS.filter(function (l) { return l.id === id; })[0] || null; }
+    function isSecondary(lvl) { return !!lvl && lvl.section === 'SECONDARY'; }
+    function isSss(lvl) { return isSecondary(lvl) && /^SSS/i.test(lvl.name); }
+    function fillSelect(sel, items) {
+      sel.innerHTML = '';
+      var blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Select…'; sel.appendChild(blank);
+      (items || []).forEach(function (v) { var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+    }
+    function lgasFor(state) { return (STATE_LGA.lgas && STATE_LGA.lgas[state]) || []; }
+    function onStateChange(stateId, lgaId) { fillSelect(document.getElementById(lgaId), lgasFor(val(stateId))); }
+    function loadStatesLgas() {
+      google.script.run.withSuccessHandler(function (data) {
+        STATE_LGA = data || { states: [], lgas: {} };
+        var states = STATE_LGA.states || [];
+        var preferred = states.indexOf('Sokoto') !== -1 ? 'Sokoto' : '';
+        ['state', 'guardianState'].forEach(function (id) {
+          var sel = document.getElementById(id); fillSelect(sel, states); sel.value = preferred;
+        });
+        onStateChange('state', 'lga');
+        onStateChange('guardianState', 'guardianLga');
+      }).withFailureHandler(function (err) {
+        showMsg('err', 'Could not load the state / LGA list. ' + (err && err.message ? err.message : String(err)) + ' Please refresh the page and try again.');
+      }).api_getStatesLgas();
+    }
+    function updateDocFields() {
+      var lvl = currentLevel(), secondary = isSecondary(lvl), sss = isSss(lvl);
+      ['primaryCert-field|primaryCert|' + secondary, 'juniorCert-field|juniorCert|' + sss].forEach(function (spec) {
+        var parts = spec.split('|'), field = document.getElementById(parts[0]), input = document.getElementById(parts[1]);
+        var show = parts[2] === 'true';
+        field.style.display = show ? '' : 'none';
+        input.required = show;
+        if (!show) input.value = '';
+      });
+    }
 
     function readImage(file) {
       return new Promise(function (resolve, reject) {
@@ -191,7 +251,7 @@
     }
     function readFileRaw(file) {
       return new Promise(function (resolve, reject) {
-        if (file.size > 7 * 1024 * 1024) { reject(new Error('Uploaded files must be smaller than 7 MB.')); return; }
+        if (file.size > 3 * 1024 * 1024) { reject(new Error('Uploaded documents must be smaller than 3 MB. Please rescan at a lower resolution or email the file to the school office.')); return; }
         var fr = new FileReader();
         fr.onerror = function () { reject(new Error('Could not read the document file.')); };
         fr.onload = function () { resolve({ name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, dataUrl: fr.result }); };
@@ -210,21 +270,30 @@
       return srow;
     }
 
-    function showReview(payload, photoFile, docFile, levelName) {
+    function showReview(payload, files, levelName) {
       var s = document.getElementById('review-summary');
       s.innerHTML = '';
+      var lvl = LEVELS.filter(function (l) { return l.id === payload.classLevelId; })[0] || null;
+      var secondary = isSecondary(lvl), sss = isSss(lvl);
+      var atts = [files.photo ? 'Passport photograph' : 'Passport photograph (missing)', files.fee ? 'Application fee evidence' : 'Application fee evidence (missing)'];
+      if (secondary) atts.push(files.primaryCert ? 'Primary school certificate' : 'Primary school certificate (missing)');
+      if (sss) atts.push(files.juniorCert ? 'Junior school certificate' : 'Junior school certificate (missing)');
       [
         ['Class level', levelName],
-        ['Child', [payload.firstName, payload.middleName, payload.lastName].filter(Boolean).join(' ')],
+        ['Child', [payload.lastName, payload.firstName, payload.middleName].filter(Boolean).join(' ')],
         ['Gender', payload.gender],
         ['Date of birth', payload.dateOfBirth],
+        ['Nationality', payload.nationality],
+        ['State of origin', payload.state],
+        ['LGA', payload.lga],
         ['Guardian name', payload.guardianName],
         ['Guardian phone', payload.guardianPhone],
         ['Guardian email', payload.guardianEmail],
+        ['Guardian state / LGA', payload.guardianState + ' / ' + payload.guardianLga],
         ['Home address', payload.address],
         ['Previous school', payload.previousSchool],
         ['Notes', payload.notes],
-        ['Attachments', (photoFile ? '1 passport photo' : 'No passport photo') + ' · ' + (docFile ? '1 document' : 'No document')]
+        ['Documents', atts.join(' · ')]
       ].forEach(function (r) { s.appendChild(summaryRow(r[0], r[1])); });
       s.appendChild(summaryRow('Confirmation', 'By submitting, you confirm the details above are correct', 'review-note'));
       form.style.display = 'none';
@@ -240,18 +309,28 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault(); msg.innerHTML = '';
-      var level = val('level'), firstName = val('firstName'), lastName = val('lastName');
-      var gender = val('gender'), dob = val('dob'), gName = val('guardianName'), gPhone = val('guardianPhone'), gEmail = val('guardianEmail');
-      if (!level || !firstName || !lastName || !gender || !dob || !gName || !gPhone) { showMsg('err', 'Please fill in all required fields.'); return; }
-      if (gEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) { showMsg('err', 'Enter a valid guardian email or leave it blank.'); return; }
+      var level = val('level'), firstName = val('firstName'), lastName = val('lastName').toUpperCase();
+      var gender = val('gender'), dob = val('dob'), nationality = val('nationality'), state = val('state'), lga = val('lga');
+      var gName = val('guardianName'), gPhone = val('guardianPhone'), gEmail = val('guardianEmail'), gState = val('guardianState'), gLga = val('guardianLga');
+      if (!level || !firstName || !lastName || !gender || !dob || !nationality || !state || !lga || !gName || !gPhone || !gEmail || !gState || !gLga) { showMsg('err', 'Please fill in all required fields.'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) { showMsg('err', 'Enter a valid guardian email address.'); return; }
+      var lvl = currentLevel(), secondary = isSecondary(lvl), sss = isSss(lvl);
+      var photoF = document.getElementById('photo').files[0], feeF = document.getElementById('fee').files[0];
+      var primaryF = secondary ? document.getElementById('primaryCert').files[0] : null;
+      var juniorF = sss ? document.getElementById('juniorCert').files[0] : null;
+      if (!photoF) { showMsg('err', 'Attach the child’s passport photograph.'); return; }
+      if (!feeF) { showMsg('err', 'Attach evidence of the application fee payment.'); return; }
+      if (secondary && !primaryF) { showMsg('err', 'A primary school certificate is required for secondary-school applications.'); return; }
+      if (sss && !juniorF) { showMsg('err', 'A junior school certificate is required for SSS applications.'); return; }
+      document.getElementById('lastName').value = lastName;
       draft = {
         website: document.getElementById('website').value,
-        firstName: firstName, middleName: val('middleName'), lastName: lastName, gender: gender, dateOfBirth: dob, classLevelId: level,
-        guardianName: gName, guardianPhone: gPhone, guardianEmail: gEmail, address: val('address'),
-        previousSchool: val('prevSchool'), notes: val('notes')
+        firstName: firstName, middleName: val('middleName'), lastName: lastName, gender: gender, dateOfBirth: dob,
+        nationality: nationality, state: state, lga: lga, classLevelId: level,
+        guardianName: gName, guardianPhone: gPhone, guardianEmail: gEmail, guardianState: gState, guardianLga: gLga,
+        address: val('address'), previousSchool: val('prevSchool'), notes: val('notes')
       };
-      var lvl = LEVELS.filter(function (l) { return l.id === level; })[0];
-      showReview(draft, document.getElementById('photo').files[0], document.getElementById('document').files[0], lvl ? (lvl.section + ' · ' + lvl.name) : level);
+      showReview(draft, { photo: photoF, fee: feeF, primaryCert: primaryF, juniorCert: juniorF }, lvl ? (lvl.section + ' · ' + lvl.name) : level);
     });
 
     document.getElementById('edit-btn').addEventListener('click', function () {
@@ -263,12 +342,16 @@
     document.getElementById('confirm-btn').addEventListener('click', function () {
       if (!draft) return;
       setSubmitBusy(true); msg.innerHTML = '';
-      var photoInput = document.getElementById('photo'), docInput = document.getElementById('document');
+      var photoInput = document.getElementById('photo'), feeInput = document.getElementById('fee');
+      var primaryInput = document.getElementById('primaryCert'), juniorInput = document.getElementById('juniorCert');
+      var lvl = currentLevel(), secondary = isSecondary(lvl), sss = isSss(lvl);
       Promise.all([
         photoInput.files.length ? readImage(photoInput.files[0]) : Promise.resolve(null),
-        docInput.files.length ? readFileRaw(docInput.files[0]) : Promise.resolve(null)
+        feeInput.files.length ? readFileRaw(feeInput.files[0]) : Promise.resolve(null),
+        (secondary && primaryInput.files.length) ? readFileRaw(primaryInput.files[0]) : Promise.resolve(null),
+        (sss && juniorInput.files.length) ? readFileRaw(juniorInput.files[0]) : Promise.resolve(null)
       ]).then(function (files) {
-        draft.photo = files[0]; draft.document = files[1];
+        draft.photo = files[0]; draft.applicationFee = files[1]; draft.primaryCert = files[2]; draft.juniorCert = files[3];
         return new Promise(function (resolve, reject) {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); }).api_applyAdmission(draft);
         });

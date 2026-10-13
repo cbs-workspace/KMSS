@@ -40,7 +40,8 @@
     .grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
     .grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
     .grid.cols-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
-    @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } }
+    .grid.cols-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
+    @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4, .grid.cols-5 { grid-template-columns: 1fr; } }
     label { display: block; font-size: 13px; font-weight: 600; color: var(--slate-700); margin-bottom: 4px; }
     .field { margin-bottom: 14px; }
     input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--slate-300); border-radius: 8px; background: #fff; outline: none; }
@@ -73,16 +74,21 @@
     .stat { background: #fff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 18px; }
     .stat .label { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    .stat-num { font-size: 28px; font-weight: 700; line-height: 1.1; }    
     .login-wrap { min-height: 100vh; min-height: 100dvh; background: var(--slate-900); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
     .login-card { width: 100%; max-width: 420px; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,.25); }
     .login-card .head { text-align: center; margin-bottom: 20px; } .login-card .head img { height: 84px; width: 84px; object-fit: contain; margin-bottom: 10px; }
     .login-card .kicker { color: var(--emerald); text-transform: uppercase; letter-spacing: .18em; font-size: 11px; font-weight: 700; }
     .login-card h1 { font-size: 22px; margin: 4px 0; }
     .login-footer { width: 100%; max-width: 420px; margin-top: 16px; }
-    .report-head { display: flex; align-items: center; justify-content: center; gap: 16px; border-bottom: 1px solid var(--slate-200); padding-bottom: 16px; margin-bottom: 16px; }
+    .report-head { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding-bottom: 6px; }
     .report-head img { height: 72px; width: 72px; object-fit: contain; }
-    .report-head .school { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: center; }
+    .report-head .school { font-size: 19px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: center; color: #14532d; }
     .report-head .subtitle { text-align: center; color: var(--slate-500); font-size: 12px; }
+    .report-head .contact { text-align: center; color: var(--slate-500); font-size: 11px; }
+    .doc-band { background: #14532d; color: #fff; text-align: center; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; font-size: 13px; padding: 9px 14px; border-radius: 8px; margin: 12px 0 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-note { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--slate-200); text-align: center; font-size: 11px; color: var(--slate-500); line-height: 1.6; }
+    .doc-note a { color: var(--emerald-dark); font-weight: 600; }
     .report-title { text-align: center; margin-top: 4px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--emerald-dark); }
     .report-sheet { background: #fff; border: 1px solid var(--slate-200); border-radius: 14px; padding: 22px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
     .report-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
@@ -96,7 +102,7 @@
     .report-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--slate-100); }
     .report-signoff { margin-top: 14px; font-size: 11px; color: var(--slate-500); text-align: center; }
     .report-signoff strong { color: var(--slate-700); }
-    @media print { .report-sheet { border: 0; box-shadow: none; padding: 0; } .report-table thead th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; } .report-table tbody tr:nth-child(even) td { background: #f8fafc !important; } .report-table .report-total td { background: #d1fae5 !important; } }
+    @media print { .report-sheet { border: 0; box-shadow: none; padding: 0; } .report-table thead th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; } .report-table tbody tr:nth-child(even) td { background: #f8fafc !important; } .report-table .report-total td { background: #d1fae5 !important; } .doc-band { background: #14532d !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .report-head .school { color: #14532d !important; } }
     .report-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
     .report-meta .kv .k { color: var(--slate-500); font-size: 12px; } .report-meta .kv .v { font-weight: 600; }
     .report-summary { display: flex; gap: 28px; flex-wrap: wrap; }
@@ -126,6 +132,27 @@
     .bar { height: 10px; background: var(--slate-100); border-radius: 999px; overflow: hidden; }
     .bar > span { display: block; height: 100%; border-radius: 999px; background: var(--emerald); transition: width .3s ease; }
     .bar.kg > span { background: #7c3aed; } .bar.primary > span { background: #2563eb; } .bar.secondary > span { background: #059669; } .bar.plain > span { background: var(--slate-400); }
+    .dg-wrap { margin-top: 20px; }
+    .dg-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 10px; }
+    .dg-tile { border: 1px solid var(--slate-200); border-radius: 12px; padding: 16px; background: #fff; }
+    .dg-tile h4 { margin: 0 0 2px; font-size: 13px; }
+    .dg-tile .dg-sub { color: var(--slate-500); font-size: 11.5px; margin-bottom: 12px; }
+    .dg-donut-wrap { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+    .dg-donut { width: 140px; height: 140px; border-radius: 50%; position: relative; flex-shrink: 0; }
+    .dg-donut::after { content: ''; position: absolute; inset: 22px; background: #fff; border-radius: 50%; }
+    .dg-donut .dg-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; }
+    .dg-donut .dg-num { font-size: 20px; font-weight: 800; color: var(--slate-900); line-height: 1; }
+    .dg-donut .dg-cap { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-top: 2px; }
+    .dg-legend { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
+    .dg-legend-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .dg-sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; display: inline-block; }
+    .dg-bars { display: flex; flex-direction: column; gap: 9px; }
+    .dg-row { display: grid; grid-template-columns: minmax(84px,40%) 1fr 38px; gap: 10px; align-items: center; font-size: 13px; }
+    .dg-row .dg-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dg-track { height: 16px; background: var(--slate-100); border-radius: 6px; overflow: hidden; }
+    .dg-fill { height: 100%; border-radius: 6px; min-width: 3px; transition: width .3s ease; }
+    .dg-row .dg-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .dg-empty { color: var(--slate-500); font-size: 12.5px; }
     .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--slate-100); color: var(--slate-700); }
     .pill.present { background: var(--emerald-light); color: var(--emerald-dark); } .pill.absent { background: #fee2e2; color: var(--red); } .pill.late { background: #fef3c7; color: var(--amber); }
     .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
@@ -159,8 +186,11 @@
     }
     @media (max-width: 560px) {
       body.embed .content { padding: 10px; }
-      .login-wrap { padding: 16px; }
-      .login-card { padding: 24px; }
+      .login-wrap { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+      .login-card { padding: 22px 18px; border-radius: 14px; }
+      .login-card .head img { height: 72px; width: 72px; }
+      input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { font-size: 16px; padding: 12px; }
+      .btn { padding: 11px 16px; }
       .toolbar .field, .toolbar input, .toolbar select { width: 100%; }
       .toolbar .spacer { display: none; }
       .toolbar { flex-direction: column; align-items: stretch; }
@@ -184,6 +214,8 @@
     .receipt-card { border: 1px solid var(--slate-300) !important; }
     .receipt { max-width: 640px; margin: 0 auto; background: #fff; font-size: 14px; }
     .receipt hr { border: 0; border-top: 1px dashed var(--slate-300); margin: 12px 0; }
+    .receipt .r-subtitle { text-align: center; color: var(--slate-500); font-size: 12px; margin: -6px 0 14px; }
+    .receipt .r-subtitle code { color: var(--slate-700); font-weight: 600; letter-spacing: .04em; }
     .receipt .r-title { text-align: center; margin: 2px 0 14px; }
     .receipt .r-title h2 { margin: 0; letter-spacing: .14em; font-size: 18px; color: var(--slate-700); }
     .receipt .r-row { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; }
@@ -208,6 +240,7 @@
     var INITIAL_VIEW = <?!= initialViewJson ?>;
     var EMBED = <?!= embedJson ?>;
     BRAND = BRAND || { schoolName: 'Kings Metro School', subtitle: '', footerText: '', logoUrl: '', cbsLogoUrl: '' };
+    if (BRAND && !BRAND.logoUrl) BRAND.logoUrl = 'https://kingsmetroschools.vercel.app/Logo_kmss.png';
     if (INITIAL_VIEW === null || INITIAL_VIEW === undefined) INITIAL_VIEW = '';
     window.addEventListener('error', function (ev) {
       var app = document.getElementById('app');
@@ -255,6 +288,7 @@
     var state = {
       token: sessionStorage.getItem('kms_token') || '', user: null, boot: null, view: 'dashboard',
       error: null, notice: null, busy: false, dashboard: null,
+      demographics: { loaded: false, students: [], staff: [] },
       lastTypedUser: '',
       rememberMe: true,
       dashboardSearch: { q: '', students: [], staff: [], ran: false, loading: false },
@@ -264,7 +298,7 @@
       report: { studentId: '', termId: '', data: null },
       staff: { search: '', list: [], form: null },
       teachers: { list: [], form: null, flash: null },
-      applications: { list: [], detail: null },
+      applications: { list: [], detail: null, letterPreview: null },
       payments: { list: [], status: '', form: null, options: [] },
       wards: { list: [], payments: [] },
       fees: { termId: '', wardId: '', schedule: null, list: [], form: null, settings: null },
@@ -339,7 +373,7 @@
         '<div class="login-wrap"><div class="login-card"><div class="head">' +
           (BRAND.logoUrl
             ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">'
-            : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KM</div>') +
+            : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KMSS</div>') +
           '<div class="kicker">' + esc(BRAND.schoolName) + '</div>' +
           '<h1>Portal Sign In</h1>' +
           '<div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div>' +
@@ -386,7 +420,7 @@
     function shellHtml() {
       var nav = NAV.filter(function (n) { return roleAllowed(n.roles); });
       return '<div class="layout"><div class="sidebar-backdrop" data-action="close-nav"></div><aside class="sidebar"><div class="sidebar-brand">' +
-        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') +
+        (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KMSS</div>') +
         '<div><div class="name">Kings Metro</div><div class="sub">School Management</div></div></div>' +
         '<nav class="nav">' + nav.map(function (n) { return '<button data-nav="' + n.key + '" class="' + (state.view === n.key ? 'active' : '') + '">' + esc(typeof n.label === 'function' ? n.label() : n.label) + '</button>'; }).join('') + '</nav>' +
         '<div class="sidebar-foot">v1.0 · Apps Script</div></aside><div class="main">' +
@@ -449,6 +483,7 @@
     function loadDashboard() {
       state.busy = true;
       state.dashboardSearch = { q: '', students: [], staff: [], ran: false, loading: false };
+      state.demographics = { loaded: false, students: [], staff: [] };
       render();
       if (state.user.role === 'PARENT') {
         Promise.all([authed('api_myWards'), authed('api_listPayments', {}), authed('api_listAnnouncements')])
@@ -456,7 +491,15 @@
           .catch(function (err) { state.busy = false; setError(err); });
         return;
       }
-      authed('api_dashboard').then(function (d) { state.dashboard = d; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+      var demoRoles = ['ADMIN', 'PRINCIPAL', 'HEADMASTER'];
+      authed('api_dashboard').then(function (d) {
+        state.dashboard = d;
+        if (demoRoles.indexOf(state.user.role) === -1) { state.busy = false; render(); return; }
+        Promise.all([authed('api_listStudents', {}), authed('api_listStaff', {})]).then(function (res) {
+          state.demographics = { loaded: true, students: res[0] || [], staff: res[1] || [] };
+          state.busy = false; render();
+        }).catch(function () { state.busy = false; render(); });
+      }).catch(function (err) { state.busy = false; setError(err); });
     }
     function viewDashboard() {
       if (state.busy || !state.dashboard) return '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
@@ -490,7 +533,7 @@
         statCard('Fee collection', f.collectionRate + '%', ('₦' + fmtMoney(f.collected) + ' of ₦' + fmtMoney(f.billed)), ICONS.money)
       ].join('') + '</div>';
       var enrollment = '<div class="card"><div class="section-head"><h3>Enrollment</h3><span class="muted small">by section &amp; gender</span></div><div class="bars">' +
-        SECTIONS.map(function (s) { return anBar(sectionLabel_(s), o.students.bySection[s] || 0, ((o.students.bySection[s] || 0) / (o.students.total || 1)) * 100, s.toLowerCase()); }).join('') +
+        SECTIONS.map(function (s) { return anBar(SECTION_LABELS[s] || s, o.students.bySection[s] || 0, ((o.students.bySection[s] || 0) / (o.students.total || 1)) * 100, s.toLowerCase()); }).join('') +
         anBar('Male', o.students.male, (o.students.male / ((o.students.male + o.students.female) || 1)) * 100, 'primary') +
         anBar('Female', o.students.female, (o.students.female / ((o.students.male + o.students.female) || 1)) * 100, 'secondary') + '</div>' +
         '<div class="dir-head" style="margin-top:14px">By class level</div>' +
@@ -692,6 +735,100 @@
       return '<div class="bar-row"><div class="top"><span>' + esc(label) + '</span><span>' + esc(count) + '</span></div><div class="bar ' + (cls || '') + '"><span style="width:' + pct + '%"></span></div></div>';
     }
     function grid2(cards) { cards = (cards || []).filter(Boolean); if (!cards.length) return ''; return '<div class="' + (cards.length === 1 ? 'grid' : 'grid cols-2') + '" style="margin-top:20px">' + cards.join('') + '</div>'; }
+
+    /* ---------------- demographics charts (dashboard) ---------------- */
+    var DEMO_PALETTE = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#0891b2', '#db2777', '#65a30d', '#dc2626', '#0f766e', '#9333ea', '#ea580c', '#0369a1'];
+    var DEMO_STUDENT_BANDS = [
+      { label: 'Under 3', min: -1, max: 2 }, { label: '3–5', min: 3, max: 5 },
+      { label: '6–11', min: 6, max: 11 }, { label: '12–17', min: 12, max: 17 }, { label: '18+', min: 18, max: 200 }
+    ];
+    var DEMO_STAFF_BANDS = [
+      { label: 'Under 25', min: -1, max: 24 }, { label: '25–34', min: 25, max: 34 },
+      { label: '35–44', min: 35, max: 44 }, { label: '45–54', min: 45, max: 54 }, { label: '55+', min: 55, max: 200 }
+    ];
+    var DEMO_SERVICE_BANDS = [
+      { label: 'Under 1', min: -1, max: 0 }, { label: '1–4', min: 1, max: 4 },
+      { label: '5–9', min: 5, max: 9 }, { label: '10–14', min: 10, max: 14 }, { label: '15+', min: 15, max: 200 }
+    ];
+    function demoYears(s) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+      if (!m) return null;
+      var now = new Date(), years = now.getFullYear() - (+m[1]);
+      if ((now.getMonth() + 1) * 100 + now.getDate() < (+m[2]) * 100 + (+m[3])) years--;
+      return (years < 0 || years > 120) ? null : years;
+    }
+    function demoBand(value, bands) {
+      if (value === null || value === undefined) return 'Not recorded';
+      for (var i = 0; i < bands.length; i++) if (value >= bands[i].min && value <= bands[i].max) return bands[i].label;
+      return 'Not recorded';
+    }
+    function demoGender(g) { var v = String(g || '').trim(); if (/^m/i.test(v)) return 'Male'; if (/^f/i.test(v)) return 'Female'; return v || 'Not recorded'; }
+    function demoCount(list, fn) { var m = {}; list.forEach(function (x) { var k = fn(x); if (k === '' || k === null || k === undefined) k = 'Not recorded'; m[k] = (m[k] || 0) + 1; }); return m; }
+    function demoSeries(map, order, includeZero) {
+      order = order || [];
+      var keys = order.slice();
+      Object.keys(map).forEach(function (k) { if (keys.indexOf(k) === -1) keys.push(k); });
+      return keys.filter(function (k) { return includeZero || (map[k] || 0) > 0; }).map(function (k) { return { label: k, count: map[k] || 0 }; });
+    }
+    function demoBandSeries(list, bands, getValue) {
+      var order = bands.map(function (b) { return b.label; });
+      var m = demoCount(list, function (x) { return demoBand(getValue(x), bands); });
+      return demoSeries(m, order.concat((m['Not recorded'] || 0) > 0 ? ['Not recorded'] : []), true);
+    }
+    function demoBySection(list, getSection) {
+      var m = demoCount(list, function (x) { var s = String(getSection(x) || '').trim(); return s ? (SECTION_LABELS[s] || s) : 'Unassigned'; });
+      return demoSeries(m, [SECTION_LABELS.KG, SECTION_LABELS.PRIMARY, SECTION_LABELS.SECONDARY, 'Unassigned'], false);
+    }
+    function demoDonut(data, cap) {
+      var total = 0; data.forEach(function (d) { total += d.count; });
+      if (!total) return '<div class="dg-empty">No data.</div>';
+      var stops = [], cursor = 0, legend = '';
+      data.forEach(function (d, i) {
+        var pct = d.count / total * 100, c = DEMO_PALETTE[i % DEMO_PALETTE.length], start = cursor;
+        cursor += pct;
+        stops.push(c + ' ' + start.toFixed(2) + '% ' + cursor.toFixed(2) + '%');
+        legend += '<div class="dg-legend-item"><span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dg-sw" style="background:' + c + '"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.label) + '</span></span><span style="font-weight:700">' + d.count + ' <span class="muted small">(' + Math.round(pct) + '%)</span></span></div>';
+      });
+      return '<div class="dg-donut-wrap"><div class="dg-donut" style="background:conic-gradient(' + stops.join(',') + ')"><div class="dg-center"><span class="dg-num">' + total + '</span><span class="dg-cap">' + esc(cap || 'Total') + '</span></div></div><div class="dg-legend">' + legend + '</div></div>';
+    }
+    function demoBars(data) {
+      if (!data || !data.length) return '<div class="dg-empty">No data.</div>';
+      var max = 1; data.forEach(function (d) { if (d.count > max) max = d.count; });
+      return '<div class="dg-bars">' + data.map(function (d, i) {
+        return '<div class="dg-row"><div class="dg-lbl" title="' + esc(d.label) + '">' + esc(d.label) + '</div><div class="dg-track"><div class="dg-fill" style="width:' + Math.round(d.count / max * 100) + '%;background:' + DEMO_PALETTE[i % DEMO_PALETTE.length] + '"></div></div><div class="dg-val">' + d.count + '</div></div>';
+      }).join('') + '</div>';
+    }
+    function demoTile(title, sub, body) { return '<div class="dg-tile"><h4>' + esc(title) + '</h4><div class="dg-sub">' + esc(sub) + '</div>' + body + '</div>'; }
+    function demographicsPanel(dg) {
+      if (!dg || !dg.loaded) return '';
+      var st = dg.students || [], sf = dg.staff || [];
+      if (!st.length && !sf.length) return '';
+      var studentTiles = '';
+      studentTiles += demoTile('Students by gender', st.length + ' students in scope', demoDonut(demoSeries(demoCount(st, function (s) { return demoGender(s.gender); }), ['Male', 'Female', 'Not recorded'], false), 'Students'));
+      studentTiles += demoTile('Students by age group', 'school-stage bands', demoBars(demoBandSeries(st, DEMO_STUDENT_BANDS, function (s) { return demoYears(s.dateOfBirth); })));
+      studentTiles += demoTile('Students by section', 'KG & Creche · Primary · Secondary', demoDonut(demoBySection(st, function (s) { return s.classArm && s.classArm.classLevel ? s.classArm.classLevel.section : ''; }), 'Students'));
+      var lvlMap = {}; st.forEach(function (s) { var lv = s.classArm && s.classArm.classLevel ? s.classArm.classLevel.name : ''; var k = lv || 'Unassigned'; if (!lvlMap[k]) lvlMap[k] = { count: 0, section: s.classArm && s.classArm.classLevel ? s.classArm.classLevel.section : '' }; lvlMap[k].count++; });
+      var lvlSeries = Object.keys(lvlMap).sort(function (a, b) { if (lvlMap[a].section !== lvlMap[b].section) return SECTIONS.indexOf(lvlMap[a].section) - SECTIONS.indexOf(lvlMap[b].section); return a.localeCompare(b, undefined, { numeric: true }); }).map(function (k) { return { label: k, count: lvlMap[k].count }; });
+      studentTiles += demoTile('Students by class level', 'enrolment per class', demoBars(lvlSeries));
+      studentTiles += demoTile('Student status', 'active vs inactive', demoDonut(demoSeries(demoCount(st, function (s) { return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active'; }), ['Active', 'Inactive'], false), 'Students'));
+      var admMap = demoCount(st, function (s) { return String(s.createdAt || '').slice(0, 7); }); delete admMap['Not recorded'];
+      var admSeries = Object.keys(admMap).sort().slice(-12).map(function (m) { return { label: m, count: admMap[m] }; });
+      if (!admSeries.length) { var yrMap = demoCount(st, function (s) { var m = /KMS\/(\d{4})\//.exec(String(s.admissionNo || '')); return m ? m[1] : ''; }); delete yrMap['Not recorded']; admSeries = Object.keys(yrMap).sort().map(function (y) { return { label: y, count: yrMap[y] }; }); }
+      studentTiles += demoTile('Admissions by month', admSeries.length && String(admSeries[0].label).length === 7 ? 'last 12 months' : 'by year', demoBars(admSeries));
+
+      var staffTiles = '';
+      staffTiles += demoTile('Staff by gender', sf.length + ' staff in scope', demoDonut(demoSeries(demoCount(sf, function (s) { return demoGender(s.gender); }), ['Male', 'Female', 'Not recorded'], false), 'Staff'));
+      staffTiles += demoTile('Staff by age group', 'school-stage bands', demoBars(demoBandSeries(sf, DEMO_STAFF_BANDS, function (s) { return demoYears(s.dateOfBirth); })));
+      staffTiles += demoTile('Staff by section', 'teaching & support', demoDonut(demoBySection(sf, function (s) { return s.section; }), 'Staff'));
+      staffTiles += demoTile('Staff by designation', 'role mix', demoBars(demoSeries(demoCount(sf, function (s) { return String(s.designation || '').trim() || 'Unspecified'; }), [], false).sort(function (a, b) { return b.count - a.count; })));
+      staffTiles += demoTile('Staff status', 'active vs inactive', demoDonut(demoSeries(demoCount(sf, function (s) { return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active'; }), ['Active', 'Inactive'], false), 'Staff'));
+      staffTiles += demoTile('Years of service', 'from date joined', demoBars(demoBandSeries(sf, DEMO_SERVICE_BANDS, function (s) { return demoYears(s.dateJoined); })));
+
+      return '<div class="dg-wrap"><div class="card"><div class="section-head"><h3>Demographics</h3><span class="muted small">live from student &amp; staff records · your scope</span></div>' +
+        '<div class="dir-head">Students</div><div class="dg-grid">' + studentTiles + '</div>' +
+        '<div class="dir-head" style="margin-top:18px">Staff</div><div class="dg-grid">' + staffTiles + '</div>' +
+        '</div></div>';
+    }
     function attCard(d) {
       var a = d.attendance;
       return '<div class="card"><div class="section-head"><h3>Attendance today</h3><span class="muted small">' + esc(a.date) + '</span></div>' +
@@ -785,6 +922,7 @@
       if (st.available) row2.push(attCard(d));
       if (roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR', 'ACCOUNT_OFFICER'])) row2.push(payCard(d));
       html += grid2(row2);
+      html += demographicsPanel(state.demographics);
       html += '<div style="margin-top:20px">' + searchPanel() + '</div>';
       html += latestAnnouncementsFrom(d.announcements);
       return html;
@@ -798,7 +936,6 @@
         statCard('Rejected', p.rejected, 'Declined claims', ICONS.money) +
         statCard('Total entries', p.count, 'All payments', ICONS.money) + '</div>';
       html += grid2([attCard(d), payCard(d)]);
-      html += '<div style="margin-top:20px">' + searchPanel() + '</div>';
       html += latestAnnouncementsFrom(d.announcements);
       return html;
     }
@@ -917,13 +1054,30 @@
 
     /* ---------------- report card ---------------- */
     function loadReport() { state.busy = true; render(); authed('api_getReportCard', state.report.studentId, state.report.termId || state.results.termId).then(function (d) { state.report.data = d; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function docContactLine() {
+      return 'Sokoto, Sokoto State, Nigeria · +234 812 210 0528 · info@kingsmetroschools.com.ng';
+    }
+    function docHeaderHtml(kind, brand) {
+      brand = brand || BRAND || {};
+      var logo = brand.logoUrl ? '<img src="' + esc(brand.logoUrl) + '" alt="">' : '<div class="logo-fallback">KMSS</div>';
+      var name = brand.schoolName || 'Kings Metro School';
+      var sub = brand.subtitle || '';
+      return '<div class="report-head">' + logo +
+        '<div><div class="school">' + esc(name) + '</div>' + (sub ? '<div class="subtitle">' + esc(sub) + '</div>' : '') +
+        '<div class="contact">' + esc(docContactLine()) + '</div></div></div>' +
+        '<div class="doc-band">' + esc(kind) + '</div>';
+    }
+    function docNoteHtml() {
+      return '<div class="doc-note">This document was generated automatically by the school portal and requires no signature. For all enquiries, contact ' +
+        '<a href="mailto:info@kingsmetroschools.com.ng">info@kingsmetroschools.com.ng</a> · +234 812 210 0528.</div>';
+    }
     function viewReport() {
       if (state.busy || !state.report.data) return '<div class="page-loading"><span class="spinner"></span> Loading report card…</div>';
       var d = state.report.data, canEdit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']);
       var att = d.attendance || { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
       var attLine = 'Present ' + esc(att.present) + ' · Absent ' + esc(att.absent) + (att.late ? ' · Late ' + esc(att.late) : '') + (att.excused ? ' · Excused ' + esc(att.excused) : '') + (att.total ? ' (' + esc(att.total) + ' recorded)' : '');
       var body = '<div class="toolbar no-print"><button class="btn btn-outline" data-action="back-results">← Back</button><div class="spacer"></div><button class="btn btn-primary" data-action="print-report">Print report card</button></div>' +
-        '<div class="report-sheet"><div class="report-head">' + (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') + '<div><div class="school">' + esc(BRAND.schoolName) + '</div><div class="subtitle">' + esc(BRAND.subtitle) + '</div><div class="report-title">Terminal Report</div></div></div>' +
+        '<div class="report-sheet">' + docHeaderHtml('Terminal Report') +
         '<div class="report-meta"><div class="kv"><div class="k">Student</div><div class="v">' + esc(fullName(d.student)) + '</div><div class="k small">' + esc(d.student.admissionNo) + (d.student.classArm ? ' · ' + esc(armLabel(d.student.classArm)) : '') + '</div></div>' +
         '<div class="kv"><div class="k">Term · Attendance</div><div class="v">' + esc(d.term.label) + '</div><div class="k small">' + attLine + '</div></div>' +
         '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(d.sheet.status) + '</div></div></div></div>' +
@@ -932,7 +1086,7 @@
         '<tr class="report-total"><td colspan="5" style="text-align:right"><strong>Total</strong></td><td><strong>' + esc(d.computed.totalScore) + '</strong></td><td colspan="2">Average <strong>' + esc(d.computed.average) + '</strong> · Position ' + esc(d.computed.position || '—') + '</td></tr></tbody></table>' +
         '<div class="report-remarks"><div class="remark-box"><div class="muted small" style="margin-bottom:6px">Teacher\u2019s remark</div><div>' + esc(d.sheet.teacherRemark || '—') + '</div><div class="sign">Teacher\u2019s signature</div></div><div class="remark-box"><div class="muted small" style="margin-bottom:6px">Principal\u2019s remark</div><div>' + esc(d.sheet.principalRemark || '—') + '</div><div class="sign">Principal\u2019s signature</div></div></div>' +
         '<div class="report-foot"><div class="muted small" style="margin-bottom:6px">Grading scale</div>' + d.gradeScale.map(function (g) { return '<span class="badge" style="margin-right:6px">' + esc(g.grade) + ': ' + esc(g.minScore) + '–' + esc(g.maxScore) + ' (' + esc(g.remark) + ')</span>'; }).join('') +
-        '</div><div class="report-signoff">Result prepared by <strong>Kings Metro School</strong> · ' + esc(BRAND.schoolName) + ' portal — this report is official and does not require a counter-signature.</div></div>';
+        '</div><div class="report-signoff">Result prepared by <strong>Kings Metro School</strong> · ' + esc(BRAND.schoolName) + ' portal — this report is official and does not require a counter-signature.</div>' + docNoteHtml() + '</div>';
       if (canEdit) body += '<div class="card no-print"><h3 style="margin-top:0">Remarks</h3><form id="remarks-form"><div class="field"><label>Teacher\u2019s remark</label><textarea name="teacherRemark">' + esc(d.sheet.teacherRemark) + '</textarea></div><div class="field"><label>Principal\u2019s remark</label><textarea name="principalRemark">' + esc(d.sheet.principalRemark) + '</textarea></div><button class="btn btn-primary" type="submit">Save remarks</button></form></div>';
       return body;
     }
@@ -1017,34 +1171,61 @@
       body += sum;
       if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
       if (app.detail) {
-        var d = state.applications.list.filter(function (x) { return x.id === app.detail; })[0];
-        if (d) body += applicationDetailHtml(d) + '<div style="height:18px"></div>';
+        var d = state.applications.list.filter(function (x) { return x.ref === app.detail; })[0];
+        if (d) {
+          body += applicationDetailHtml(d) + '<div style="height:18px"></div>';
+          if (app.letterPreview) body += applicationLetterPreviewHtml(app.letterPreview) + '<div style="height:18px"></div>';
+        }
       }
       if (!app.list.length) return body + '<div class="empty">No applications yet.</div>';
       body += '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Child</th><th>Applying for</th><th>Guardian</th><th>Phone</th><th>Submitted</th><th>Status</th><th></th></tr></thead><tbody>' +
         app.list.map(function (x) {
-          return '<tr><td><code>' + esc(x.ref) + '</code></td><td><strong>' + esc([x.childFirstName, x.childMiddleName, x.childLastName].filter(Boolean).join(' ')) + '</strong></td><td>' + esc(x.applyingClass) + '</td><td>' + esc(x.guardianName) + '</td><td>' + esc(x.guardianPhone) + '</td><td>' + esc(String(x.submittedAt).slice(0, 10)) + '</td><td>' + applyBadge(x.status) + '</td>' +
-            '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="application-open" data-id="' + esc(x.id) + '">' + (app.detail === x.id ? 'Close' : 'Review') + '</button></td></tr>';
+          return '<tr><td><code>' + esc(x.ref) + '</code></td><td><strong>' + esc(x.childNames) + '</strong></td><td>' + esc(x.applyingClass) + '</td><td>' + esc(x.guardianName) + '</td><td>' + esc(x.guardianPhone) + '</td><td>' + esc(String(x.timestamp || '').slice(0, 16)) + '</td><td>' + applyBadge(x.status) + '</td>' +
+            '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="application-open" data-id="' + esc(x.ref) + '">' + (app.detail === x.ref ? 'Close' : 'Review') + '</button></td></tr>';
         }).join('') + '</tbody></table></div>';
       return body;
     }
+    function docLinkCard(label, url) {
+      return '<div class="field"><label>' + esc(label) + '</label><div>' + (url ? '<a href="' + esc(url) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div>';
+    }
     function applicationDetailHtml(d) {
-      var reviewCols = '<div class="grid cols-3">' + inputField('Child first name', 'f', d.childFirstName, false) + inputField('Child middle name', 'f', d.childMiddleName, false) + inputField('Child last name', 'f', d.childLastName, false) + '</div>' +
-        '<div class="grid cols-3">' + inputField('Gender', 'f', d.gender, false) + inputField('Date of birth', 'f', d.dateOfBirth, false) + inputField('Applying for', 'f', d.applyingClass + ' (' + (d.classLevelId || '') + ')', false) + '</div>' +
-        '<div class="grid cols-3">' + inputField('Guardian name', 'f', d.guardianName, false) + inputField('Guardian phone', 'f', d.guardianPhone, false) + inputField('Guardian email', 'f', d.guardianEmail || '—', false) + '</div>' +
+      var reviewCols = '<div class="grid cols-3">' + inputField('Child name', 'f', d.childNames, false) + inputField('Gender', 'f', d.gender, false) + inputField('Date of birth', 'f', d.dateOfBirth, false) + '</div>' +
+        '<div class="grid cols-3">' + inputField('Nationality', 'f', d.nationality || '—', false) + inputField('State of origin', 'f', d.state || '—', false) + inputField('LGA', 'f', d.lga || '—', false) + '</div>' +
+        '<div class="grid cols-3">' + inputField('Applying for', 'f', d.applyingClass, false) + inputField('Guardian name', 'f', d.guardianName, false) + inputField('Guardian phone', 'f', d.guardianPhone, false) + '</div>' +
+        '<div class="grid cols-3">' + inputField('Guardian email', 'f', d.guardianEmail || '—', false) + inputField('Guardian state', 'f', d.guardianState || '—', false) + inputField('Guardian LGA', 'f', d.guardianLga || '—', false) + '</div>' +
         '<div class="field"><label>Home address</label><div>' + esc(d.address || '—') + '</div></div>' +
-        '<div class="grid cols-2"><div class="field"><label>Previous school</label><div>' + esc(d.previousSchool || '—') + '</div></div><div class="field"><label>Submitted</label><div>' + esc(d.submittedAt) + (d.reviewedBy ? '<div class="muted small">Last reviewed by ' + esc(d.reviewedBy) + (d.reviewedAt ? ' on ' + esc(String(d.reviewedAt).slice(0, 10)) : '') + '</div>' : '') + '</div></div></div>' +
+        '<div class="grid cols-2"><div class="field"><label>Previous school</label><div>' + esc(d.previousSchool || '—') + '</div></div><div class="field"><label>Submitted</label><div>' + esc(d.timestamp || '') + (d.reviewedBy ? '<div class="muted small">Last reviewed by ' + esc(d.reviewedBy) + (d.reviewedAt ? ' on ' + esc(String(d.reviewedAt).slice(0, 10)) : '') + '</div>' : '') + '</div></div></div>' +
         (d.notes ? '<div class="field"><label>Notes</label><div>' + esc(d.notes) + '</div></div>' : '') +
-        '<div class="grid cols-2"><div class="field"><label>Passport photo</label><div>' + (d.photoUrl ? '<a href="' + esc(d.photoUrl) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div><div class="field"><label>Document (birth cert etc.)</label><div>' + (d.documentUrl ? '<a href="' + esc(d.documentUrl) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div></div>';
+        '<div class="grid cols-2">' + docLinkCard('Passport photograph', d.photoUrl) + docLinkCard('Primary school certificate', d.primaryCertUrl) + docLinkCard('Junior school certificate', d.juniorCertUrl) + docLinkCard('Evidence of application fee', d.applicationFeeUrl) + '</div>';
       var statusOptions = (state.boot.admissionStatuses || ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED']).map(function (s) {
         return '<option value="' + esc(s) + '"' + (String(s) === String(d.status) ? ' selected' : '') + '>' + esc(s) + '</option>';
       }).join('');
-      return '<div class="card"><div class="row"><div><h3 style="margin:0">' + esc(d.ref) + '</h3><div class="muted small">' + esc([d.childFirstName, d.childLastName].filter(Boolean).join(' ')) + '</div></div><div class="spacer"></div>' + applyBadge(d.status) + '</div>' +
+      var canApprove = roleAllowed(['ADMIN', 'PRINCIPAL']);
+      var approveBlock = '';
+      if (canApprove) {
+        approveBlock = '<div style="margin-top:14px;border-top:1px solid #e8ecea;padding-top:14px">' +
+          '<div class="muted small" style="margin-bottom:8px">Approving sends the offer letter (email + branded PDF) to the guardian and sets this application to <strong>OFFERED</strong>.</div>' +
+          '<button class="btn btn-primary" type="button" data-action="application-approve" data-id="' + esc(d.ref) + '">Approve &amp; send admission letter</button>' +
+          (d.letterSentAt ? '<div class="muted small" style="margin-top:8px">Offer letter already sent ' + esc(String(d.letterSentAt).slice(0, 10)) + (d.letterSentBy ? ' by ' + esc(d.letterSentBy) : '') + '.</div>' : '') +
+          '</div>';
+      }
+      return '<div class="card"><div class="row"><div><h3 style="margin:0">' + esc(d.ref) + '</h3><div class="muted small">' + esc(d.childNames) + '</div></div><div class="spacer"></div>' + applyBadge(d.status) + '</div>' +
         reviewCols +
-        '<form id="application-form" data-id="' + esc(d.id) + '"><div class="grid cols-3">' +
+        '<form id="application-form" data-id="' + esc(d.ref) + '"><div class="grid cols-3">' +
         '<div class="field"><label>Status</label><select name="status">' + statusOptions + '</select></div>' +
         '<div class="field" style="grid-column:span 2"><label>Remarks</label><textarea name="remarks" placeholder="e.g. documents verified, interview scheduled…">' + esc(d.remarks || '') + '</textarea></div></div>' +
-        '<div class="row"><button class="btn btn-primary" type="submit">Save review</button></div></form></div>';
+        '<div class="row"><button class="btn btn-primary" type="submit">Save review</button></div></form>' +
+        approveBlock + '</div>';
+    }
+    function applicationLetterPreviewHtml(p) {
+      return '<div class="card"><div class="row"><strong>Admission letter preview</strong><div class="spacer"></div>' +
+        (p.alreadySent ? '<span class="badge warn">Already sent</span>' : '<span class="badge">Not yet sent</span>') + '</div>' +
+        '<p class="muted small" style="margin:8px 0 0">To: ' + esc(p.email) + '</p>' +
+        '<p class="muted small" style="margin:2px 0 0">Subject: ' + esc(p.subject) + '</p>' +
+        (p.alreadySent ? '<div class="alert error" style="margin-top:10px">An offer letter was already sent to this guardian on ' + esc(String(p.alreadySent.sentAt).slice(0, 10)) + '. Sending again will email them a second copy.</div>' : '') +
+        '<pre style="white-space:pre-wrap;background:#f6f8f7;border:1px solid #e2e8e4;border-radius:8px;padding:14px;margin-top:12px;font-size:13px;line-height:1.5">' + esc(p.body) + '</pre>' +
+        '<p class="muted small">A branded PDF of this letter is generated and attached automatically. The applicant\'s address above is the only recipient.</p>' +
+        '<div class="row"><button class="btn btn-primary" data-action="application-letter-send">' + (p.alreadySent ? 'Send again' : 'Send admission letter') + '</button> <button class="btn btn-outline" data-action="application-letter-cancel">Cancel</button></div></div>';
     }
 
     /* ---------------- payments ---------------- */
@@ -1125,6 +1306,7 @@
       if (!f.schedule) return body + '<div class="empty">Select a ward and term to see the fee schedule.</div>';
       var s = f.schedule, ward = findIn(state.wards.list, f.wardId);
       body += '<div class="card fee-sheet">' +
+        '<div style="padding:16px 16px 0">' + docHeaderHtml('Fee Schedule') + '</div>' +
         '<div class="sheet-head"><h3 style="margin:0">Fee schedule — ' + esc(s.term ? s.term.label : '') + '</h3>' + (s.saved ? '<span class="badge ok">Selection saved</span>' : '<span class="badge warn">Unsaved changes</span>') + '</div>' +
         '<div class="fee-sum">' +
         feeStat('Total bill', '₦ ' + fmtMoney(s.totalBill)) + feeStat('Paid so far', '₦ ' + fmtMoney(s.amountPaid)) +
@@ -1140,7 +1322,8 @@
         '<div class="sheet-head" style="padding:14px 16px"><div class="field" style="min-width:170px;margin:0"><label>Pay in</label><select data-field="fees-inst">' + [1, 2, 3].map(function (n) {
           return '<option value="' + n + '"' + (Number(s.installments) === n ? ' selected' : '') + '>' + (n === 1 ? 'One payment (full)' : (n === 2 ? 'Two installments' : 'Three installments')) + '</option>';
         }).join('') + '</select></div><div class="spacer"></div>' +
-        '<button class="btn btn-primary" data-action="fees-save"' + (s.saved ? ' disabled' : '') + '>Save selection</button></div></div>';
+        '<button class="btn btn-primary" data-action="fees-save"' + (s.saved ? ' disabled' : '') + '>Save selection</button></div>' +
+        '<div style="padding:0 16px 16px">' + docNoteHtml() + '</div></div>';
       var pays = s.payments || [];
       body += '<div class="card no-print" style="margin-top:20px"><h3 style="margin-top:0">Payments &amp; receipts</h3>' +
         (pays.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Receipt no.</th><th>#</th><th>Category</th><th>Amount</th><th>Balance after</th><th>Status</th><th></th></tr></thead><tbody>' +
@@ -1167,6 +1350,15 @@
       body += '<div class="card" style="margin-top:24px"><div class="section-head"><h3>Settings</h3></div>' +
         '<div class="grid cols-2"><div class="field"><label>Admission notification emails <span class="muted small">(comma-separated — the applicant plus all admin/principal users are always notified)</span></label><input data-field="adm-emails" type="text" value="' + esc(f.settings.ADMISSION_NOTIFY_EMAILS || '') + '"></div>' +
         '<div class="field"><label>Email-to-SMS gateway <span class="muted small">(carrier suffix, e.g. @vtext.com — optional fallback when no API provider is set)</span></label><input data-field="sms-gateway" type="text" value="' + esc(f.settings.SMS_EMAIL_GATEWAY || '') + '" placeholder="@vtext.com"></div></div>' +
+        '<div class="section-head" style="margin-top:16px"><h3 style="font-size:15px">Admission offer letter</h3><span class="muted small">used when an application is approved</span></div>' +
+        '<div class="grid cols-2">' +
+        '<div class="field"><label>Academic session</label><input data-field="adm-session" type="text" value="' + esc(f.settings.ADMISSION_SESSION || '') + '" placeholder="e.g. 2026/2027"></div>' +
+        '<div class="field"><label>Resumption note</label><input data-field="adm-resumption" type="text" value="' + esc(f.settings.ADMISSION_RESUMPTION_DATE || '') + '" placeholder="e.g. 8 September 2026"></div></div>' +
+        '<div class="grid cols-2">' +
+        '<div class="field"><label>Acceptance deadline</label><input data-field="adm-deadline" type="text" value="' + esc(f.settings.ADMISSION_ACCEPTANCE_DEADLINE || '') + '" placeholder="e.g. two (2) weeks from the date of this letter"></div>' +
+        '<div class="field"><label>Principal name <span class="muted small">(signature)</span></label><input data-field="adm-principal" type="text" value="' + esc(f.settings.ADMISSION_PRINCIPAL_NAME || '') + '" placeholder="e.g. The Principal"></div></div>' +
+        '<div class="field"><label>Fees note</label><input data-field="adm-fees" type="text" value="' + esc(f.settings.ADMISSION_LETTER_FEES || '') + '" placeholder="e.g. The fee schedule is available at the school office."></div>' +
+        '<div class="field"><label>Next steps / acceptance instructions</label><textarea data-field="adm-next">' + esc(f.settings.ADMISSION_LETTER_NEXT_STEPS || '') + '</textarea></div>' +
         '<div class="section-head" style="margin-top:16px"><h3 style="font-size:15px">SMS provider</h3><span class="muted small">recommended — delivers SMS directly</span></div>' +
         '<div class="grid cols-3">' +
         '<div class="field"><label>Provider</label><select data-field="sms-provider">' + ['', 'TERMII'].map(function (p) { return '<option value="' + p + '"' + (String(f.settings.SMS_PROVIDER || '') === p ? ' selected' : '') + '>' + (p === '' ? 'None' : p) + '</option>'; }).join('') + '</select></div>' +
@@ -1207,9 +1399,8 @@
       var rowRaw = function (k, v, line) { return '<div class="r-row' + (line ? ' line' : '') + '"><span class="k">' + esc(k) + '</span><span class="v">' + (v === '' || v === null || v === undefined ? '—' : v) + '</span></div>'; };
       var st = String(r.status || 'PENDING');
       var statusBadge = st === 'VERIFIED' ? '<span class="badge ok">VERIFIED</span>' : (st === 'REJECTED' ? '<span class="badge bad">REJECTED — contact the office</span>' : '<span class="badge warn">PENDING — awaiting verification</span>');
-      var doc = '<div class="report-head">' + (b.logoUrl ? '<img src="' + esc(b.logoUrl) + '" alt="">' : '<div class="logo-fallback">KM</div>') +
-        '<div><div class="school">' + esc(b.schoolName || 'Kings Metro School') + '</div><div class="subtitle">' + esc(b.subtitle || '') + '</div></div></div>';
-      return doc + '<div class="r-title"><h2>OFFICIAL RECEIPT</h2><code>' + esc(r.receiptNo || '') + '</code></div>' +
+      return '<div class="receipt">' + docHeaderHtml('Official Receipt', b) +
+        (r.receiptNo ? '<div class="r-subtitle">Receipt No. <code>' + esc(r.receiptNo) + '</code></div>' : '') +
         rowRaw('Status', statusBadge) + row('Student', r.studentName + ' (' + r.admissionNo + ')') + row('Class', r.classArm) + row('Term', r.term ? r.term.label : (r.termId || '')) +
         row('Date', String(r.createdAt || '').slice(0, 10)) + row('Payment', r.category + (r.installmentNo ? ' — installment ' + r.installmentNo : '')) +
         (r.items ? row('Items', r.items) : '') +
@@ -1217,7 +1408,7 @@
         '<hr>' + row('Amount paid', '₦ ' + fmtMoney(r.amountPaid), true) +
         (r.balanceAfter !== '' ? row('Balance after this payment', '₦ ' + fmtMoney(r.balanceAfter)) : '') +
         (r.viewfile ? rowRaw('Evidence', '<a href="' + esc(r.viewfile) + '" target="_blank">Open evidence</a>') : '') +
-        '<div class="r-foot">' + esc(b.footerText || '') + '<br>Keep this receipt for your records.</div>';
+        '<div class="r-foot">' + (b.footerText ? esc(b.footerText) + '<br>' : '') + 'Keep this receipt for your records.</div>' + docNoteHtml() + '</div>';
     }
     function toggleFeeItem(t) {
       var s = state.fees.schedule; if (!s) return;
@@ -1389,6 +1580,7 @@
       authed('api_changeOwnPassword', oldP, newP).then(function () {
         authed('api_logout').catch(function () {});
         state.token = ''; state.user = null; state.boot = null; state.pwForm = false;
+        state.busy = false;                       // <-- THE FIX
         sessionStorage.removeItem('kms_token');
         state.notice = 'Password changed. Please sign in again.';
         render();
@@ -1432,7 +1624,15 @@
           el.setAttribute('aria-label', nowShown ? 'Hide password' : 'Show password');
           return;
         }
-        case 'signout': authed('api_logout').catch(function () {}); state.token = ''; state.user = null; state.boot = null; sessionStorage.removeItem('kms_token'); clearMessages(); document.body.classList.remove('nav-open'); render(); return;
+        case 'signout':
+        authed('api_logout').catch(function () {});
+        state.token = ''; state.user = null; state.boot = null;
+        state.busy = false;                         // <-- belt and braces
+        sessionStorage.removeItem('kms_token');
+        clearMessages();
+        document.body.classList.remove('nav-open');
+        render();
+        return;
         case 'student-new': state.students.form = { classArmId: state.students.classArmId, status: 'ACTIVE' }; clearMessages(); render(); return;
         case 'cancel-student': state.students.form = null; render(); return;
         case 'student-edit': var st = findIn(state.students.list, id); if (st) { state.students.form = JSON.parse(JSON.stringify(st)); clearMessages(); render(); } return;
@@ -1457,7 +1657,10 @@
         case 'teacher-activate': act(authed('api_setTeacherActive', id, true), 'Teacher activated.', loadTeachers); return;
         case 'teacher-deactivate': var td = findIn(state.teachers.list, id); if (td && confirm('Deactivate ' + td.username + '? They will be signed out and unable to sign in.')) act(authed('api_setTeacherActive', id, false), 'Teacher deactivated.', loadTeachers); return;
         case 'teacher-reset': var tr = findIn(state.teachers.list, id); if (tr && confirm('Send ' + tr.username + ' a new password? Their current sessions will be ended.')) { state.busy = true; clearMessages(); render(); authed('api_resetTeacherPassword', id).then(function (r) { state.teachers.flash = { message: r.message, password: r.password || '' }; state.busy = false; loadTeachers(); }).catch(function (err) { state.busy = false; setError(err); }); } return;
-        case 'application-open': state.applications.detail = state.applications.detail === id ? null : id; clearMessages(); render(); return;
+        case 'application-open': state.applications.detail = state.applications.detail === id ? null : id; state.applications.letterPreview = null; clearMessages(); render(); return;
+        case 'application-approve': state.busy = true; state.applications.letterPreview = null; clearMessages(); render(); authed('api_previewAdmissionLetter', id).then(function (p) { state.applications.letterPreview = p; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); return;
+        case 'application-letter-cancel': state.applications.letterPreview = null; clearMessages(); render(); return;
+        case 'application-letter-send': sendAdmissionLetter(); return;
         case 'pay-new': state.payments.form = true; clearMessages(); render(); return;
         case 'cancel-payment': state.payments.form = null; render(); return;
         case 'pay-verify': act(authed('api_verifyPayment', id, el.getAttribute('data-decision')), 'Payment updated.', loadPayments); return;
@@ -1486,7 +1689,7 @@
         case 'fee-cancel': state.fees.form = null; render(); return;
         case 'fee-edit': var ffe = findIn(state.fees.list, id); if (ffe) { state.fees.form = JSON.parse(JSON.stringify(ffe)); clearMessages(); render(); } return;
         case 'fee-delete': if (confirm('Delete this fee/charge? Parents\u2019 saved selections for it remain in the log.')) act(authed('api_deleteFee', id), 'Fee deleted.', loadFees); return;
-        case 'fees-save-settings': var lf = function (n) { return String((document.querySelector('[data-field="' + n + '"]') || {}).value || '').trim(); }; var ems = lf('adm-emails'); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', '), SMS_EMAIL_GATEWAY: lf('sms-gateway'), SMS_PROVIDER: lf('sms-provider'), SMS_API_KEY: lf('sms-api-key'), SMS_SENDER_ID: lf('sms-sender') || 'KMS', SMS_CHANNEL: lf('sms-channel') || 'generic', SMS_COUNTRY_CODE: lf('sms-country') || '234' }), 'Settings saved.', loadFees); return;
+        case 'fees-save-settings': var lf = function (n) { return String((document.querySelector('[data-field="' + n + '"]') || {}).value || '').trim(); }; var ems = lf('adm-emails'); act(authed('api_saveSettings', { ADMISSION_NOTIFY_EMAILS: ems.split(/[,;\s]+/).filter(Boolean).join(', '), ADMISSION_SESSION: lf('adm-session'), ADMISSION_RESUMPTION_DATE: lf('adm-resumption'), ADMISSION_ACCEPTANCE_DEADLINE: lf('adm-deadline'), ADMISSION_PRINCIPAL_NAME: lf('adm-principal'), ADMISSION_LETTER_FEES: lf('adm-fees'), ADMISSION_LETTER_NEXT_STEPS: lf('adm-next'), SMS_EMAIL_GATEWAY: lf('sms-gateway'), SMS_PROVIDER: lf('sms-provider'), SMS_API_KEY: lf('sms-api-key'), SMS_SENDER_ID: lf('sms-sender') || 'KMS', SMS_CHANNEL: lf('sms-channel') || 'generic', SMS_COUNTRY_CODE: lf('sms-country') || '234' }), 'Settings saved.', loadFees); return;
         case 'msg-preview': loadMessageAudience(); return;
         case 'msg-fee-remind': runFeeReminders(); return;
         case 'msg-att-alert': runAttendanceAlerts(); return;
@@ -1609,6 +1812,22 @@
       state.busy = true; clearMessages(); render();
       authed('api_updateApplication', data.id, { status: data.status, remarks: data.remarks }).then(function () {
         state.notice = 'Application updated.'; state.busy = false; loadApplications();
+      }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function sendAdmissionLetter() {
+      var p = state.applications.letterPreview;
+      if (!p) return;
+      var confirmResend = false;
+      if (p.alreadySent) {
+        if (!confirm('An offer letter was already sent to ' + p.email + ' on ' + String(p.alreadySent.sentAt).slice(0, 10) + '. Send it again?')) return;
+        confirmResend = true;
+      }
+      state.busy = true; clearMessages(); render();
+      authed('api_sendAdmissionLetter', p.ref, { confirmResend: confirmResend }).then(function (r) {
+        if (r && r.needsConfirmation) { state.notice = r.message; state.busy = false; render(); return; }
+        state.applications.letterPreview = null;
+        state.notice = r && r.message ? r.message : 'Admission letter sent.';
+        state.busy = false; loadApplications();
       }).catch(function (err) { state.busy = false; setError(err); });
     }
     function savePayment(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=evidence]')).then(function (file) { if (file) data.evidence = file; return authed('api_savePayment', data); }).then(function () { state.payments.form = null; state.notice = 'Payment submitted.'; loadPayments(); }).catch(function (err) { state.busy = false; setError(err); }); }
