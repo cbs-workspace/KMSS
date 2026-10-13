@@ -15,6 +15,8 @@
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace server && npm run build --workspace client",
     "lint": "npm run lint --workspace server && npm run lint --workspace client",
+    "deploy": "npx --yes vercel@latest deploy --prod --yes",
+    "deploy:preview": "npx --yes vercel@latest deploy --yes",
     "db:migrate": "npm run db:migrate --workspace server",
     "db:generate": "npm run db:generate --workspace server",
     "db:push": "npm run db:push --workspace server",
