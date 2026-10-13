@@ -10,6 +10,7 @@ build/
 .env
 .env.local
 .env.*.local
+.env.example
 
 # Logs
 *.log
@@ -22,13 +23,21 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Prisma / local SQLite database
-server/prisma/dev.db
-server/prisma/dev.db-journal
-server/prisma/migrations/
-
-# Uploads
-server/uploads/
-
 # Vercel
 .vercel/
+
+# ---------------------------------------------------------------------------
+# Local-only: NOT needed to build or deploy the public site, so these are
+# never committed and never pushed to GitHub. Keep them on your machine only.
+#   docs/          documentation, guides and notes (.md, .docx)
+#   *.docx, *.pdf  documents anywhere in the tree
+#   README.md      local project guide
+#   server/, client/, docker-compose.yml   legacy Express/React stack (reference only)
+# ---------------------------------------------------------------------------
+docs/
+*.docx
+*.pdf
+README.md
+server/
+client/
+docker-compose.yml
