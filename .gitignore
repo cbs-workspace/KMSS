@@ -29,3 +29,6 @@ server/prisma/migrations/
 
 # Uploads
 server/uploads/
+
+# Vercel
+.vercel/

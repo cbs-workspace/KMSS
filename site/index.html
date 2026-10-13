@@ -621,9 +621,9 @@
     /* ===== Editable settings — update these with the school's real details ===== */
     var CONFIG = {
       name: 'Kings Metro School',
-      // Portal login URL embedded by the "Sign in" modal. Update this to the
-      // hosted portal address once it is deployed (e.g. https://portal.example.com/login).
-      portalUrl: 'http://localhost:5173/login',
+      // Portal login URL embedded by the "Sign in" modal. The modal iframe loads
+      // this URL with ?embed=1; "Open in new tab" uses it as-is.
+      portalUrl: 'https://script.google.com/macros/s/AKfycbynmP0luv46PyRtxIcv6gNd2UV82l7oEkQuGon8FXPGcV009sfYJppXFYn9r9ldazE2ew/exec',
       gasUrl: 'https://script.google.com/macros/s/AKfycbynmP0luv46PyRtxIcv6gNd2UV82l7oEkQuGon8FXPGcV009sfYJppXFYn9r9ldazE2ew/exec',
       address: 'Sokoto, Sokoto State, Nigeria',
       phone: '+234 000 000 0000',
@@ -656,12 +656,14 @@
     var external = document.getElementById('login-external');
 
     function portalUrl() { return PORTAL_URL; }
+    function portalEmbedUrl() { return PORTAL_URL + (PORTAL_URL.indexOf('?') === -1 ? '?' : '&') + 'embed=1'; }
     document.getElementById('apply-frame').setAttribute('src', GAS_URL + '?admission=1&embed=1');
     document.getElementById('apply-open').setAttribute('href', GAS_URL + '?admission=1');
     function openLogin(e) {
       if (e) e.preventDefault();
       var url = portalUrl();
-      if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);
+      var embed = portalEmbedUrl();
+      if (frame.getAttribute('src') !== embed) frame.setAttribute('src', embed);
       external.setAttribute('href', url);
       overlay.classList.add('open');
       document.body.style.overflow = 'hidden';
