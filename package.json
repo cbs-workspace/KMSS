@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node tools/serve-site.js",
     "site": "node tools/serve-site.js",
-    "deploy": "npx --yes vercel@latest deploy --prod --yes",
-    "deploy:preview": "npx --yes vercel@latest deploy --yes"
+    "deploy": "npx --yes vercel@latest deploy --prod --yes --scope cbs4",
+    "deploy:preview": "npx --yes vercel@latest deploy --yes --scope cbs4"
   }
 }
