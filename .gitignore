@@ -31,13 +31,12 @@ Thumbs.db
 # never committed and never pushed to GitHub. Keep them on your machine only.
 #   docs/          documentation, guides and notes (.md, .docx)
 #   *.docx, *.pdf  documents anywhere in the tree
-#   README.md      local project guide
 #   server/, client/, docker-compose.yml   legacy Express/React stack (reference only)
+# NOTE: README.md *is* committed on purpose — it is the repo's landing guide.
 # ---------------------------------------------------------------------------
 docs/
 *.docx
 *.pdf
-README.md
 server/
 client/
 docker-compose.yml
