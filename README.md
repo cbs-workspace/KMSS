@@ -37,7 +37,7 @@ deploying to Vercel does **not** update GitHub. Do both when a change should be 
 
 | Target | What ships | How to publish |
 | --- | --- | --- |
-| **GitHub** | the deployable code only — `site/`, `Google_App_Script/`, `tools/`, `package.json`, `package-lock.json`, `.gitignore` (docs and legacy files are excluded) | `git add -A` → `git commit -m "..."` → `git push origin main` |
+| **GitHub** | the deployable code only — `site/`, `Google_App_Script/`, `tools/`, `package.json`, `package-lock.json`, `.gitignore` (docs and legacy files are excluded) | `git add <changed paths>` → `git commit -m "..."` → `git push origin main` (**never** `git add -A` — it sweeps in untracked local-only files) |
 | **Vercel** | only `site/` (the public website) | `npm run deploy` (production) or `npm run deploy:preview` |
 
 ### Standard update loop
@@ -45,8 +45,8 @@ deploying to Vercel does **not** update GitHub. Do both when a change should be 
 ```powershell
 # 1. Edit site/ (and/or Google_App_Script/ to record a portal change — see below)
 # 2. Preview locally:  npm run dev   ->  http://localhost:8080
-# 3. Commit and push to GitHub
-git add -A
+# 3. Commit and push to GitHub (do NOT use `git add -A` — it would add local-only files)
+git add site/ Google_App_Script/ tools/ AGENTS.md README.md package.json package-lock.json .gitignore
 git commit -m "<type>(scope): <summary>"
 git push origin main
 # 4. Publish the public website to Vercel production
@@ -79,14 +79,14 @@ To change the portal:
 
 > ⚠️ **Always create a "New version" on the existing deployment — never a brand-new deployment.**
 > The website's login iframe points at the current deployment's `/exec` URL
-> (`CONFIG.portalUrl` in `site/index.html`). Reusing the same deployment keeps that link
+> (`CONFIG.portalUrl` in `site/app.js`). Reusing the same deployment keeps that link
 > identical, so the **login section keeps working and needs no website change**.
 
 ### Facts agents need
 
 - **The portal is served by the deployed GAS app.** Its `/exec` URL is in `var CONFIG`
-  inside `site/index.html`:
-  - `portalUrl` — the login modal iframe (loaded with `?embed=1`); "Open in new tab" uses it as-is.
+  inside `site/app.js`:
+  - `portalUrl` — the page/modal login target (the iframe loads it with `?embed=1`); "Open in new tab" uses it as-is.
   - `gasUrl` — the announcements feed and the public admission form (`?admission=1`).
   When the public page is loaded, this already-online link is what lets users sign in.
 - **GitHub remote:** `origin` → `https://github.com/cbs-workspace/KMSS.git`, default branch `main`.
@@ -130,7 +130,11 @@ machine and are excluded by [`.gitignore`](.gitignore) — see [Never commit](#n
 ```
 .
 ├── site/                      # Public marketing website (the Vercel target)      [GitHub]
-│   ├── index.html             # Single-page site + login modal + admission embed
+│   ├── index.html             # Home + login modal + admission embed (shared header/footer/rail)
+│   ├── about.html  academics.html  admissions.html  contact.html  gallery.html
+│   ├── login.html             # Full-page in-site portal embed (default loginMode 'page')
+│   ├── styles.css             # Single stylesheet for every page
+│   ├── app.js                 # CONFIG + all shared behaviour (nav, music, theme, rail, marquee)
 │   ├── Logo_kmss.png          # Crest (referenced as /Logo_kmss.png)
 │   ├── CBS_Logo_green.png
 │   └── music.mp3
@@ -173,20 +177,22 @@ npm run dev        # alias of: npm run site
 | --- | --- |
 | Public website | http://localhost:8080 |
 
-Open the page, then click **Staff / Parent Login** — the modal loads the live GAS deployment
-link and users sign in against the real online portal.
+Open the page, then click **Staff / Parent Login** — by default this opens `/login.html`,
+which embeds the live GAS deployment full-page so users sign in against the real online portal
+(see `CONFIG.loginMode` in `site/app.js`).
 
 ---
 
 ## Public website configuration
 
-All editable settings live in the `CONFIG` object inside `site/index.html`
+All editable settings live in the `CONFIG` object near the top of `site/app.js`
 (search for `var CONFIG`):
 
 ```js
 var CONFIG = {
-  name: 'Kings Metro School',
-  portalUrl: 'https://script.google.com/macros/s/.../exec', // login modal (deployed GAS app)
+  name: 'Kings Metro School Sokoto',
+  loginMode: 'page',   // 'page' (default) -> /login.html | 'modal' -> in-page iframe | 'tab' -> new tab
+  portalUrl: 'https://script.google.com/macros/s/.../exec', // deployed GAS app
   gasUrl:    'https://script.google.com/macros/s/.../exec', // announcements + admission form
   address: 'Sokoto, Sokoto State, Nigeria',
   phone: '+234 812 210 0528',
@@ -196,9 +202,10 @@ var CONFIG = {
 ```
 
 `portalUrl` and `gasUrl` are the **already-connected deployment link** of the GAS app; do not
-point them at a local server. The login modal loads `portalUrl` in an iframe with `?embed=1`
-and "Open in new tab" uses the plain URL. Useful query overrides: `?portal=<url>`, `?gas=<url>`,
-`?login=1`.
+point them at a local server. With the default `loginMode: 'page'` the login buttons open
+`/login.html`, which embeds `portalUrl` full-page with `?embed=1` (the raw `script.google.com`
+URL never shows in the address bar); `'modal'` uses the in-page iframe and `'tab'` opens the
+plain URL in a new tab. Useful query overrides: `?portal=<url>`, `?gas=<url>`, `?login=1`.
 
 After editing the site, always run `npm run deploy` to publish it.
 
@@ -225,7 +232,8 @@ Publishes the repository (the public site + the reference Apps Script + tooling)
 legacy stack are gitignored and are never pushed.
 
 ```powershell
-git add -A
+# Stage only the paths you changed — never `git add -A` (it sweeps in local-only/untracked files)
+git add site/ Google_App_Script/ tools/ AGENTS.md README.md package.json package-lock.json .gitignore
 git commit -m "<type>(scope): <summary>"
 git push origin main
 ```
@@ -243,8 +251,8 @@ npm run deploy          # production  -> https://kingsmetroschools.vercel.app
 npm run deploy:preview  # a preview URL
 ```
 
-- Runs `vercel deploy --prod --yes` from the repo root; the project's **Root Directory is
-  `site`**, so only the website is uploaded.
+- Runs `npx --yes vercel@latest deploy --prod --yes --scope cbs4` from the repo root; the project's
+  **Root Directory is `site`**, so only the website is uploaded.
 - Production alias: **https://kingsmetroschools.vercel.app**
 - Root directory, framework preset and the project link are already configured; do not change
   them unless intentionally re-architecting.
@@ -264,7 +272,8 @@ The school portal is a Google Apps Script web app:
   the Google Drive project of **`cbs4u4me@gmail.com`**, then **redeployed as a *New version* on
   the *existing* deployment** so the `/exec` link stays the same — see
   [Changing the portal](#changing-the-portal-google-apps-script-reference-only).
-- **How users reach it:** through the public website's login modal, which loads the deployment
+- **How users reach it:** through the public website's login flow (`/login.html`, the in-page modal,
+  or a new tab — see `CONFIG.loginMode`), which loads the deployment
   `/exec` URL from `CONFIG.portalUrl`. Because the deployment is already online and its link is
   reused on every redeploy, signing in keeps working with no website change — no local portal is
   required.
