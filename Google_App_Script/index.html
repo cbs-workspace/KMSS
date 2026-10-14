@@ -44,7 +44,7 @@
     @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4, .grid.cols-5 { grid-template-columns: 1fr; } }
     label { display: block; font-size: 13px; font-weight: 600; color: var(--slate-700); margin-bottom: 4px; }
     .field { margin-bottom: 14px; }
-    input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--slate-300); border-radius: 8px; background: #fff; outline: none; }
+    input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], input[type=tel], select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--slate-300); border-radius: 8px; background: #fff; outline: none; }
     input:focus, select:focus, textarea:focus { border-color: var(--emerald); box-shadow: 0 0 0 3px rgba(5,150,105,.15); }
     textarea { min-height: 90px; resize: vertical; }
     input[type=file] { padding: 6px; }
@@ -74,7 +74,7 @@
     .stat { background: #fff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 18px; }
     .stat .label { color: var(--slate-500); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
-    .stat-num { font-size: 28px; font-weight: 700; line-height: 1.1; }    
+    .stat-num { font-size: 28px; font-weight: 700; line-height: 1.1; }
     .login-wrap { min-height: 100vh; min-height: 100dvh; background: var(--slate-900); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
     .login-card { width: 100%; max-width: 420px; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,.25); }
     .login-card .head { text-align: center; margin-bottom: 20px; } .login-card .head img { height: 84px; width: 84px; object-fit: contain; margin-bottom: 10px; }
@@ -189,7 +189,7 @@
       .login-wrap { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
       .login-card { padding: 22px 18px; border-radius: 14px; }
       .login-card .head img { height: 72px; width: 72px; }
-      input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], select, textarea { font-size: 16px; padding: 12px; }
+      input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], input[type=tel], select, textarea { font-size: 16px; padding: 12px; }
       .btn { padding: 11px 16px; }
       .toolbar .field, .toolbar input, .toolbar select { width: 100%; }
       .toolbar .spacer { display: none; }
@@ -257,7 +257,8 @@
       classes: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
       term: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
       money: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
-      attendance: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>'
+      attendance: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>',
+      workload: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H3v10h6V11z"/><path d="M15 3H9v18h6V3z"/><path d="M21 7h-6v14h6V7z"/></svg>'
     };
     var NAV = [
       { key: 'dashboard', label: 'Dashboard', roles: 'ALL' },
@@ -266,6 +267,7 @@
       { key: 'attendance', label: 'Attendance', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'results', label: 'Results', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER'] },
       { key: 'statistics', label: 'Statistics', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'] },
+      { key: 'workload', label: 'Workload', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'messages', label: 'Messages', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'] },
       { key: 'teachers', label: 'Teachers', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
       { key: 'applications', label: 'Applications', roles: ['ADMIN', 'PRINCIPAL', 'HEADMASTER'] },
@@ -288,13 +290,14 @@
     var state = {
       token: sessionStorage.getItem('kms_token') || '', user: null, boot: null, view: 'dashboard',
       error: null, notice: null, busy: false, dashboard: null,
-      demographics: { loaded: false, students: [], staff: [] },
+      demographics: { loaded: false, data: null },
       lastTypedUser: '',
       rememberMe: true,
+      pwReset: { step: '', email: '', code: '', newPassword: '', confirm: '', busy: false, flash: null },
       dashboardSearch: { q: '', students: [], staff: [], ran: false, loading: false },
       students: { classArmId: '', search: '', list: [], form: null },
       attendance: { classArmId: '', date: todayISO(), roster: null },
-      results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [], studentId: '', grades: null },
+      results: { classArmId: '', termId: '', subjectId: '', tab: 'entry', sheet: null, sheets: [], studentId: '', grades: null, bulk: null },
       report: { studentId: '', termId: '', data: null },
       staff: { search: '', list: [], form: null },
       teachers: { list: [], form: null, flash: null },
@@ -304,6 +307,7 @@
       fees: { termId: '', wardId: '', schedule: null, list: [], form: null, settings: null },
       receipt: null,
       analytics: { termId: '', data: null },
+      workload: { termId: '', data: null, busy: false },
       messages: { to: 'PARENTS', section: '', classArmId: '', channel: 'EMAIL', subject: '', body: '', threshold: 75, audience: null, flash: null },
       staffReg: { date: todayISO(), records: null },
       timetable: { classArmId: '', termId: '', data: null, form: null },
@@ -317,7 +321,87 @@
     function esc(v) { if (v === null || v === undefined) return ''; return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function todayISO() { var d = new Date(), m = String(d.getMonth() + 1), day = String(d.getDate()); if (m.length < 2) m = '0' + m; if (day.length < 2) day = '0' + day; return d.getFullYear() + '-' + m + '-' + day; }
     function call(fn) { var args = Array.prototype.slice.call(arguments, 1); return new Promise(function (resolve, reject) { var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) { reject(new Error(e && e.message ? e.message : String(e))); }); r[fn].apply(r, args); }); }
-    function authed(fn) { var args = Array.prototype.slice.call(arguments, 1); return call.apply(null, [fn, state.token].concat(args)); }
+    /* ---------------- read cache + background prefetch ---------------- */
+    var READ_FNS = { api_dashboard: 1, api_demographics: 1, api_listStudents: 1, api_listStaff: 1, api_getAnalytics: 1, api_listAnnouncements: 1, api_listApplications: 1,
+      api_listTeachers: 1, api_listPayments: 1, api_listFees: 1, api_getSettings: 1, api_getStaffRoster: 1, api_listTimetable: 1, api_getRoster: 1,
+      api_getScoreSheet: 1, api_listResultSheets: 1, api_messageAudience: 1, api_listUsers: 1, api_listAudit: 1, api_listRef: 1, api_myWards: 1,
+      api_myWardsWithBalance: 1, api_teacherWorkload: 1 };
+    var PASSTHRU = { api_searchDirectory: 1, api_getReceipt: 1, api_previewAdmissionLetter: 1, api_getReportCard: 1, api_getStudentGrades: 1, api_getFeeSchedule: 1, api_me: 1, api_gradesTemplate: 1, api_getFileDataUrl: 1 };
+    var READ_FRESH_MS = 20000, READ_MAX_MS = 120000;
+    var readCache = {};
+    function clearReadCache() { readCache = {}; photoCache = {}; photoPending = {}; }
+    function readCall_(fn, args) { return call.apply(null, [fn, state.token].concat(args)); }
+    function fetchRead_(key, fn, args) {
+      var e = { at: Date.now(), json: null, pending: null, refreshing: false };
+      e.pending = readCall_(fn, args).then(function (r) {
+        var json = JSON.stringify(r === undefined ? null : r);
+        e.json = json; e.at = Date.now(); e.pending = null;
+        return json;
+      }, function (err) { if (readCache[key] === e) delete readCache[key]; throw err; });
+      readCache[key] = e;
+      return e.pending;
+    }
+    function refreshRead_(key, fn, args) {
+      var e = readCache[key];
+      if (!e || e.refreshing) return;
+      e.refreshing = true;
+      readCall_(fn, args).then(function (r) { if (readCache[key] === e) { e.json = JSON.stringify(r === undefined ? null : r); e.at = Date.now(); } e.refreshing = false; }, function () { e.refreshing = false; });
+    }
+    function authed(fn) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      if (!READ_FNS[fn]) {
+        var p = readCall_(fn, args);
+        return PASSTHRU[fn] ? p : p.then(function (r) { clearReadCache(); return r; });
+      }
+      var key = fn + '|' + JSON.stringify(args), e = readCache[key], now = Date.now(), pending;
+      if (e && now - e.at <= READ_MAX_MS) {
+        if (e.pending) pending = e.pending;
+        else {
+          if (now - e.at > READ_FRESH_MS) refreshRead_(key, fn, args);
+          return Promise.resolve(JSON.parse(e.json));
+        }
+      } else pending = fetchRead_(key, fn, args);
+      return pending.then(function (json) { return JSON.parse(json); });
+    }
+    function prefetchJobs() {
+      var b = state.boot, role = state.user.role, jobs = [];
+      var first = (b && b.classArms && b.classArms.length) ? b.classArms[0].id : '', termId = b ? (b.currentTermId || '') : '';
+      var leader = ['ADMIN', 'PRINCIPAL', 'HEADMASTER'].indexOf(role) !== -1;
+      function add(view, fn, args) { if (viewAllowed(view)) jobs.push([fn].concat(args || [])); }
+      add('dashboard', 'api_dashboard');
+      if (leader) add('dashboard', 'api_demographics');
+      add('statistics', 'api_getAnalytics', [{ termId: '' }]);
+      if (leader) add('workload', 'api_teacherWorkload', [termId]);
+      add('announcements', 'api_listAnnouncements');
+      add('applications', 'api_listApplications');
+      add('payments', 'api_listPayments', [{ status: '' }]);
+      add('payments', 'api_listStudents', [{}]);
+      add('staff', 'api_listStaff', [{ search: '' }]);
+      add('teachers', 'api_listTeachers');
+      add('messages', 'api_messageAudience', [{ to: 'PARENTS', section: '', classArmId: '' }]);
+      add('staff-register', 'api_getStaffRoster', [todayISO()]);
+      add('timetable', 'api_listTimetable', [{ classArmId: '', termId: '' }]);
+      add('fees', 'api_listFees'); add('fees', 'api_getSettings');
+      if (b && first) {
+        add('students', 'api_listStudents', [{ classArmId: first, search: '' }]);
+        add('attendance', 'api_getRoster', [first, todayISO()]);
+        var subs = subjectsForArm(first);
+        if (subs.length && termId) add('results', 'api_getScoreSheet', [first, termId, subs[0].id]);
+      }
+      if (viewAllowed('admin')) { ADMIN_TABS.forEach(function (t) { jobs.push(['api_listRef', t.key]); }); jobs.push(['api_listRef', 'Users']); }
+      add('users', 'api_listUsers'); add('users', 'api_listAudit');
+      return jobs;
+    }
+    function prefetchAll() {
+      if (!state.token || !state.user || state.user.role === 'PARENT') return;
+      var jobs = prefetchJobs(), i = 0;
+      function next() {
+        if (i >= jobs.length) return;
+        var j = jobs[i++];
+        authed.apply(null, j).then(next, next);
+      }
+      for (var w = 0; w < 4; w++) next();
+    }
     function setError(err) { state.error = err && err.message ? err.message : String(err); state.notice = null; render(); }
     function roleAllowed(roles) { if (roles === 'ALL') return true; if (!state.user) return false; if (state.user.role === 'ADMIN') return true; return roles.indexOf(state.user.role) !== -1; }
     function fullName(rec) { return [rec.lastName, rec.firstName, rec.middleName].filter(Boolean).join(' '); }
@@ -329,21 +413,55 @@
     function optionsHtml(list, valueFn, selected, labelFn) { return list.map(function (x) { var v = valueFn(x); return '<option value="' + esc(v) + '"' + (String(v) === String(selected) ? ' selected' : '') + '>' + esc(labelFn(x)) + '</option>'; }).join(''); }
     function armOptions(sel) { return '<option value="">Select class…</option>' + optionsHtml(state.boot.classArms, function (a) { return a.id; }, sel, armLabel); }
     function termOptions(sel) { return optionsHtml(state.boot.terms, function (t) { return t.id; }, sel, termText); }
-    function photoImg(fileId) { return fileId ? '<img class="thumb" src="https://drive.google.com/uc?export=view&id=' + esc(fileId) + '" alt="">' : '<span class="ph"></span>'; }
     function readFileInput(input) { return new Promise(function (resolve, reject) { var f = input && input.files && input.files[0]; if (!f) return resolve(null); if (f.size > 8 * 1024 * 1024) return reject(new Error('File too large (max 8 MB).')); var reader = new FileReader(); reader.onload = function () { resolve({ name: f.name, mimeType: f.type, dataUrl: reader.result }); }; reader.onerror = function () { reject(new Error('Could not read file.')); }; reader.readAsDataURL(f); }); }
 
+    /* ---- authenticated photo loading: files are private, so we fetch them lazily ---- */
+    var photoCache = {};     // fileId -> dataUrl
+    var photoPending = {};   // fileId -> [placeholderId, ...]
+    function photoImg(fileId, size) {
+      if (!fileId) return '<span class="ph"' + (size ? ' style="width:' + size + 'px;height:' + size + 'px"' : '') + '></span>';
+      var cached = photoCache[fileId];
+      var style = size ? ' style="width:' + size + 'px;height:' + size + 'px"' : '';
+      if (cached) return '<img class="thumb" src="' + cached + '" alt=""' + style + '>';
+      var pid = 'ph_' + Math.random().toString(36).slice(2, 10);
+      fetchPhoto_(fileId, pid);
+      return '<span class="ph" id="' + pid + '"' + style + '></span>';
+    }
+    function fetchPhoto_(fileId, holderId) {
+      if (photoCache[fileId]) {
+        var el = document.getElementById(holderId);
+        if (el) el.outerHTML = '<img class="thumb" src="' + photoCache[fileId] + '" alt="">';
+        return;
+      }
+      if (photoPending[fileId]) { photoPending[fileId].push(holderId); return; }
+      photoPending[fileId] = [holderId];
+      authed('api_getFileDataUrl', fileId).then(function (r) {
+        photoCache[fileId] = r.dataUrl;
+        (photoPending[fileId] || []).forEach(function (hid) {
+          var el = document.getElementById(hid);
+          if (el) el.outerHTML = '<img class="thumb" src="' + r.dataUrl + '" alt="">';
+        });
+        delete photoPending[fileId];
+      }).catch(function () {
+        (photoPending[fileId] || []).forEach(function (hid) {
+          var el = document.getElementById(hid);
+          if (el) el.outerHTML = '<span class="ph" title="Photo unavailable"></span>';
+        });
+        delete photoPending[fileId];
+      });
+    }
+
     /* ---------------- boot ---------------- */
-    function bootstrapTo(url) { state.token = url.token; state.user = url.user; return authed('api_bootstrap'); }
-    function start() { if (!state.token) { render(); return; } authed('api_bootstrap').then(afterBoot).catch(function () { state.token = ''; sessionStorage.removeItem('kms_token'); render(); }); }
+    function start() { try { call('api_warmup').catch(function () {}); } catch (e) {} if (!state.token) { render(); return; } authed('api_bootstrap').then(afterBoot).catch(function () { state.token = ''; sessionStorage.removeItem('kms_token'); render(); }); }
     function viewAllowed(key) { for (var i = 0; i < NAV.length; i++) if (NAV[i].key === key) return roleAllowed(NAV[i].roles); return false; }
     function afterBoot(boot) {
-      state.boot = boot; state.user = boot.user; state.results.termId = boot.currentTermId || '';
+      state.boot = boot; state.user = boot.user; state.results.termId = boot.currentTermId || ''; state.workload.termId = boot.currentTermId || '';
       if (boot.classArms && boot.classArms.length) { state.students.classArmId = boot.classArms[0].id; state.attendance.classArmId = boot.classArms[0].id; state.results.classArmId = boot.classArms[0].id; }
       navigate(INITIAL_VIEW && viewAllowed(INITIAL_VIEW) ? INITIAL_VIEW : 'dashboard');
+      prefetchAll();
     }
 
     /* ---------------- login / shell ---------------- */
-    /* Eye icon for the password reveal toggle. */
     function eyeIcon(shown) {
       if (shown) {
         return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ' +
@@ -358,7 +476,6 @@
     }
 
     function renderLogin() {
-      // --- read persisted preferences ---
       var savedUser = state.lastTypedUser || '';
       var remember  = state.rememberMe;
       var showPw    = false;
@@ -369,52 +486,61 @@
         showPw = localStorage.getItem('kms_show_pw') === '1';
       } catch (e) {}
 
+      var inner = '';
+      if (state.pwReset.step) {
+        inner += pwResetHtml();
+      } else {
+        inner +=
+          '<form id="login-form">' +
+          '<div class="field"><label for="u">Username</label>' +
+            '<input id="u" name="username" type="text" autocomplete="username" required value="' + esc(savedUser) + '"></div>' +
+          '<div class="field"><label for="p">Password</label>' +
+            '<div style="position:relative">' +
+              '<input id="p" name="password" type="' + (showPw ? 'text' : 'password') + '" autocomplete="current-password" required style="padding-right:44px">' +
+              '<button type="button" data-action="toggle-pw" aria-label="' + (showPw ? 'Hide password' : 'Show password') + '" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:6px;cursor:pointer;color:var(--slate-500);display:flex;align-items:center">' + eyeIcon(showPw) + '</button>' +
+            '</div></div>' +
+          '<label for="remember-me" style="display:flex;align-items:center;gap:8px;font-weight:500;margin:4px 0 16px;cursor:pointer;color:var(--slate-700);font-size:13px">' +
+            '<input type="checkbox" id="remember-me" name="rememberMe" style="width:16px;height:16px;accent-color:var(--emerald);margin:0"' + (remember ? ' checked' : '') + '>' +
+            '<span>Remember me on this device</span></label>' +
+          '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit"' + (state.busy ? ' disabled' : '') + '>' +
+            (state.busy ? '<span class="spinner" style="border-top-color:#fff"></span> Signing in…' : 'Sign in') + '</button>' +
+          '<div style="margin-top:14px;text-align:center"><button type="button" class="btn-ghost" data-action="pw-reset-start" style="border:0;background:transparent;color:var(--emerald-dark);font-weight:600">Forgot password?</button></div>' +
+          '</form>';
+      }
+
       document.getElementById('app').innerHTML =
         '<div class="login-wrap"><div class="login-card"><div class="head">' +
-          (BRAND.logoUrl
-            ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">'
-            : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KMSS</div>') +
+          (BRAND.logoUrl ? '<img src="' + esc(BRAND.logoUrl) + '" alt="">' : '<div class="logo-fallback" style="margin:0 auto 10px;width:84px;height:84px;font-size:28px;">KMSS</div>') +
           '<div class="kicker">' + esc(BRAND.schoolName) + '</div>' +
           '<h1>Portal Sign In</h1>' +
           '<div class="muted small">' + esc(BRAND.subtitle) + ' — staff, teachers &amp; parents</div>' +
         '</div>' +
         (state.error  ? '<div class="alert error">'   + esc(state.error)  + '</div>' : '') +
         (state.notice ? '<div class="alert success">' + esc(state.notice) + '</div>' : '') +
-        '<form id="login-form">' +
-
-          '<div class="field"><label for="u">Username</label>' +
-            '<input id="u" name="username" type="text" autocomplete="username" required ' +
-                   'value="' + esc(savedUser) + '"></div>' +
-
-          '<div class="field"><label for="p">Password</label>' +
-            '<div style="position:relative">' +
-              '<input id="p" name="password" type="' + (showPw ? 'text' : 'password') + '" ' +
-                     'autocomplete="current-password" required style="padding-right:44px">' +
-              '<button type="button" data-action="toggle-pw" ' +
-                      'aria-label="' + (showPw ? 'Hide password' : 'Show password') + '" ' +
-                      'style="position:absolute;right:6px;top:50%;transform:translateY(-50%);' +
-                             'border:0;background:transparent;padding:6px;cursor:pointer;' +
-                             'color:var(--slate-500);display:flex;align-items:center">' +
-                eyeIcon(showPw) +
-              '</button>' +
-            '</div></div>' +
-
-          '<label for="remember-me" style="display:flex;align-items:center;gap:8px;' +
-                 'font-weight:500;margin:4px 0 16px;cursor:pointer;color:var(--slate-700);font-size:13px">' +
-            '<input type="checkbox" id="remember-me" name="rememberMe" ' +
-                   'style="width:16px;height:16px;accent-color:var(--emerald);margin:0"' +
-                   (remember ? ' checked' : '') + '>' +
-            '<span>Remember me on this device</span>' +
-          '</label>' +
-
-          '<button class="btn btn-primary" style="width:100%;justify-content:center" ' +
-                  'type="submit"' + (state.busy ? ' disabled' : '') + '>' +
-            (state.busy
-              ? '<span class="spinner" style="border-top-color:#fff"></span> Signing in…'
-              : 'Sign in') +
-          '</button>' +
-        '</form></div>' +
-        '<div class="login-footer">' + footerHtml(true) + '</div></div>';
+        inner +
+        '</div><div class="login-footer">' + footerHtml(true) + '</div></div>';
+    }
+    function pwResetHtml() {
+      var r = state.pwReset, h = '';
+      if (r.flash) h += '<div class="alert ' + (r.flash.error ? 'error' : 'success') + '">' + esc(r.flash.message) + '</div>';
+      if (r.step === 'request') {
+        h += '<form id="pw-reset-form" data-step="request">' +
+          '<p class="muted small" style="margin-top:0">Enter the email address on your portal account. We will email a one-time reset code.</p>' +
+          '<div class="field"><label>Email</label><input type="email" name="email" value="' + esc(r.email) + '" required></div>' +
+          '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit"' + (r.busy ? ' disabled' : '') + '>' + (r.busy ? '<span class="spinner" style="border-top-color:#fff"></span> Sending…' : 'Send reset code') + '</button>' +
+          '<div style="margin-top:12px;text-align:center"><button type="button" class="btn-ghost" data-action="pw-reset-cancel" style="border:0;background:transparent;color:var(--slate-500);font-weight:600">Back to sign in</button></div>' +
+        '</form>';
+      } else if (r.step === 'confirm') {
+        h += '<form id="pw-reset-form" data-step="confirm">' +
+          '<p class="muted small" style="margin-top:0">Enter the 6-digit code we sent to <strong>' + esc(r.email) + '</strong>, then choose a new password.</p>' +
+          '<div class="field"><label>Reset code</label><input type="text" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="' + esc(r.code) + '" required></div>' +
+          '<div class="field"><label>New password (min 8 characters)</label><input type="password" name="newPassword" required></div>' +
+          '<div class="field"><label>Confirm new password</label><input type="password" name="confirm" required></div>' +
+          '<button class="btn btn-primary" style="width:100%;justify-content:center" type="submit"' + (r.busy ? ' disabled' : '') + '>' + (r.busy ? '<span class="spinner" style="border-top-color:#fff"></span> Resetting…' : 'Reset password') + '</button>' +
+          '<div style="margin-top:12px;text-align:center"><button type="button" class="btn-ghost" data-action="pw-reset-restart" style="border:0;background:transparent;color:var(--slate-500);font-weight:600">Use a different email</button> · <button type="button" class="btn-ghost" data-action="pw-reset-cancel" style="border:0;background:transparent;color:var(--slate-500);font-weight:600">Back to sign in</button></div>' +
+        '</form>';
+      }
+      return h;
     }
     function footerHtml(dark) { return '<div class="footer' + (dark ? ' dark' : '') + '">' + (BRAND.cbsLogoUrl ? '<img src="' + esc(BRAND.cbsLogoUrl) + '" alt="CBS">' : '') + '<span class="text">' + esc(BRAND.footerText) + '</span></div>'; }
     function shellHtml() {
@@ -439,6 +565,7 @@
       else if (v === 'attendance') body = viewAttendance();
       else if (v === 'results') body = viewResults();
       else if (v === 'statistics') body = viewAnalytics();
+      else if (v === 'workload') body = viewWorkload();
       else if (v === 'messages') body = viewMessages();
       else if (v === 'staff-register') body = viewStaffRegister();
       else if (v === 'timetable') body = viewTimetable();
@@ -457,13 +584,27 @@
     }
     function clearMessages() { state.error = null; state.notice = null; }
     function navigate(view) {
+      // Reset per-view overlays and transient forms so nothing leaks between views.
+      state.receipt = null;
+      state.pwForm = false;
       state.view = view; clearMessages(); state.users.flash = null; state.teachers.flash = null;
+      if (view !== 'applications') { state.applications.detail = null; state.applications.letterPreview = null; }
+      if (view !== 'students')     state.students.form = null;
+      if (view !== 'staff')        state.staff.form = null;
+      if (view !== 'teachers')     state.teachers.form = null;
+      if (view !== 'fees')         state.fees.form = null;
+      if (view !== 'admin')        state.admin.form = null;
+      if (view !== 'users')        state.users.form = null;
+      if (view !== 'timetable')    state.timetable.form = null;
+      if (view !== 'attendance')   state.attendance.roster = null;
+      if (view !== 'messages')     state.messages.flash = null;
       if (view === 'dashboard') return loadDashboard();
       if (view === 'announcements') return loadAnnouncements();
       if (view === 'students') return loadStudents();
       if (view === 'attendance') return loadRoster();
       if (view === 'results') return loadResults();
       if (view === 'statistics') return loadAnalytics();
+      if (view === 'workload') return loadWorkload();
       if (view === 'messages') return loadMessageAudience();
       if (view === 'staff-register') return loadStaffRegister();
       if (view === 'timetable') return loadTimetable();
@@ -483,10 +624,10 @@
     function loadDashboard() {
       state.busy = true;
       state.dashboardSearch = { q: '', students: [], staff: [], ran: false, loading: false };
-      state.demographics = { loaded: false, students: [], staff: [] };
+      state.demographics = { loaded: false, data: null };
       render();
       if (state.user.role === 'PARENT') {
-        Promise.all([authed('api_myWards'), authed('api_listPayments', {}), authed('api_listAnnouncements')])
+        Promise.all([authed('api_myWardsWithBalance'), authed('api_listPayments', {}), authed('api_listAnnouncements')])
           .then(function (res) { state.dashboard = { role: 'PARENT', wards: res[0] || [], payments: res[1] || [], announcements: res[2] || [] }; state.busy = false; render(); })
           .catch(function (err) { state.busy = false; setError(err); });
         return;
@@ -495,8 +636,8 @@
       authed('api_dashboard').then(function (d) {
         state.dashboard = d;
         if (demoRoles.indexOf(state.user.role) === -1) { state.busy = false; render(); return; }
-        Promise.all([authed('api_listStudents', {}), authed('api_listStaff', {})]).then(function (res) {
-          state.demographics = { loaded: true, students: res[0] || [], staff: res[1] || [] };
+        authed('api_demographics').then(function (dd) {
+          state.demographics = { loaded: true, data: dd };
           state.busy = false; render();
         }).catch(function () { state.busy = false; render(); });
       }).catch(function (err) { state.busy = false; setError(err); });
@@ -567,7 +708,59 @@
       return head + cards + grid2([enrollment, attendanceTrend]) + grid2([performance, finance]) + (d.trends.length ? '<div style="margin-top:20px">' + trends + '</div>' : '');
     }
 
-    /* ---------------- messages (bulk email / SMS) ---------------- */
+    /* ---------------- workload ---------------- */
+    function loadWorkload() {
+      state.workload.busy = true; state.busy = true; render();
+      authed('api_teacherWorkload', state.workload.termId).then(function (d) {
+        state.workload.data = d;
+        if (!state.workload.termId && d.term) state.workload.termId = d.term.id;
+        state.workload.busy = false; state.busy = false; render();
+      }).catch(function (err) { state.workload.busy = false; state.busy = false; setError(err); });
+    }
+    function workloadBar(pct) {
+      var w = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+      var cls = pct >= 95 ? 'ok' : (pct >= 70 ? 'warn' : 'bad');
+      return '<div class="bar" style="min-width:120px"><span style="width:' + w + '%;background:' + (cls === 'ok' ? 'var(--emerald)' : cls === 'warn' ? 'var(--amber)' : 'var(--red)') + '"></span></div>';
+    }
+    function viewWorkload() {
+      if (state.workload.busy || !state.workload.data) return '<div class="page-loading"><span class="spinner"></span> Loading workload…</div>';
+      var d = state.workload.data, list = d.teachers || [];
+      var head = '<div class="section-head"><h3>Teacher workload &amp; score entry status</h3><span class="muted small">' + esc(d.term ? d.term.label : '') + ' · lower completion sorted first</span></div>' +
+        '<div class="toolbar no-print"><div class="field" style="min-width:240px"><label>Term</label><select data-field="wl-term">' + optionsHtml(state.boot.terms, function (t) { return t.id; }, state.workload.termId, termText) + '</select></div></div>';
+      if (!list.length) return head + '<div class="empty">No teachers in your scope.</div>';
+      var summary = { done: 0, partial: 0, empty: 0 };
+      list.forEach(function (t) {
+        if (t.completion >= 95) summary.done++;
+        else if (t.completion >= 1) summary.partial++;
+        else summary.empty++;
+      });
+      var cards = '<div class="grid cols-3" style="margin-bottom:18px">' +
+        '<div class="card" style="padding:14px"><div class="stat-num">' + summary.done + '</div><div class="muted small">Fully entered (≥95%)</div></div>' +
+        '<div class="card" style="padding:14px"><div class="stat-num">' + summary.partial + '</div><div class="muted small">In progress</div></div>' +
+        '<div class="card" style="padding:14px"><div class="stat-num">' + summary.empty + '</div><div class="muted small">No scores yet</div></div>' +
+        '</div>';
+      var body = '<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Classes</th><th>Score entries</th><th style="min-width:160px">Completion</th><th></th></tr></thead><tbody>' +
+        list.map(function (t) {
+          var classes = t.arms && t.arms.length ? t.arms.join('<br>') : '<span class="muted">None assigned</span>';
+          return '<tr><td><strong>' + esc(t.fullName) + '</strong><div class="muted small">' + esc(t.username) + '</div></td>' +
+            '<td>' + classes + '</td>' +
+            '<td><div>' + t.entered + ' / ' + t.expected + '</div><div class="muted small">' + (t.expected ? Math.round(t.entered / t.expected * 100) : 0) + '%</div></td>' +
+            '<td>' + workloadBar(t.completion) + '<div class="muted small">' + t.completion + '%</div></td>' +
+            '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="wl-open" data-id="' + esc(t.id) + '">Details</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+      var detail = state.workload.detail ? workloadDetailHtml(state.workload.detail) : '';
+      return head + cards + detail + body;
+    }
+    function workloadDetailHtml(t) {
+      if (!t) return '';
+      if (!t.missing || !t.missing.length) return '<div class="card" style="margin-bottom:18px"><div class="row"><strong>' + esc(t.fullName) + '</strong><div class="spacer"></div><span class="badge ok">All scores entered</span><button class="btn btn-outline btn-sm" data-action="wl-close">Close</button></div></div>';
+      return '<div class="card" style="margin-bottom:18px"><div class="row"><strong>' + esc(t.fullName) + '</strong><span class="muted small">' + t.missing.length + ' subject(s) still to enter</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-action="wl-close">Close</button></div>' +
+        '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Class</th><th>Subject</th><th style="text-align:right">Entered</th><th style="text-align:right">Expected</th></tr></thead><tbody>' +
+        t.missing.map(function (m) { return '<tr><td>' + esc(m.classArm) + '</td><td><strong>' + esc(m.subject) + '</strong></td><td style="text-align:right">' + m.entered + '</td><td style="text-align:right">' + m.of + '</td></tr>'; }).join('') +
+        '</tbody></table></div></div>';
+    }
+
+    /* ---------------- messages ---------------- */
     function audienceQuery() { return { to: state.messages.to, section: state.messages.section, classArmId: state.messages.classArmId }; }
     function loadMessageAudience() {
       state.busy = true; render();
@@ -642,7 +835,7 @@
     }
     function viewStaffRegister() {
       var s = state.staffReg;
-      var body = '<div class="section-head"><h3>Staff register</h3><span class="muted small">Daily staff attendance</span><button class="btn btn-primary btn-sm" data-action="staff-reg-save">Save register</button></div>';
+      var body = '<div class="section-head"><h3>Staff register</h3><span class="muted small">Daily staff attendance</span><button class="btn btn-primary btn-sm" data-action="staff-reg-save"' + ((state.busy || !s.records) ? ' disabled' : '') + '>Save register</button></div>';
       body += '<div class="card"><div class="row"><div class="field" style="max-width:220px;margin:0"><label>Date</label><input type="date" data-field="staff-reg-date" value="' + esc(s.date) + '"></div><div class="spacer"></div><div class="muted small">P / A / L / E — Present, Absent, Late, Excused</div></div>';
       if (state.busy || !s.records) return body + '<div class="page-loading"><span class="spinner"></span> Loading roster…</div></div>';
       if (!s.records.records.length) return body + '<div class="empty">No staff in your scope.</div></div>';
@@ -667,7 +860,7 @@
       act(authed('api_saveStaffAttendance', state.staffReg.date, records), 'Staff register saved.', loadStaffRegister);
     }
 
-    /* ---------------- timetable / exams ---------------- */
+    /* ---------------- timetable ---------------- */
     function loadTimetable() {
       state.busy = true; render();
       authed('api_listTimetable', { classArmId: state.timetable.classArmId, termId: state.timetable.termId }).then(function (d) {
@@ -736,51 +929,10 @@
     }
     function grid2(cards) { cards = (cards || []).filter(Boolean); if (!cards.length) return ''; return '<div class="' + (cards.length === 1 ? 'grid' : 'grid cols-2') + '" style="margin-top:20px">' + cards.join('') + '</div>'; }
 
-    /* ---------------- demographics charts (dashboard) ---------------- */
+    /* ---------------- demographics charts ---------------- */
     var DEMO_PALETTE = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#0891b2', '#db2777', '#65a30d', '#dc2626', '#0f766e', '#9333ea', '#ea580c', '#0369a1'];
-    var DEMO_STUDENT_BANDS = [
-      { label: 'Under 3', min: -1, max: 2 }, { label: '3–5', min: 3, max: 5 },
-      { label: '6–11', min: 6, max: 11 }, { label: '12–17', min: 12, max: 17 }, { label: '18+', min: 18, max: 200 }
-    ];
-    var DEMO_STAFF_BANDS = [
-      { label: 'Under 25', min: -1, max: 24 }, { label: '25–34', min: 25, max: 34 },
-      { label: '35–44', min: 35, max: 44 }, { label: '45–54', min: 45, max: 54 }, { label: '55+', min: 55, max: 200 }
-    ];
-    var DEMO_SERVICE_BANDS = [
-      { label: 'Under 1', min: -1, max: 0 }, { label: '1–4', min: 1, max: 4 },
-      { label: '5–9', min: 5, max: 9 }, { label: '10–14', min: 10, max: 14 }, { label: '15+', min: 15, max: 200 }
-    ];
-    function demoYears(s) {
-      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
-      if (!m) return null;
-      var now = new Date(), years = now.getFullYear() - (+m[1]);
-      if ((now.getMonth() + 1) * 100 + now.getDate() < (+m[2]) * 100 + (+m[3])) years--;
-      return (years < 0 || years > 120) ? null : years;
-    }
-    function demoBand(value, bands) {
-      if (value === null || value === undefined) return 'Not recorded';
-      for (var i = 0; i < bands.length; i++) if (value >= bands[i].min && value <= bands[i].max) return bands[i].label;
-      return 'Not recorded';
-    }
-    function demoGender(g) { var v = String(g || '').trim(); if (/^m/i.test(v)) return 'Male'; if (/^f/i.test(v)) return 'Female'; return v || 'Not recorded'; }
-    function demoCount(list, fn) { var m = {}; list.forEach(function (x) { var k = fn(x); if (k === '' || k === null || k === undefined) k = 'Not recorded'; m[k] = (m[k] || 0) + 1; }); return m; }
-    function demoSeries(map, order, includeZero) {
-      order = order || [];
-      var keys = order.slice();
-      Object.keys(map).forEach(function (k) { if (keys.indexOf(k) === -1) keys.push(k); });
-      return keys.filter(function (k) { return includeZero || (map[k] || 0) > 0; }).map(function (k) { return { label: k, count: map[k] || 0 }; });
-    }
-    function demoBandSeries(list, bands, getValue) {
-      var order = bands.map(function (b) { return b.label; });
-      var m = demoCount(list, function (x) { return demoBand(getValue(x), bands); });
-      return demoSeries(m, order.concat((m['Not recorded'] || 0) > 0 ? ['Not recorded'] : []), true);
-    }
-    function demoBySection(list, getSection) {
-      var m = demoCount(list, function (x) { var s = String(getSection(x) || '').trim(); return s ? (SECTION_LABELS[s] || s) : 'Unassigned'; });
-      return demoSeries(m, [SECTION_LABELS.KG, SECTION_LABELS.PRIMARY, SECTION_LABELS.SECONDARY, 'Unassigned'], false);
-    }
     function demoDonut(data, cap) {
-      var total = 0; data.forEach(function (d) { total += d.count; });
+      var total = 0; (data || []).forEach(function (d) { total += d.count; });
       if (!total) return '<div class="dg-empty">No data.</div>';
       var stops = [], cursor = 0, legend = '';
       data.forEach(function (d, i) {
@@ -800,29 +952,26 @@
     }
     function demoTile(title, sub, body) { return '<div class="dg-tile"><h4>' + esc(title) + '</h4><div class="dg-sub">' + esc(sub) + '</div>' + body + '</div>'; }
     function demographicsPanel(dg) {
-      if (!dg || !dg.loaded) return '';
-      var st = dg.students || [], sf = dg.staff || [];
-      if (!st.length && !sf.length) return '';
+      if (!dg || !dg.loaded || !dg.data) return '';
+      var d = dg.data;
+      if (!d.students && !d.staff) return '';
+      var s = d.students, sf = d.staff;
+      if (!s.total && !sf.total) return '';
       var studentTiles = '';
-      studentTiles += demoTile('Students by gender', st.length + ' students in scope', demoDonut(demoSeries(demoCount(st, function (s) { return demoGender(s.gender); }), ['Male', 'Female', 'Not recorded'], false), 'Students'));
-      studentTiles += demoTile('Students by age group', 'school-stage bands', demoBars(demoBandSeries(st, DEMO_STUDENT_BANDS, function (s) { return demoYears(s.dateOfBirth); })));
-      studentTiles += demoTile('Students by section', 'KG & Creche · Primary · Secondary', demoDonut(demoBySection(st, function (s) { return s.classArm && s.classArm.classLevel ? s.classArm.classLevel.section : ''; }), 'Students'));
-      var lvlMap = {}; st.forEach(function (s) { var lv = s.classArm && s.classArm.classLevel ? s.classArm.classLevel.name : ''; var k = lv || 'Unassigned'; if (!lvlMap[k]) lvlMap[k] = { count: 0, section: s.classArm && s.classArm.classLevel ? s.classArm.classLevel.section : '' }; lvlMap[k].count++; });
-      var lvlSeries = Object.keys(lvlMap).sort(function (a, b) { if (lvlMap[a].section !== lvlMap[b].section) return SECTIONS.indexOf(lvlMap[a].section) - SECTIONS.indexOf(lvlMap[b].section); return a.localeCompare(b, undefined, { numeric: true }); }).map(function (k) { return { label: k, count: lvlMap[k].count }; });
-      studentTiles += demoTile('Students by class level', 'enrolment per class', demoBars(lvlSeries));
-      studentTiles += demoTile('Student status', 'active vs inactive', demoDonut(demoSeries(demoCount(st, function (s) { return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active'; }), ['Active', 'Inactive'], false), 'Students'));
-      var admMap = demoCount(st, function (s) { return String(s.createdAt || '').slice(0, 7); }); delete admMap['Not recorded'];
-      var admSeries = Object.keys(admMap).sort().slice(-12).map(function (m) { return { label: m, count: admMap[m] }; });
-      if (!admSeries.length) { var yrMap = demoCount(st, function (s) { var m = /KMS\/(\d{4})\//.exec(String(s.admissionNo || '')); return m ? m[1] : ''; }); delete yrMap['Not recorded']; admSeries = Object.keys(yrMap).sort().map(function (y) { return { label: y, count: yrMap[y] }; }); }
-      studentTiles += demoTile('Admissions by month', admSeries.length && String(admSeries[0].label).length === 7 ? 'last 12 months' : 'by year', demoBars(admSeries));
+      studentTiles += demoTile('Students by gender', s.total + ' students in scope', demoDonut(s.gender, 'Students'));
+      studentTiles += demoTile('Students by age group', 'school-stage bands', demoBars(s.ageBand));
+      studentTiles += demoTile('Students by section', 'KG & Creche · Primary · Secondary', demoDonut(s.section, 'Students'));
+      studentTiles += demoTile('Students by class level', 'enrolment per class', demoBars(s.classLevel));
+      studentTiles += demoTile('Student status', 'active vs inactive', demoDonut(s.status, 'Students'));
+      studentTiles += demoTile('Admissions by month', s.admissionsLabel || 'recent activity', demoBars(s.admissions));
 
       var staffTiles = '';
-      staffTiles += demoTile('Staff by gender', sf.length + ' staff in scope', demoDonut(demoSeries(demoCount(sf, function (s) { return demoGender(s.gender); }), ['Male', 'Female', 'Not recorded'], false), 'Staff'));
-      staffTiles += demoTile('Staff by age group', 'school-stage bands', demoBars(demoBandSeries(sf, DEMO_STAFF_BANDS, function (s) { return demoYears(s.dateOfBirth); })));
-      staffTiles += demoTile('Staff by section', 'teaching & support', demoDonut(demoBySection(sf, function (s) { return s.section; }), 'Staff'));
-      staffTiles += demoTile('Staff by designation', 'role mix', demoBars(demoSeries(demoCount(sf, function (s) { return String(s.designation || '').trim() || 'Unspecified'; }), [], false).sort(function (a, b) { return b.count - a.count; })));
-      staffTiles += demoTile('Staff status', 'active vs inactive', demoDonut(demoSeries(demoCount(sf, function (s) { return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active'; }), ['Active', 'Inactive'], false), 'Staff'));
-      staffTiles += demoTile('Years of service', 'from date joined', demoBars(demoBandSeries(sf, DEMO_SERVICE_BANDS, function (s) { return demoYears(s.dateJoined); })));
+      staffTiles += demoTile('Staff by gender', sf.total + ' staff in scope', demoDonut(sf.gender, 'Staff'));
+      staffTiles += demoTile('Staff by age group', 'school-stage bands', demoBars(sf.ageBand));
+      staffTiles += demoTile('Staff by section', 'teaching & support', demoDonut(sf.section, 'Staff'));
+      staffTiles += demoTile('Staff by designation', 'role mix', demoBars(sf.designation));
+      staffTiles += demoTile('Staff status', 'active vs inactive', demoDonut(sf.status, 'Staff'));
+      staffTiles += demoTile('Years of service', 'from date joined', demoBars(sf.serviceYears));
 
       return '<div class="dg-wrap"><div class="card"><div class="section-head"><h3>Demographics</h3><span class="muted small">live from student &amp; staff records · your scope</span></div>' +
         '<div class="dir-head">Students</div><div class="dg-grid">' + studentTiles + '</div>' +
@@ -942,16 +1091,26 @@
     function parentDashboard(d) {
       var pending = d.payments.filter(function (p) { return p.status === 'PENDING'; }).length;
       var verified = d.payments.filter(function (p) { return p.status === 'VERIFIED'; }).length;
+      var owingWards = d.wards.filter(function (w) { return Number(w.balance) > 0; });
+      var totalBalance = owingWards.reduce(function (t, w) { return t + Number(w.balance || 0); }, 0);
       var html = heroHtml('Parent portal', d.wards.length + ' ward(s)');
       html += '<div class="cards">' +
         statCard('My wards', d.wards.length, 'Linked students', ICONS.students) +
         statCard('Payments', d.payments.length, 'Submitted', ICONS.money) +
-        statCard('Pending', pending, 'Awaiting verification', ICONS.attendance) +
-        statCard('Verified', verified, 'Confirmed', ICONS.attendance) + '</div>';
+        statCard('Outstanding', '₦' + fmtMoney(totalBalance), owingWards.length ? (owingWards.length + ' ward(s) with a balance') : 'All caught up', ICONS.attendance) +
+        statCard('Verified', verified, (pending ? pending + ' pending' : 'Nothing pending'), ICONS.attendance) + '</div>';
       if (d.wards.length) {
-        html += '<div style="margin-top:20px"><div class="card"><div class="section-head"><h3>My wards</h3></div>' + d.wards.map(function (w) {
-          return '<div class="dir-item">' + photoImg(w.photoFileId) + '<div><strong>' + esc(fullName(w)) + '</strong><div class="muted small">' + esc(w.admissionNo) + (w.classArm ? ' · ' + esc(armLabel(w.classArm)) : '') + '</div></div><div class="spacer"></div><button class="btn btn-outline btn-sm" data-action="open-report-ward" data-id="' + esc(w.id) + '">Report card</button></div>';
-        }).join('') + '</div></div>';
+        html += '<div style="margin-top:20px"><div class="card"><div class="section-head"><h3>My wards</h3><span class="muted small">term bill and balance</span></div>' +
+          d.wards.map(function (w) {
+            var bal = Number(w.balance || 0);
+            var badge = bal > 0 ? '<span class="badge bad">₦' + fmtMoney(bal) + ' outstanding</span>' : '<span class="badge ok">Fully paid</span>';
+            var termLabel = w.term ? esc(w.term.label) : '';
+            return '<div class="dir-item"><div style="min-width:44px">' + photoImg(w.photoFileId) + '</div>' +
+              '<div><strong>' + esc(fullName(w)) + '</strong><div class="muted small">' + esc(w.admissionNo) + (w.classArm ? ' · ' + esc(armLabel(w.classArm)) : '') + '</div>' +
+              (w.term ? '<div class="muted small">' + termLabel + ' — bill ₦' + fmtMoney(w.totalBill || 0) + ' · paid ₦' + fmtMoney(w.amountPaid || 0) + '</div>' : '') +
+              '</div><div class="spacer"></div>' + badge +
+              '<button class="btn btn-outline btn-sm" data-action="open-report-ward" data-id="' + esc(w.id) + '">Report card</button></div>';
+          }).join('') + '</div></div>';
       }
       html += latestAnnouncementsFrom(d.announcements);
       return html;
@@ -982,7 +1141,7 @@
         inputField('Guardian name', 'guardianName', f.guardianName, true) + inputField('Guardian phone', 'guardianPhone', f.guardianPhone, true) +
         selField('Status', 'status', ['ACTIVE', 'INACTIVE'], f.status || 'ACTIVE') + '</div>' +
         '<div class="field"><label>Home address</label><textarea name="address" required>' + esc(f.address || '') + '</textarea></div>' +
-        '<div class="field"><label>Passport photo ' + (isNew ? '(required)' : '(required until one is on file)') + ', stored in Drive</label><input type="file" name="photo" accept="image/*"' + (isNew ? ' required' : '') + '></div>' +
+        '<div class="field"><label>Passport photo ' + (isNew ? '(required)' : '(required until one is on file)') + ', stored privately in Drive</label><input type="file" name="photo" accept="image/*"' + (isNew ? ' required' : '') + '></div>' +
         '<div class="row"><button class="btn btn-primary" type="submit">Save student</button><button class="btn btn-outline" type="button" data-action="cancel-student">Cancel</button></div></form></div>';
     }
     function inputField(label, name, value, required, type) { return '<div class="field"><label>' + esc(label) + '</label><input name="' + name + '" type="' + (type || 'text') + '" value="' + esc(value || '') + '"' + (required ? ' required' : '') + '></div>'; }
@@ -992,9 +1151,10 @@
     function loadRoster() { state.busy = true; render(); authed('api_getRoster', state.attendance.classArmId, state.attendance.date).then(function (r) { state.attendance.roster = r; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function viewAttendance() {
       var a = state.attendance;
+      var saveDisabled = state.busy || !a.roster || !a.roster.students || !a.roster.students.length;
       var body = '<div class="toolbar no-print"><div class="field" style="min-width:240px"><label>Class</label><select data-field="att-class">' + armOptions(a.classArmId) + '</select></div>' +
         '<div class="field"><label>Date</label><input type="date" data-field="att-date" value="' + esc(a.date) + '"></div>' +
-        '<div class="spacer"></div><button class="btn btn-primary" data-action="attendance-save">Save attendance</button></div>';
+        '<div class="spacer"></div><button class="btn btn-primary" data-action="attendance-save"' + (saveDisabled ? ' disabled' : '') + '>Save attendance</button></div>';
       if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading roster…</div>';
       if (!a.roster || !a.roster.students.length) return body + '<div class="empty">No students in this class yet.</div>';
       body += '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th>Note</th></tr></thead><tbody>' +
@@ -1005,6 +1165,24 @@
     }
 
     /* ---------------- results ---------------- */
+    var RESULT_STATUS_RANK = { DRAFT: 0, SUBMITTED: 1, APPROVED: 2, PUBLISHED: 3 };
+    function resultStatusRank_(st) { return RESULT_STATUS_RANK[String(st || 'DRAFT').toUpperCase()]; }
+    function resultStatusBadge_(st) {
+      if (!st) return '';
+      var up = String(st).toUpperCase();
+      var cls = up === 'PUBLISHED' ? 'ok' : (up === 'APPROVED' ? 'ok' : (up === 'SUBMITTED' ? 'warn' : ''));
+      return '<span class="badge ' + cls + '">' + esc(up) + '</span>';
+    }
+    function aggregateResultStatus_(sheets) {
+      if (!sheets || !sheets.length) return '';
+      var min = 3;
+      sheets.forEach(function (s) {
+        var r = resultStatusRank_(s.status);
+        if (r === undefined) r = 0;
+        if (r < min) min = r;
+      });
+      return ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED'][min];
+    }
     function loadResults() {
       state.busy = true; render();
       var r = state.results, subs = subjectsForArm(r.classArmId);
@@ -1015,8 +1193,85 @@
         r.sheet = sh;
         if (r.studentId) return authed('api_getStudentGrades', r.studentId, r.termId).then(function (g) { r.grades = g; });
       });
+      else if (r.tab === 'bulk') task = Promise.resolve();
       else task = authed('api_listResultSheets', r.classArmId, r.termId).then(function (sh) { r.sheets = sh; });
       task.then(function () { state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); });
+    }
+    function saveTextFile(name, text) {
+      try {
+        var blob = new Blob([text], { type: 'text/csv;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click();
+        setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+      } catch (e) { window.open('data:text/csv;charset=utf-8,' + encodeURIComponent(text), '_blank'); }
+    }
+    function bulkReady() { var r = state.results; return !!(r.classArmId && r.termId); }
+    function bulkDownload() {
+      var r = state.results;
+      if (!bulkReady()) { setError(new Error('Select a class and a term first.')); return; }
+      clearMessages(); r.bulk = { working: 'Preparing the template…' }; render();
+      authed('api_gradesTemplate', r.classArmId, r.termId).then(function (t) {
+        saveTextFile(t.filename, t.csv);
+        r.bulk = null; state.notice = 'Template downloaded: ' + t.students + ' students, ' + t.subjects + ' subjects. Fill in the scores, save as CSV and upload it here.'; render();
+      }).catch(function (err) { r.bulk = null; setError(err); });
+    }
+    function bulkChooseFile(input) {
+      var r = state.results, f = input && input.files && input.files[0];
+      if (!f) return;
+      if (!bulkReady()) { setError(new Error('Select a class and a term first.')); return; }
+      if (f.size > 2 * 1024 * 1024) { setError(new Error('That file is too large for a grades CSV (max 2 MB).')); return; }
+      var fr = new FileReader();
+      fr.onerror = function () { setError(new Error('Could not read the file.')); };
+      fr.onload = function () {
+        var text = String(fr.result || '');
+        clearMessages(); r.bulk = { working: 'Checking ' + f.name + '…', filename: f.name }; render();
+        authed('api_importGrades', r.classArmId, r.termId, text, false).then(function (p) {
+          r.bulk = { filename: f.name, text: text, preview: p }; render();
+        }).catch(function (err) { r.bulk = null; setError(err); });
+      };
+      fr.readAsText(f);
+    }
+    function bulkConfirm() {
+      var r = state.results, b = r.bulk;
+      if (!b || !b.text || !b.preview || !b.preview.ok) return;
+      clearMessages(); r.bulk = { working: 'Saving scores…', filename: b.filename }; render();
+      authed('api_importGrades', r.classArmId, r.termId, b.text, true).then(function (res) {
+        r.bulk = { filename: b.filename, done: res };
+        state.notice = 'Saved ' + res.saved + ' subject score sets for ' + res.studentsInFile + ' students. Totals, grades and positions are updated; the sheet has been reset to DRAFT.';
+        render();
+      }).catch(function (err) { r.bulk = { filename: b.filename, text: b.text, preview: b.preview }; setError(err); });
+    }
+    function bulkGradesHtml() {
+      var r = state.results, b = r.bulk || {};
+      var h = '<div class="card"><h3 style="margin-top:0">Upload scores for every subject at once</h3>' +
+        '<ol class="muted small" style="margin:0 0 14px;padding-left:20px;line-height:1.7">' +
+        '<li>Choose the <strong>class</strong> and <strong>term</strong> above.</li>' +
+        '<li>Download the template. It already lists every student in the class, with CA1, CA2, CA3 and Exam columns for each subject.</li>' +
+        '<li>Type the scores (CA1\u2013CA3: 0\u201310 each, Exam: 0\u201370). Leave a subject blank to skip it. Do not change the Admission No column or the column headings.</li>' +
+        '<li>Save the file as <strong>CSV</strong> and choose it below. You will see a summary and can confirm before anything is saved.</li></ol>' +
+        '<div class="row"><button class="btn btn-outline" data-action="bulk-download"' + (bulkReady() && !b.working ? '' : ' disabled') + '>\u2B07 Download CSV template</button></div>';
+      if (b.working) return h + '<div class="page-loading"><span class="spinner"></span> ' + esc(b.working) + '</div></div>';
+      h += '<div class="field" style="margin-top:16px;max-width:440px"><label>Filled CSV file</label><input type="file" accept=".csv,text/csv" data-field="bulk-file"></div>';
+      if (b.done) {
+        h += '<div class="alert success">Saved <strong>' + esc(b.done.saved) + '</strong> subject score sets for <strong>' + esc(b.done.studentsInFile) + '</strong> students in ' + esc(b.done.classLabel) + ' (' + esc(b.done.termLabel) + '). The result sheet has been reset to DRAFT — submit it for approval from the Result sheets tab.</div>';
+      }
+      var p = b.preview;
+      if (p) {
+        h += '<div class="card" style="margin-top:14px;background:var(--slate-50,#f8fafc)"><strong>' + esc(b.filename || 'File') + '</strong> \u2014 ' + esc(p.classLabel) + ' \u00B7 ' + esc(p.termLabel) +
+          '<div class="muted small" style="margin-top:6px">' + esc(p.studentsInFile) + ' of ' + esc(p.studentsInClass) + ' students \u00B7 ' + esc(p.subjectsInFile) + ' of ' + esc(p.subjectsInClass) + ' subjects \u00B7 ' + esc(p.entryCount) + ' score sets to save</div>';
+        if (p.missingStudentCount) h += '<div class="muted small" style="margin-top:6px">Not in the file (will be left unchanged): ' + esc(p.missingStudents.join(', ')) + (p.missingStudentCount > p.missingStudents.length ? ' and ' + (p.missingStudentCount - p.missingStudents.length) + ' more' : '') + '.</div>';
+        if (p.subjectsNotInFile && p.subjectsNotInFile.length) h += '<div class="muted small" style="margin-top:6px">Subjects not in the file (unchanged): ' + esc(p.subjectsNotInFile.join(', ')) + '.</div>';
+        if (p.errorCount) {
+          h += '<div class="alert error" style="margin-top:12px"><strong>' + esc(p.errorCount) + ' problem' + (p.errorCount === 1 ? '' : 's') + ' to fix before this can be saved.</strong> Correct the CSV and choose it again.<ul style="margin:8px 0 0;padding-left:18px">' +
+            p.errors.map(function (e) { return '<li>' + (e.row ? 'Row ' + esc(e.row) + ': ' : '') + esc(e.message) + '</li>'; }).join('') + '</ul>' +
+            (p.errorCount > p.errors.length ? '<div class="small" style="margin-top:6px">\u2026and ' + (p.errorCount - p.errors.length) + ' more.</div>' : '') + '</div>';
+          h += '<div class="row" style="margin-top:10px"><button class="btn btn-outline" data-action="bulk-cancel">Clear</button></div>';
+        } else {
+          h += '<div class="alert success" style="margin-top:12px">No problems found. Saving will overwrite the existing scores for the subjects and students listed.</div>' +
+            '<div class="row" style="margin-top:10px"><button class="btn btn-primary" data-action="bulk-confirm">Confirm &amp; save ' + esc(p.entryCount) + ' score sets</button><button class="btn btn-outline" data-action="bulk-cancel">Cancel</button></div>';
+        }
+        h += '</div>';
+      }
+      return h + '</div>';
     }
     function viewResults() {
       var r = state.results, subs = subjectsForArm(r.classArmId);
@@ -1026,30 +1281,43 @@
         '<div class="field" style="min-width:200px"><label>Term</label><select data-field="res-term">' + termOptions(r.termId) + '</select></div>' +
         (r.tab === 'entry' ? '<div class="field" style="min-width:220px"><label>Subject</label><select data-field="res-subject"><option value="">Select subject…</option>' + optionsHtml(subs, function (s) { return s.id; }, r.subjectId, function (s) { return s.name; }) + '</select></div>' : studentSel) +
         '<div class="spacer"></div>' + (r.tab === 'entry' ? '<button class="btn btn-primary" data-action="scores-save">Save scores</button>' : (r.tab === 'grades' && r.grades ? '<button class="btn btn-primary" data-action="grades-save">Save grades</button>' : '')) + '</div>' +
-        '<div class="tabs no-print"><button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button><button data-action="res-tab" data-tab="grades" class="' + (r.tab === 'grades' ? 'active' : '') + '">Per-student grades</button><button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button></div>';
+        '<div class="tabs no-print"><button data-action="res-tab" data-tab="entry" class="' + (r.tab === 'entry' ? 'active' : '') + '">Score entry</button><button data-action="res-tab" data-tab="grades" class="' + (r.tab === 'grades' ? 'active' : '') + '">Per-student grades</button><button data-action="res-tab" data-tab="bulk" class="' + (r.tab === 'bulk' ? 'active' : '') + '">Upload CSV (all subjects)</button><button data-action="res-tab" data-tab="sheets" class="' + (r.tab === 'sheets' ? 'active' : '') + '">Result sheets</button></div>';
       if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
+      if (r.tab === 'bulk') return body + bulkGradesHtml();
       if (r.tab === 'entry') {
         if (!r.subjectId) return body + '<div class="empty">Select a subject to enter scores.</div>';
         if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
         return body + '<div class="table-wrap"><table><thead><tr><th>Student</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>' +
-          r.sheet.rows.map(function (row) { return '<tr><td><strong>' + esc(fullName(row.student)) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(row.studentId) + '" value="' + esc(row[k]) + '"></td>'; }).join('') + '<td data-total-for="' + esc(row.studentId) + '">' + esc(row.total === '' ? '—' : row.total) + '</td><td>' + esc(row.grade || '—') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="muted small">CA1–CA3 out of 10 each; Exam out of 70. Totals and result sheets are recomputed automatically when you save.</p>';
+          r.sheet.rows.map(function (row) { return '<tr><td><strong>' + esc(fullName(row.student)) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-score="' + k + '" data-sid="' + esc(row.studentId) + '" value="' + esc(row[k]) + '"></td>'; }).join('') + '<td data-total-for="' + esc(row.studentId) + '">' + esc(row.total === '' ? '—' : row.total) + '</td><td>' + esc(row.grade || '—') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="muted small">CA1–CA3 out of 10 each; Exam out of 70. Totals and result sheets are recomputed when you save; the sheet is reset to DRAFT so it must be resubmitted for approval.</p>';
       }
       if (r.tab === 'grades') {
         if (!r.sheet || !r.sheet.rows.length) return body + '<div class="empty">No students in this class yet.</div>';
         if (!r.studentId) return body + '<div class="empty">Pick a student above to enter their grades for this term — results are generated automatically as you save.</div>';
         if (!r.grades) return body + '<div class="page-loading"><span class="spinner"></span> Loading student…</div>';
         var g = r.grades, student = g.student;
-        var chips = '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(g.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(g.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(g.computed.average) + '</div></div><div class="kv"><div class="k">Avg grade</div><div class="v">' + esc(g.averageGrade || '—') + '</div></div><div class="kv"><div class="k">Progress</div><div class="v">' + esc(g.enteredCount) + '/' + esc(g.subjectCount) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(g.sheet.status) + '</div></div></div>';
-        var sheetNote = g.complete ? '<div class="alert success">All subjects entered — the result sheet has been generated automatically.</div>' : '<p class="muted small">' + (g.subjectCount - g.enteredCount) + ' subject(s) still need scores before the sheet is complete.</p>';
+        var chips = '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(g.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(g.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(g.computed.average) + '</div></div><div class="kv"><div class="k">Avg grade</div><div class="v">' + esc(g.averageGrade || '—') + '</div></div><div class="kv"><div class="k">Progress</div><div class="v">' + esc(g.enteredCount) + '/' + esc(g.subjectCount) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + resultStatusBadge_(g.sheet.status) + '</div></div></div>';
+        var sheetNote = g.complete ? '<div class="alert success">All subjects entered — the result sheet has been generated automatically and is back in DRAFT pending approval.</div>' : '<p class="muted small">' + (g.subjectCount - g.enteredCount) + ' subject(s) still need scores before the sheet is complete.</p>';
         return body + '<div class="card"><div class="grid cols-2"><div><strong>' + esc(fullName(student)) + '</strong><div class="muted small">' + esc(student.admissionNo) + (student.classArm ? ' · ' + esc(armLabel(student.classArm)) : '') + '</div><div class="muted small">' + esc(g.term.label) + '</div></div>' + chips + '</div>' + sheetNote +
           '<div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th></th></tr></thead><tbody>' +
           g.subjects.map(function (s) { return '<tr data-grow="' + esc(s.subjectId) + '"><td><strong>' + esc(s.subjectName) + '</strong></td>' + ['ca1', 'ca2', 'ca3', 'exam'].map(function (k) { return '<td><input style="width:72px" type="number" min="0" data-gscore="' + k + '" value="' + esc(s[k]) + '"></td>'; }).join('') + '<td data-gtotal-for="' + esc(s.subjectId) + '">' + esc(s.total === '' ? '—' : s.total) + '</td><td data-ggrade-for="' + esc(s.subjectId) + '">' + esc(s.grade || '—') + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(student.id) + '">Report card</button></td></tr>'; }).join('') + '</tbody></table></div>' +
           '<p class="muted small">CA1–CA3 out of 10 each; Exam out of 70. Save to recompute the student\u2019s total, position and the class result sheets.</p></div>';
       }
-      body += '<div class="toolbar no-print"><div class="spacer"></div><button class="btn btn-outline" data-action="results-compute">Compute</button><button class="btn btn-primary" data-action="results-publish">Publish</button></div>';
+      var agg = aggregateResultStatus_(r.sheets);
+      var canSubmit = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'TEACHER']);
+      var canApprove = roleAllowed(['ADMIN', 'PRINCIPAL', 'HEADMASTER']);
+      var workflow = '<div class="toolbar no-print"><div class="spacer"></div>';
+      workflow += resultStatusBadge_(agg);
+      workflow += ' <button class="btn btn-outline" data-action="results-compute">Recompute</button>';
+      if (canSubmit && agg === 'DRAFT') workflow += ' <button class="btn btn-primary" data-action="results-submit">Submit for approval</button>';
+      if (canApprove && agg === 'SUBMITTED') workflow += ' <button class="btn btn-primary" data-action="results-approve">Approve</button>';
+      if (canApprove && agg === 'APPROVED') workflow += ' <button class="btn btn-primary" data-action="results-publish">Publish to parents</button>';
+      if (canApprove && agg === 'PUBLISHED') workflow += ' <button class="btn btn-outline" data-action="results-unpublish">Unpublish</button>';
+      workflow += '</div>';
+      body += workflow;
+      body += '<div class="muted small no-print" style="margin:-6px 0 12px">Workflow: teachers enter scores → <strong>Submit</strong> → leadership <strong>Approves</strong> → <strong>Publish</strong> makes the report visible to parents. Any score save resets the term to DRAFT.</div>';
       if (!r.sheets.length) return body + '<div class="empty">No result sheets yet. Compute first.</div>';
       return body + '<div class="table-wrap"><table><thead><tr><th>#</th><th>Student</th><th>Total</th><th>Average</th><th>Status</th><th></th></tr></thead><tbody>' +
-        r.sheets.map(function (row) { return '<tr><td>' + esc(row.position || '—') + '</td><td><strong>' + esc(fullName(row.student)) + '</strong></td><td>' + esc(row.totalScore) + '</td><td>' + esc(row.average) + '</td><td>' + (row.status ? '<span class="badge ' + (row.status === 'PUBLISHED' ? 'ok' : 'warn') + '">' + esc(row.status) + '</span>' : '—') + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(row.student.id) + '">Report card</button></td></tr>'; }).join('') + '</tbody></table></div>';
+        r.sheets.map(function (row) { return '<tr><td>' + esc(row.position || '—') + '</td><td><strong>' + esc(fullName(row.student)) + '</strong></td><td>' + esc(row.totalScore) + '</td><td>' + esc(row.average) + '</td><td>' + (row.status ? resultStatusBadge_(row.status) : '—') + '</td><td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="open-report" data-id="' + esc(row.student.id) + '">Report card</button></td></tr>'; }).join('') + '</tbody></table></div>';
     }
 
     /* ---------------- report card ---------------- */
@@ -1080,7 +1348,7 @@
         '<div class="report-sheet">' + docHeaderHtml('Terminal Report') +
         '<div class="report-meta"><div class="kv"><div class="k">Student</div><div class="v">' + esc(fullName(d.student)) + '</div><div class="k small">' + esc(d.student.admissionNo) + (d.student.classArm ? ' · ' + esc(armLabel(d.student.classArm)) : '') + '</div></div>' +
         '<div class="kv"><div class="k">Term · Attendance</div><div class="v">' + esc(d.term.label) + '</div><div class="k small">' + attLine + '</div></div>' +
-        '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + esc(d.sheet.status) + '</div></div></div></div>' +
+        '<div class="report-summary"><div class="kv"><div class="k">Position</div><div class="v">' + esc(d.computed.position || '—') + '</div></div><div class="kv"><div class="k">Total</div><div class="v">' + esc(d.computed.totalScore) + '</div></div><div class="kv"><div class="k">Average</div><div class="v">' + esc(d.computed.average) + '</div></div><div class="kv"><div class="k">Status</div><div class="v">' + resultStatusBadge_(d.sheet.status) + '</div></div></div></div>' +
         '<table class="report-table"><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>' +
         (d.scores.length ? d.scores.map(function (s) { return '<tr><td>' + esc(s.subject.name) + '</td><td>' + esc(s.ca1 || '—') + '</td><td>' + esc(s.ca2 || '—') + '</td><td>' + esc(s.ca3 || '—') + '</td><td>' + esc(s.exam || '—') + '</td><td><strong>' + esc(s.total || '—') + '</strong></td><td>' + esc(s.grade || '—') + '</td><td>' + esc(s.remark || '—') + '</td></tr>'; }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No scores captured for this term.</td></tr>') +
         '<tr class="report-total"><td colspan="5" style="text-align:right"><strong>Total</strong></td><td><strong>' + esc(d.computed.totalScore) + '</strong></td><td colspan="2">Average <strong>' + esc(d.computed.average) + '</strong> · Position ' + esc(d.computed.position || '—') + '</td></tr></tbody></table>' +
@@ -1110,11 +1378,11 @@
         inputField('Email', 'email', f.email, false, 'email') + inputField('Phone', 'phone', f.phone) + inputField('Designation', 'designation', f.designation) +
         selField('Section', 'section', ['', 'KG', 'PRIMARY', 'SECONDARY'], f.section) + selField('Status', 'status', ['ACTIVE', 'INACTIVE'], f.status || 'ACTIVE') + '</div>' +
         '<div class="field"><label>Address</label><textarea name="address">' + esc(f.address) + '</textarea></div>' +
-        '<div class="field"><label>Photo / document (optional, stored in Drive)</label><input type="file" name="photo" accept="image/*,.pdf"></div>' +
+        '<div class="field"><label>Photo / document (optional, stored privately in Drive)</label><input type="file" name="photo" accept="image/*,.pdf"></div>' +
         '<div class="row"><button class="btn btn-primary" type="submit">Save staff</button><button class="btn btn-outline" type="button" data-action="cancel-staff">Cancel</button></div></form></div>';
     }
 
-    /* ---------------- teachers (role-scoped assignment) ---------------- */
+    /* ---------------- teachers ---------------- */
     function loadTeachers() { state.busy = true; render(); authed('api_listTeachers').then(function (list) { state.teachers.list = list; state.busy = false; render(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function viewTeachers() {
       var t = state.teachers;
@@ -1185,8 +1453,12 @@
         }).join('') + '</tbody></table></div>';
       return body;
     }
-    function docLinkCard(label, url) {
-      return '<div class="field"><label>' + esc(label) + '</label><div>' + (url ? '<a href="' + esc(url) + '" target="_blank" rel="noreferrer">View</a>' : '—') + '</div></div>';
+    function docLinkCard(label, fileId) {
+      return '<div class="field"><label>' + esc(label) + '</label><div>' +
+        (fileId
+          ? '<button type="button" class="btn btn-outline btn-sm" data-action="evidence-open" data-id="' + esc(fileId) + '">View</button>'
+          : '—') +
+        '</div></div>';
     }
     function applicationDetailHtml(d) {
       var reviewCols = '<div class="grid cols-3">' + inputField('Child name', 'f', d.childNames, false) + inputField('Gender', 'f', d.gender, false) + inputField('Date of birth', 'f', d.dateOfBirth, false) + '</div>' +
@@ -1196,7 +1468,7 @@
         '<div class="field"><label>Home address</label><div>' + esc(d.address || '—') + '</div></div>' +
         '<div class="grid cols-2"><div class="field"><label>Previous school</label><div>' + esc(d.previousSchool || '—') + '</div></div><div class="field"><label>Submitted</label><div>' + esc(d.timestamp || '') + (d.reviewedBy ? '<div class="muted small">Last reviewed by ' + esc(d.reviewedBy) + (d.reviewedAt ? ' on ' + esc(String(d.reviewedAt).slice(0, 10)) : '') + '</div>' : '') + '</div></div></div>' +
         (d.notes ? '<div class="field"><label>Notes</label><div>' + esc(d.notes) + '</div></div>' : '') +
-        '<div class="grid cols-2">' + docLinkCard('Passport photograph', d.photoUrl) + docLinkCard('Primary school certificate', d.primaryCertUrl) + docLinkCard('Junior school certificate', d.juniorCertUrl) + docLinkCard('Evidence of application fee', d.applicationFeeUrl) + '</div>';
+        '<div class="grid cols-2">' + docLinkCard('Passport photograph', d.photoFileId) + docLinkCard('Primary school certificate', d.primaryCertFileId) + docLinkCard('Junior school certificate', d.juniorCertFileId) + docLinkCard('Evidence of application fee', d.applicationFeeFileId) + '</div>';
       var statusOptions = (state.boot.admissionStatuses || ['PENDING', 'REVIEWED', 'OFFERED', 'ADMITTED', 'REJECTED']).map(function (s) {
         return '<option value="' + esc(s) + '"' + (String(s) === String(d.status) ? ' selected' : '') + '>' + esc(s) + '</option>';
       }).join('');
@@ -1212,7 +1484,7 @@
       return '<div class="card"><div class="row"><div><h3 style="margin:0">' + esc(d.ref) + '</h3><div class="muted small">' + esc(d.childNames) + '</div></div><div class="spacer"></div>' + applyBadge(d.status) + '</div>' +
         reviewCols +
         '<form id="application-form" data-id="' + esc(d.ref) + '"><div class="grid cols-3">' +
-        '<div class="field"><label>Status</label><select name="status">' + statusOptions + '</select></div>' +
+        '<div class="field"><label>Status</label><select name="status">' + statusOptions + '</select><div class="muted small" style="margin-top:4px">Changing to REVIEWED, ADMITTED or REJECTED sends the guardian an automatic email.</div></div>' +
         '<div class="field" style="grid-column:span 2"><label>Remarks</label><textarea name="remarks" placeholder="e.g. documents verified, interview scheduled…">' + esc(d.remarks || '') + '</textarea></div></div>' +
         '<div class="row"><button class="btn btn-primary" type="submit">Save review</button></div></form>' +
         approveBlock + '</div>';
@@ -1244,7 +1516,7 @@
       if (state.busy) return body + '<div class="page-loading"><span class="spinner"></span> Loading…</div>';
       if (!p.list.length) return body + '<div class="empty">No payments recorded yet.</div>';
       return body + '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Student</th><th>Category</th><th>Amount</th><th>Method</th><th>Ref</th><th>Evidence</th><th>Status</th><th></th></tr></thead><tbody>' +
-        p.list.map(function (x) { return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><strong>' + esc(x.studentName) + '</strong><div class="muted small">' + esc(x.admissionNo) + '</div></td><td>' + esc(x.category) + '</td><td>' + esc(x.amount) + '</td><td>' + esc(x.method || '—') + '</td><td>' + esc(x.reference || '—') + '</td><td>' + (x.evidenceUrl ? '<a href="' + esc(x.evidenceUrl) + '" target="_blank">View</a>' : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
+        p.list.map(function (x) { return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><strong>' + esc(x.studentName) + '</strong><div class="muted small">' + esc(x.admissionNo) + '</div></td><td>' + esc(x.category) + '</td><td>' + esc(x.amount) + '</td><td>' + esc(x.method || '—') + '</td><td>' + esc(x.reference || '—') + '</td><td>' + (x.evidenceFileId ? '<button class="btn btn-outline btn-sm" data-action="evidence-open" data-id="' + esc(x.evidenceFileId) + '">View</button>' : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
           '<td style="text-align:right;white-space:nowrap">' + (canVerify && x.status === 'PENDING' ? '<button class="btn btn-outline btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="VERIFIED">Verify</button> <button class="btn btn-danger btn-sm" data-action="pay-verify" data-id="' + esc(x.id) + '" data-decision="REJECTED">Reject</button>' : '') + ' <button class="btn btn-outline btn-sm" data-action="receipt-open" data-id="' + esc(x.id) + '">Receipt</button>' + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
     function badgeStatus(s) { var cls = s === 'VERIFIED' ? 'ok' : (s === 'REJECTED' ? 'bad' : 'warn'); return '<span class="badge ' + cls + '">' + esc(s) + '</span>'; }
@@ -1258,7 +1530,7 @@
         '<div class="field"><label>Method</label><input name="method" type="text" placeholder="Transfer / Cash / POS"></div>' +
         '<div class="field"><label>Reference</label><input name="reference" type="text" placeholder="Teller / transaction no."></div></div>' +
         '<div class="field"><label>Note</label><textarea name="note" placeholder="Items paid for: fees, uniform, books…"></textarea></div>' +
-        '<div class="field"><label>Evidence (receipt / teller — stored in Drive)</label><input type="file" name="evidence" accept="image/*,.pdf"></div>' +
+        '<div class="field"><label>Evidence (receipt / teller — stored privately in Drive)</label><input type="file" name="evidence" accept="image/*,.pdf"></div>' +
         '<div class="row"><button class="btn btn-primary" type="submit">Submit</button><button class="btn btn-outline" type="button" data-action="cancel-payment">Cancel</button></div></form></div>';
     }
 
@@ -1331,7 +1603,7 @@
           return '<tr><td>' + esc(String(x.createdAt).slice(0, 10)) + '</td><td><code>' + esc(x.receiptNo) + '</code></td><td>' + esc(x.installmentNo || '—') + '</td><td>' + esc(x.category) + '</td><td>₦ ' + esc(x.amountPaid) + '</td><td>' + (x.balanceAfter !== '' ? '₦ ' + esc(x.balanceAfter) : '—') + '</td><td>' + badgeStatus(x.status) + '</td>' +
             '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="receipt-open" data-id="' + esc(x.id) + '">Print / view receipt</button></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">No payments recorded for this ward and term yet.</div>') +
-        '<p class="muted small" style="margin-top:12px">Evidence (teller / receipt) for each payment is kept on file by the school. Full payment reduces the balance to ₦0 — an official receipt is generated for every payment.</p></div>';
+        '<p class="muted small" style="margin-top:12px">Evidence (teller / receipt) for each payment is kept privately on file by the school. Full payment reduces the balance to ₦0 — an official receipt is generated for every payment.</p></div>';
       return body;
     }
     function viewFeeAdmin() {
@@ -1407,7 +1679,6 @@
         row('Method', r.method || '—') + (r.reference ? row('Reference', r.reference) : '') +
         '<hr>' + row('Amount paid', '₦ ' + fmtMoney(r.amountPaid), true) +
         (r.balanceAfter !== '' ? row('Balance after this payment', '₦ ' + fmtMoney(r.balanceAfter)) : '') +
-        (r.viewfile ? rowRaw('Evidence', '<a href="' + esc(r.viewfile) + '" target="_blank">Open evidence</a>') : '') +
         '<div class="r-foot">' + (b.footerText ? esc(b.footerText) + '<br>' : '') + 'Keep this receipt for your records.</div>' + docNoteHtml() + '</div>';
     }
     function toggleFeeItem(t) {
@@ -1440,7 +1711,9 @@
       var res = state.receipt; if (!res) return;
       document.getElementById('print-area').innerHTML = receiptHtml(res);
       document.body.classList.add('print-receipt');
-      setTimeout(function () { window.print(); }, 60);
+      var cleanup = function () { document.body.classList.remove('print-receipt'); window.removeEventListener('afterprint', cleanup); };
+      window.addEventListener('afterprint', cleanup);
+      setTimeout(function () { window.print(); setTimeout(cleanup, 500); }, 60);
     }
     function printFeeSheet() {
       document.body.classList.remove('print-receipt');
@@ -1457,7 +1730,7 @@
         return '<div class="card" style="margin-bottom:16px"><div class="row">' + photoImg(w.photoFileId) + '<div><strong>' + esc(fullName(w)) + '</strong><div class="muted small">' + esc(w.admissionNo) + (w.classArm ? ' · ' + esc(armLabel(w.classArm)) : '') + '</div></div>' +
           '<div class="spacer"></div><button class="btn btn-outline btn-sm" data-action="open-report-ward" data-id="' + esc(w.id) + '">Report card</button></div>' +
           '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Purpose</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>' +
-          (pays.length ? pays.map(function (p) { return '<tr><td>' + esc(String(p.createdAt).slice(0, 10)) + '</td><td>' + esc(p.category) + '</td><td>' + esc(p.amount) + '</td><td>' + badgeStatus(p.status) + '</td><td>' + (p.evidenceUrl ? '<a href="' + esc(p.evidenceUrl) + '" target="_blank">Evidence</a>' : '') + '</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted" style="text-align:center">No payments yet.</td></tr>') + '</tbody></table></div></div>';
+          (pays.length ? pays.map(function (p) { return '<tr><td>' + esc(String(p.createdAt).slice(0, 10)) + '</td><td>' + esc(p.category) + '</td><td>' + esc(p.amount) + '</td><td>' + badgeStatus(p.status) + '</td><td>' + (p.evidenceFileId ? '<button class="btn btn-outline btn-sm" data-action="evidence-open" data-id="' + esc(p.evidenceFileId) + '">Evidence</button>' : '') + '</td></tr>'; }).join('') : '<tr><td colspan="5" class="muted" style="text-align:center">No payments yet.</td></tr>') + '</tbody></table></div></div>';
       }).join('');
     }
 
@@ -1579,8 +1852,9 @@
       state.busy = true; clearMessages(); render();
       authed('api_changeOwnPassword', oldP, newP).then(function () {
         authed('api_logout').catch(function () {});
+        clearReadCache();
         state.token = ''; state.user = null; state.boot = null; state.pwForm = false;
-        state.busy = false;                       // <-- THE FIX
+        state.busy = false;
         sessionStorage.removeItem('kms_token');
         state.notice = 'Password changed. Please sign in again.';
         render();
@@ -1624,10 +1898,35 @@
           el.setAttribute('aria-label', nowShown ? 'Hide password' : 'Show password');
           return;
         }
+        case 'pw-reset-start': state.pwReset = { step: 'request', email: state.lastTypedUser || '', code: '', newPassword: '', confirm: '', busy: false, flash: null }; clearMessages(); render(); return;
+        case 'pw-reset-restart': state.pwReset = { step: 'request', email: state.pwReset.email, code: '', newPassword: '', confirm: '', busy: false, flash: null }; clearMessages(); render(); return;
+        case 'pw-reset-cancel': state.pwReset = { step: '', email: '', code: '', newPassword: '', confirm: '', busy: false, flash: null }; clearMessages(); render(); return;
+        case 'evidence-open': {
+          var fid = id;
+          if (!fid) return;
+          var w = window.open('', '_blank');
+          authed('api_getFileDataUrl', fid).then(function (r) {
+            // Chrome / Firefox block top-level navigation to data: URLs.
+            // Convert the base64 payload into a Blob and open its object URL instead.
+            var parts = String(r.dataUrl || '').split(',');
+            var b64 = parts.length > 1 ? parts[1] : parts[0];
+            var mime = r.mimeType || 'application/octet-stream';
+            var binary = atob(b64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            var blob = new Blob([bytes], { type: mime });
+            var objectUrl = URL.createObjectURL(blob);
+            if (w) w.location.href = objectUrl; else window.location.href = objectUrl;
+            // Revoke after the tab has had time to consume it.
+            setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+          }).catch(function (err) { if (w) w.close(); setError(err); });
+          return;
+        }
         case 'signout':
         authed('api_logout').catch(function () {});
+        clearReadCache();
         state.token = ''; state.user = null; state.boot = null;
-        state.busy = false;                         // <-- belt and braces
+        state.busy = false;
         sessionStorage.removeItem('kms_token');
         clearMessages();
         document.body.classList.remove('nav-open');
@@ -1639,11 +1938,17 @@
         case 'student-delete': if (confirm('Delete this student?')) act(authed('api_deleteStudent', id), 'Student deleted.', loadStudents); return;
         case 'att-status': setAttStatus(el.getAttribute('data-sid'), el.getAttribute('data-status')); return;
         case 'attendance-save': saveAttendance(); return;
+        case 'bulk-download': bulkDownload(); return;
+        case 'bulk-confirm': bulkConfirm(); return;
+        case 'bulk-cancel': state.results.bulk = null; clearMessages(); render(); return;
         case 'res-tab': state.results.tab = el.getAttribute('data-tab'); clearMessages(); loadResults(); return;
         case 'scores-save': saveScores(); return;
         case 'grades-save': saveGrades(); return;
         case 'results-compute': act(authed('api_computeResults', state.results.classArmId, state.results.termId), 'Results computed.', function () { state.results.tab = 'sheets'; loadResults(); }); return;
-        case 'results-publish': if (confirm('Publish results for this class/term?')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, true), 'Results published.', loadResults); return;
+        case 'results-submit': act(authed('api_submitResults', state.results.classArmId, state.results.termId), 'Submitted for approval.', loadResults); return;
+        case 'results-approve': act(authed('api_approveResults', state.results.classArmId, state.results.termId), 'Results approved.', loadResults); return;
+        case 'results-publish': if (confirm('Publish results for this class/term? Parents will see the report cards immediately.')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, true), 'Results published.', loadResults); return;
+        case 'results-unpublish': if (confirm('Unpublish results for this class/term? They will be hidden from parents until you publish again.')) act(authed('api_publishResults', state.results.classArmId, state.results.termId, false), 'Results unpublished.', loadResults); return;
         case 'open-report': case 'open-report-ward': state.report.studentId = id; state.report.termId = state.results.termId || state.analytics.termId; navigate('reportcard'); return;
         case 'back-results': navigate(state.user.role === 'PARENT' ? 'my-wards' : 'results'); return;
         case 'print-report': window.print(); return;
@@ -1699,6 +2004,13 @@
         case 'tt-edit': var tte = timetableEntry(id); if (tte) { state.timetable.form = JSON.parse(JSON.stringify(tte)); clearMessages(); render(); } return;
         case 'tt-cancel': state.timetable.form = null; render(); return;
         case 'tt-delete': if (confirm('Delete this timetable entry?')) act(authed('api_deleteTimetableEntry', id), 'Entry deleted.', loadTimetable); return;
+        case 'wl-open': {
+          var wt = (state.workload.data && state.workload.data.teachers) ? state.workload.data.teachers.filter(function (x) { return String(x.id) === String(id); })[0] : null;
+          state.workload.detail = (state.workload.detail && state.workload.detail.id === id) ? null : wt;
+          render();
+          return;
+        }
+        case 'wl-close': state.workload.detail = null; render(); return;
       }
     });
     function act(promise, notice, reload) { state.busy = true; clearMessages(); render(); promise.then(function () { state.notice = notice; state.busy = false; reload(); }).catch(function (err) { state.busy = false; setError(err); }); }
@@ -1714,11 +2026,13 @@
       else if (f === 'staff-search') { state.staff.search = t.value; loadStaff(); }
       else if (f === 'att-class') { state.attendance.classArmId = t.value; clearMessages(); loadRoster(); }
       else if (f === 'att-date') { state.attendance.date = t.value; clearMessages(); loadRoster(); }
-      else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; state.results.studentId = ''; state.results.grades = null; clearMessages(); loadResults(); }
-      else if (f === 'res-term') { state.results.termId = t.value; clearMessages(); loadResults(); }
+      else if (f === 'res-class') { state.results.classArmId = t.value; state.results.subjectId = ''; state.results.sheet = null; state.results.studentId = ''; state.results.grades = null; state.results.bulk = null; clearMessages(); loadResults(); }
+      else if (f === 'res-term') { state.results.termId = t.value; state.results.bulk = null; clearMessages(); loadResults(); }
+      else if (f === 'bulk-file') { bulkChooseFile(t); }
       else if (f === 'res-subject') { state.results.subjectId = t.value; clearMessages(); loadResults(); }
       else if (f === 'res-student') { state.results.studentId = t.value; state.results.grades = null; clearMessages(); loadResults(); }
       else if (f === 'an-term') { state.analytics.termId = t.value; clearMessages(); loadAnalytics(); }
+      else if (f === 'wl-term') { state.workload.termId = t.value; state.workload.data = null; clearMessages(); loadWorkload(); }
       else if (f === 'msg-to') { state.messages.to = t.value; clearMessages(); loadMessageAudience(); }
       else if (f === 'msg-section') { state.messages.section = t.value; clearMessages(); loadMessageAudience(); }
       else if (f === 'msg-class') { state.messages.classArmId = t.value; clearMessages(); loadMessageAudience(); }
@@ -1745,6 +2059,7 @@
     document.addEventListener('submit', function (e) {
       var form = e.target; e.preventDefault();
       if (form.id === 'login-form') doLogin(form);
+      else if (form.id === 'pw-reset-form') submitPasswordReset(form);
       else if (form.id === 'student-form') saveStudent(form);
       else if (form.id === 'staff-form') saveStaff(form);
       else if (form.id === 'teacher-form') saveTeacher(form);
@@ -1786,12 +2101,41 @@
         } catch (e) {}
 
         state.lastTypedUser = '';
+        state.error = null;
+        clearReadCache();
+        // Fetch bootstrap, then let afterBoot() drive the first navigation and prefetch.
         return authed('api_bootstrap');
       }).then(afterBoot).catch(function (err) {
         state.busy = false;
         state.error = err.message;
         render();
       });
+    }
+    function submitPasswordReset(form) {
+      var step = form.getAttribute('data-step'), r = state.pwReset;
+      r.flash = null;
+      if (step === 'request') {
+        var email = String(form.email.value || '').trim().toLowerCase();
+        if (!email) { r.flash = { message: 'Enter your email address.', error: true }; render(); return; }
+        r.busy = true; render();
+        call('api_requestPasswordReset', email).then(function (res) {
+          r.busy = false; r.step = 'confirm'; r.email = email;
+          r.flash = { message: res.message || 'If that email is on file, a reset code has been sent.', error: false };
+          render();
+        }).catch(function (err) { r.busy = false; r.flash = { message: err.message, error: true }; render(); });
+      } else {
+        var code = String(form.code.value || '').replace(/[^0-9]/g, '');
+        var np = String(form.newPassword.value || ''), cf = String(form.confirm.value || '');
+        if (!code) { r.flash = { message: 'Enter the reset code we emailed you.', error: true }; render(); return; }
+        if (np.length < 8) { r.flash = { message: 'New password must be at least 8 characters.', error: true }; render(); return; }
+        if (np !== cf) { r.flash = { message: 'Passwords do not match.', error: true }; render(); return; }
+        r.busy = true; render();
+        call('api_confirmPasswordReset', r.email, code, np).then(function (res) {
+          state.pwReset = { step: '', email: '', code: '', newPassword: '', confirm: '', busy: false, flash: null };
+          state.notice = res.message || 'Password reset. Please sign in with your new password.';
+          render();
+        }).catch(function (err) { r.busy = false; r.flash = { message: err.message, error: true }; render(); });
+      }
     }
     function collect(form) { var data = {}; form.querySelectorAll('[name]').forEach(function (el) { if (el.type !== 'file') data[el.getAttribute('name')] = el.value; }); if (form.getAttribute('data-id')) data.id = form.getAttribute('data-id'); return data; }
     function saveStudent(form) { var data = collect(form); state.busy = true; clearMessages(); render(); readFileInput(form.querySelector('[name=photo]')).then(function (file) { if (file) data.photo = file; return authed('api_saveStudent', data); }).then(function () { state.students.form = null; state.notice = 'Student saved.'; loadStudents(); }).catch(function (err) { state.busy = false; setError(err); }); }
@@ -1834,12 +2178,19 @@
     function saveAdmin(form) { act(authed('api_saveRef', state.admin.tab, collect(form)), 'Saved.', function () { state.admin.form = null; loadAdmin(); }); }
     function saveAnnouncement(form) { var data = collect(form); state.busy = true; clearMessages(); render(); authed('api_saveAnnouncement', data).then(function () { state.announcements.form = false; state.notice = 'Announcement posted.'; loadAnnouncements(); }).catch(function (err) { state.busy = false; setError(err); }); }
     function saveFee(form) { var data = collect(form); data.mandatory = data.mandatory === 'true'; data.active = data.active === 'true'; state.busy = true; clearMessages(); render(); authed('api_saveFee', data).then(function () { state.fees.form = null; state.notice = 'Fee / charge saved. Parents will see it on their next schedule.'; loadFees(); }).catch(function (err) { state.busy = false; setError(err); }); }
-    function saveRemarks(form) { state.busy = true; clearMessages(); render(); authed('api_saveRemarks', state.report.studentId, state.report.termId || state.results.termId, { teacherRemark: form.teacherRemark.value, principalRemark: form.principalRemark.value }).then(function () { state.notice = 'Remarks saved.'; loadReport(); }).catch(function (err) { state.busy = false; setError(err); }); }
+    function saveRemarks(form) {
+      var termId = state.report.termId || state.results.termId;
+      if (!termId) { setError(new Error('Select a valid term before saving remarks.')); return; }
+      state.busy = true; clearMessages(); render();
+      authed('api_saveRemarks', state.report.studentId, termId, { teacherRemark: form.teacherRemark.value, principalRemark: form.principalRemark.value })
+        .then(function () { state.notice = 'Remarks saved.'; loadReport(); })
+        .catch(function (err) { state.busy = false; setError(err); });
+    }
     function setAttStatus(sid, status) { var r = state.attendance.roster; if (!r) return; r.students.forEach(function (x) { if (x.studentId === sid) x.status = status; }); var tr = document.querySelector('tr[data-sid="' + sid + '"]'); if (tr) tr.querySelectorAll('[data-action="att-status"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-status') === status); }); }
     function setAttNote(sid, note) { var r = state.attendance.roster; if (r) r.students.forEach(function (x) { if (x.studentId === sid) x.note = note; }); }
-    function saveAttendance() { var r = state.attendance.roster; if (!r) return; var records = r.students.map(function (x) { return { studentId: x.studentId, status: x.status, note: x.note }; }); act(authed('api_saveAttendance', state.attendance.classArmId, state.attendance.date, records), 'Attendance saved.', loadRoster); }
-    function saveScores() { var sh = state.results.sheet; if (!sh) return; var records = sh.rows.map(function (row) { var rec = { studentId: row.studentId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]'); rec[k] = inp ? inp.value : ''; }); return rec; }); act(authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records), 'Scores saved — result sheets updated.', loadResults); }
-    function saveGrades() { var g = state.results.grades; if (!g || !g.subjects.length) return; var records = g.subjects.map(function (s) { var row = document.querySelector('[data-grow="' + s.subjectId + '"]'); var rec = { subjectId: s.subjectId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = row ? row.querySelector('[data-gscore="' + k + '"]') : null; rec[k] = inp ? inp.value : ''; }); return rec; }); var name = fullName(g.student); act(authed('api_saveStudentGrades', g.student.id, g.term.id, records), 'Grades saved for ' + name + ' — result generated automatically.', function (d) { state.results.grades = d; state.busy = false; render(); }); }
+    function saveAttendance() { var r = state.attendance.roster; if (!r || !r.students || !r.students.length) { setError(new Error('Load a class roster before saving attendance.')); return; } var records = r.students.map(function (x) { return { studentId: x.studentId, status: x.status, note: x.note }; }); act(authed('api_saveAttendance', state.attendance.classArmId, state.attendance.date, records), 'Attendance saved.', loadRoster); }
+    function saveScores() { var sh = state.results.sheet; if (!sh) return; var records = sh.rows.map(function (row) { var rec = { studentId: row.studentId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = document.querySelector('[data-score="' + k + '"][data-sid="' + row.studentId + '"]'); rec[k] = inp ? inp.value : ''; }); return rec; }); act(authed('api_saveScores', state.results.termId, state.results.classArmId, state.results.subjectId, records), 'Scores saved — result sheets updated and reset to DRAFT for re-approval.', loadResults); }
+    function saveGrades() { var g = state.results.grades; if (!g || !g.subjects.length) return; var records = g.subjects.map(function (s) { var row = document.querySelector('[data-grow="' + s.subjectId + '"]'); var rec = { subjectId: s.subjectId }; ['ca1', 'ca2', 'ca3', 'exam'].forEach(function (k) { var inp = row ? row.querySelector('[data-gscore="' + k + '"]') : null; rec[k] = inp ? inp.value : ''; }); return rec; }); var name = fullName(g.student); act(authed('api_saveStudentGrades', g.student.id, g.term.id, records), 'Grades saved for ' + name + ' — result regenerated and reset to DRAFT.', function (d) { state.results.grades = d; state.busy = false; render(); }); }
 
     start();
   </script>

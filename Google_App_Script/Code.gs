@@ -89,7 +89,8 @@ var HEADERS = {
   Timetable: ['id', 'termId', 'classArmId', 'dayOfWeek', 'startTime', 'endTime', 'subjectId', 'title', 'teacher', 'room', 'kind', 'note', 'createdBy', 'createdAt', 'updatedAt'],
   Settings: ['key', 'value', 'updatedAt'],
   AuditLog: ['id', 'at', 'actorId', 'actorUsername', 'action', 'target', 'detail'],
-  AdmissionLetters: ['id', 'ref', 'childName', 'guardianName', 'email', 'sentBy', 'sentAt', 'status', 'letterRef', 'error']
+  AdmissionLetters: ['id', 'ref', 'childName', 'guardianName', 'email', 'sentBy', 'sentAt', 'status', 'letterRef', 'error'],
+  ScoreAudit: ['id', 'at', 'termId', 'classArmId', 'studentId', 'subjectId', 'ca1', 'ca2', 'ca3', 'exam', 'total', 'grade', 'actorId', 'actorUsername', 'source', 'note']
 };
 
 function brand_() {
@@ -104,11 +105,45 @@ function brand_() {
 }
 
 /* =========================== 2. UTILITIES =========================== */
-
+/* ---- Short, human-readable IDs -------------------------------------------
+ * Every table's `id` is Prefix + zero-padded sequence, e.g. Fee01, Stu017.
+ * The prefix map keeps the sheet readable; the sequence is derived from the
+ * maximum existing numeric id in that table, so no counter column is needed. */
+var ID_PREFIXES = {
+  Users: 'Usr', ClassLevels: 'Lvl', ClassArms: 'Arm', Subjects: 'Sub', SubjectClass: 'SC',
+  Terms: 'Trm', GradeScale: 'Grd', Students: 'Stu', Staff: 'Stf', ParentStudents: 'PS',
+  Attendance: 'Att', Scores: 'Scr', ResultSheets: 'RS', Payments: 'Pay', Files: 'Fil',
+  Announcements: 'Ann', Fees: 'Fee', FeeSelections: 'FS', FeePlans: 'FP',
+  StaffAttendance: 'StA', Timetable: 'TT', AuditLog: 'Log', AdmissionLetters: 'AL', ScoreAudit: 'SAu'
+};
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function idPrefix_(table) { return ID_PREFIXES[table] || 'ID'; }
+function formatId_(table, n) {
+  var p = idPrefix_(table), s = String(n);
+  while (s.length < 2) s = '0' + s;
+  return p + s;
+}
+function maxIdNumber_(table) {
+  var p = idPrefix_(table);
+  var re = new RegExp('^' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)$');
+  var max = 0;
+  readTableSafe_(table).forEach(function (r) {
+    var m = re.exec(String(r.id || ''));
+    if (m) { var n = parseInt(m[1], 10); if (n > max) max = n; }
+  });
+  return max;
+}
+function nextId_(table) { return formatId_(table, maxIdNumber_(table) + 1); }
 function uuid_() { return Utilities.getUuid(); }
-function nowIso_() { return new Date().toISOString(); }
+function nowIso_() {
+  try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"); }
+  catch (e) { return new Date().toISOString().slice(0, 19); }
+}
 function todayIso_() { try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); } catch (e) { return new Date().toISOString().slice(0, 10); } }
-function nowLocalStamp_() { try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'); } catch (e) { return new Date().toISOString().replace('T', ' ').slice(0, 19); } }
+function nowLocalStamp_() {
+  try { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"); }
+  catch (e) { return new Date().toISOString().slice(0, 19); }
+}
 function toBool_(value) {
   if (value === true || value === false) return value;
   var s = String(value).toLowerCase();
@@ -119,6 +154,19 @@ function toNum_(value) {
   var n = Number(value); return isNaN(n) ? null : n;
 }
 function round2_(n) { return Math.round(Number(n) * 100) / 100; }
+/** Runs fn while holding the script-wide lock; always releases it. */
+function withScriptLock_(fn, timeoutMs) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(timeoutMs || 20000)) {
+    throw new Error('The school portal is busy. Please try again in a moment.');
+  }
+  try { return fn(); } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+/** Best-effort Drive trash — never throws. */
+function trashFile_(fileId) {
+  if (!fileId) return;
+  try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* ignore */ }
+}
 function indexById_(rows) { var m = {}; rows.forEach(function (r) { m[r.id] = r; }); return m; }
 function parseCsv_(value) {
   if (!value) return [];
@@ -138,8 +186,105 @@ function numOrZero_(v) { var n = Number(v); return isNaN(n) ? 0 : n; }
 var __ss = null, __sheets = {}, __tables = {};
 
 function invalidateTable_(name) {
-  if (!name) { __tables = {}; }
-  else { delete __tables[name]; }
+  if (!name) {
+    __tables = {};
+    Object.keys(HEADERS).forEach(function (n) { touchTable_(n); });
+  } else {
+    delete __tables[name];
+    touchTable_(name);
+  }
+}
+
+/* ---- Cross-request cache (CacheService) ----------------------------------
+ * The per-execution memo above only lives for one call. These helpers keep every
+ * sheet table, plus the pre-computed dashboard / statistics snapshots, in the
+ * script cache so a request after sign-in is answered from memory instead of
+ * re-reading Google Sheets. Every write bumps a per-table version (tv_<name>)
+ * and a global data version (dv); entries tagged with an older version are
+ * ignored and rebuilt. refreshCaches() (time trigger) and api_warmup() (called
+ * from the sign-in page) keep everything hot before anyone signs in. */
+var TABLE_CACHE_TTL = 1800;         // seconds; the trigger re-validates every 15 min
+var SNAPSHOT_TTL = 1800;
+var TABLE_CACHE_MAX_CHARS = 3000000; // larger tables are simply not cached
+var CACHE_CHUNK = 30000;             // chars per key (CacheService limit is 100 KB)
+var NO_DV_TABLES = { AuditLog: 1, Files: 1, ScoreAudit: 1 }; // never affect any statistics
+var __noPersist = {};
+
+function touchTable_(name) {
+  try {
+    var ts = String(new Date().getTime()) + String(Math.floor(Math.random() * 1000));
+    var o = {}; o['tv_' + name] = ts;
+    if (!NO_DV_TABLES[name]) o.dv = ts;
+    CacheService.getScriptCache().putAll(o, 21600);
+  } catch (e) {
+    // CacheService rejects writes above its size cap; on any failure fall back
+    // to a durable Script Property so readers still observe a version change.
+    try {
+      PropertiesService.getScriptProperties().setProperty('tvfb_' + name, String(new Date().getTime()));
+      if (!NO_DV_TABLES[name]) PropertiesService.getScriptProperties().setProperty('dvfb', String(new Date().getTime()));
+    } catch (e2) { /* nothing more we can do */ }
+    __noPersist[name] = true;
+    Logger.log('touchTable_ failed for ' + name + ': ' + (e && e.message ? e.message : e));
+  }
+}
+function tableVersion_(name) {
+  var a = '', b = '';
+  try { a = CacheService.getScriptCache().get('tv_' + name) || ''; } catch (e) {}
+  try { b = PropertiesService.getScriptProperties().getProperty('tvfb_' + name) || ''; } catch (e2) {}
+  if (!a && !b) return '0';
+  if (!a) return b;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+function dataVersion_() {
+  var a = '', b = '';
+  try { a = CacheService.getScriptCache().get('dv') || ''; } catch (e) {}
+  try { b = PropertiesService.getScriptProperties().getProperty('dvfb') || ''; } catch (e2) {}
+  if (!a && !b) return '0';
+  if (!a) return b;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+function bigPut_(key, str, ttl, tag) {
+  try {
+    var cache = CacheService.getScriptCache(), n = Math.max(1, Math.ceil(str.length / CACHE_CHUNK)), batch = {}, count = 0, i;
+    for (i = 0; i < n; i++) {
+      batch[key + '~' + i] = str.substr(i * CACHE_CHUNK, CACHE_CHUNK); count++;
+      if (count >= 40) { cache.putAll(batch, ttl); batch = {}; count = 0; }
+    }
+    if (count) cache.putAll(batch, ttl);
+    cache.put(key, JSON.stringify({ n: n, tag: String(tag) }), ttl); // meta last: readers never see a half-written entry
+    return true;
+  } catch (e) { Logger.log('bigPut_ ' + key + ' failed: ' + (e && e.message ? e.message : e)); return false; }
+}
+function bigGet_(key, tag) {
+  try {
+    var cache = CacheService.getScriptCache(), m = cache.get(key);
+    if (!m) return null;
+    var meta = JSON.parse(m);
+    if (tag !== undefined && String(meta.tag) !== String(tag)) return null;
+    var keys = [], i;
+    for (i = 0; i < meta.n; i++) keys.push(key + '~' + i);
+    var got = cache.getAll(keys), out = [];
+    for (i = 0; i < keys.length; i++) { var part = got[keys[i]]; if (part === undefined || part === null) return null; out.push(part); }
+    return out.join('');
+  } catch (e) { return null; }
+}
+function md5Hex_(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(text), Utilities.Charset.UTF_8), out = '';
+  for (var i = 0; i < bytes.length; i++) { var h = (bytes[i] & 0xff).toString(16); out += h.length === 1 ? '0' + h : h; }
+  return out;
+}
+function scopeKey_(user) { return [user.role, user.sectionScope || '', user.classArmScope || '', user.role === 'PARENT' ? user.id : ''].join('|'); }
+/** Returns a cached result for (kind, user scope, extra) while no data has changed; otherwise computes and stores it. */
+function snapshot_(kind, user, extra, computeFn) {
+  var key = 'sn_' + kind + '_' + md5Hex_(scopeKey_(user) + '#' + (extra || ''));
+  var dv = dataVersion_();
+  var hit = bigGet_(key, dv);
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* recompute */ } }
+  var data = computeFn();
+  try { var str = JSON.stringify(data); if (str.length < 900000) bigPut_(key, str, SNAPSHOT_TTL, dv); } catch (e2) { /* ignore */ }
+  return data;
 }
 
 function getSpreadsheetId_() {
@@ -186,6 +331,23 @@ function getSheet_(name) {
 }
 function readTable_(name) {
   if (__tables[name]) return __tables[name];
+  var tv = tableVersion_(name), rows = null;
+  var cached = bigGet_('tc_' + name, tv);
+  if (cached !== null) { try { rows = JSON.parse(cached); } catch (e) { rows = null; } }
+  if (!rows) {
+    rows = readTableFromSheet_(name);
+    if (!__noPersist[name]) {
+      try {
+        var str = JSON.stringify(rows);
+        if (str.length <= TABLE_CACHE_MAX_CHARS) { if (!bigPut_('tc_' + name, str, TABLE_CACHE_TTL, tv)) __noPersist[name] = true; }
+        else __noPersist[name] = true;
+      } catch (e2) { __noPersist[name] = true; }
+    }
+  }
+  __tables[name] = rows;
+  return rows;
+}
+function readTableFromSheet_(name) {
   var values = getSheet_(name).getDataRange().getValues();
   var rows = [];
   if (values.length >= 2) {
@@ -197,7 +359,6 @@ function readTable_(name) {
       rows.push(obj);
     }
   }
-  __tables[name] = rows;
   return rows;
 }
 function sheetCellValue_(v) {
@@ -216,6 +377,9 @@ function findWhere_(name, predicate) { var rows = readTable_(name); for (var i =
 function filterWhere_(name, predicate) { return readTable_(name).filter(predicate); }
 
 function appendRow_(name, obj) {
+  if (ID_PREFIXES[name] && (!obj.id || UUID_RE.test(String(obj.id)))) {
+    obj.id = nextId_(name);
+  }
   var headers = HEADERS[name], sheet = getSheet_(name);
   var rowNum = sheet.getLastRow() + 1;
   sheet.appendRow(headers.map(function (h) { return obj[h] === undefined || obj[h] === null ? '' : obj[h]; }));
@@ -225,10 +389,18 @@ function appendRow_(name, obj) {
     copy._row = rowNum;
     __tables[name].push(copy);
   }
+  touchTable_(name);
   return obj;
 }
 function bulkAppend_(name, rows) {
   if (!rows.length) return;
+  // Pre-compute the starting max once so every row in the batch gets a distinct id.
+  if (ID_PREFIXES[name]) {
+    var start = maxIdNumber_(name);
+    rows.forEach(function (r, i) {
+      if (!r.id || UUID_RE.test(String(r.id))) r.id = formatId_(name, start + i + 1);
+    });
+  }
   var sheet = getSheet_(name), headers = HEADERS[name];
   var out = rows.map(function (r) { return headers.map(function (h) { return r[h] === undefined || r[h] === null ? '' : r[h]; }); });
   sheet.getRange(sheet.getLastRow() + 1, 1, out.length, headers.length).setValues(out);
@@ -246,6 +418,7 @@ function updateRow_(name, id, patch) {
       target[headers[c]] = v; // keep cache hot
     }
   }
+  touchTable_(name);
   return true;
 }
 function updateRowByKey_(name, keyField, keyValue, patch) {
@@ -260,6 +433,7 @@ function updateRowByKey_(name, keyField, keyValue, patch) {
       target[headers[c]] = v; // keep cache hot
     }
   }
+  touchTable_(name);
   return true;
 }
 function deleteRow_(name, id) {
@@ -268,6 +442,107 @@ function deleteRow_(name, id) {
   return false;
 }
 function stripRow_(obj) { var c = {}; Object.keys(obj).forEach(function (k) { if (k !== '_row') c[k] = obj[k]; }); return c; }
+
+/* ---- Background pre-computation ------------------------------------------
+ * Runs from a time trigger (installCacheTriggers) and from api_warmup(), which the
+ * sign-in page calls as soon as it loads. It reloads every sheet into the cache and
+ * pre-computes the dashboard + statistics for every leadership scope, so the data is
+ * already waiting when someone signs in. api_warmup() returns no data, so it is safe
+ * to expose before authentication. */
+var WARM_TABLES = ['Users', 'ClassLevels', 'ClassArms', 'Subjects', 'SubjectClass', 'Terms', 'GradeScale', 'Students', 'Staff',
+  'ParentStudents', 'Attendance', 'Scores', 'ResultSheets', 'Payments', 'Fees', 'FeeSelections', 'FeePlans', 'Announcements',
+  'Applications', 'AdmissionLetters', 'StaffAttendance', 'Timetable', 'Settings'];
+var PRECOMPUTE_ROLES = ['ADMIN', 'PRINCIPAL', 'HEADMASTER', 'BURSAR'];
+
+/** Re-reads one sheet; if it differs from the cached copy (e.g. edited by hand) the versions are bumped. */
+function refreshTable_(name) {
+  var tv = tableVersion_(name);
+  var rows = readTableFromSheet_(name), str = JSON.stringify(rows);
+  var old = bigGet_('tc_' + name, tv);
+  if (old !== str) {
+    if (old !== null) { touchTable_(name); tv = tableVersion_(name); }
+    if (str.length <= TABLE_CACHE_MAX_CHARS) bigPut_('tc_' + name, str, TABLE_CACHE_TTL, tv);
+  }
+  __tables[name] = rows;
+}
+function warmCaches_(opts) {
+  opts = opts || {};
+  var t0 = new Date().getTime(), budget = opts.budgetMs || 240000;
+  WARM_TABLES.forEach(function (n) {
+    if (new Date().getTime() - t0 > budget) return;
+    try { if (opts.force) refreshTable_(n); else readTable_(n); } catch (e) { Logger.log('warm ' + n + ' failed: ' + e); }
+  });
+  var seen = {};
+  readTableSafe_('Users').forEach(function (u) {
+    if (!toBool_(u.active) || PRECOMPUTE_ROLES.indexOf(u.role) === -1) return;
+    var k = scopeKey_(u);
+    if (seen[k] || new Date().getTime() - t0 > budget) return;
+    seen[k] = true;
+    try { dashboardSnapshot_(u); } catch (e) { Logger.log('warm dashboard ' + u.username + ' failed: ' + e); }
+    try { demographicsSnapshot_(u); } catch (e3) { Logger.log('warm demographics ' + u.username + ' failed: ' + e3); }
+    try { analyticsSnapshot_(u, {}); } catch (e2) { Logger.log('warm statistics ' + u.username + ' failed: ' + e2); }
+  });
+  Logger.log('warmCaches_ finished in ' + (new Date().getTime() - t0) + ' ms.');
+}
+/** Public, data-free: called by the sign-in page so the caches are hot by the time the user finishes typing. */
+function api_warmup() {
+  var cache = CacheService.getScriptCache();
+  if (cache.get('warm_lock')) return { ok: true, warmed: false };
+  try { cache.put('warm_lock', '1', 120); } catch (e) { /* ignore */ }
+  try { warmCaches_({ budgetMs: 60000 }); } catch (e2) { Logger.log('api_warmup failed: ' + e2); }
+  return { ok: true, warmed: true };
+}
+/** Time-trigger target. */
+function refreshCaches() { warmCaches_({ force: true, budgetMs: 270000 }); }
+
+function installCacheTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'refreshCaches') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('refreshCaches').timeBased().everyMinutes(15).create();
+  refreshCaches();
+  Logger.log('Cache refresh trigger installed (every 15 minutes) and caches primed.');
+}
+/* =========================== 3a. BACKUPS =========================== */
+
+var BACKUP_RETENTION = 30;         // number of daily backups to keep
+var BACKUP_FILE_PREFIX = 'Kings Metro School Backup ';
+
+/** Copies the whole spreadsheet (every tab) into a Backups subfolder, then prunes. */
+function backupSpreadsheet() {
+  try {
+    var source = DriveApp.getFileById(getSpreadsheetId_());
+    var folder = getOrCreateSubfolder_(resolveRootFolder_(), 'Backups');
+    var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd-HHmm');
+    var name = BACKUP_FILE_PREFIX + stamp;
+    var copy = source.makeCopy(name, folder);
+    Logger.log('Backup created: ' + name + ' (' + copy.getId() + ')');
+    pruneBackups_(folder);
+    return copy.getId();
+  } catch (e) {
+    Logger.log('backupSpreadsheet FAILED: ' + (e && e.message ? e.message : e));
+    throw e;
+  }
+}
+function pruneBackups_(folder) {
+  var it = folder.getFiles(), list = [];
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.getName().indexOf(BACKUP_FILE_PREFIX) !== 0) continue;
+    list.push(f);
+  }
+  list.sort(function (a, b) { return b.getDateCreated().getTime() - a.getDateCreated().getTime(); });
+  for (var i = BACKUP_RETENTION; i < list.length; i++) {
+    try { list[i].setTrashed(true); } catch (e) { /* ignore */ }
+  }
+}
+
+/** Run once from the Apps Script editor: installs the nightly backup trigger. */
+function installBackupTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'backupSpreadsheet') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('backupSpreadsheet').timeBased().atHour(2).everyDays(1).create();
+  Logger.log('Daily backup trigger installed (runs at 02:00 script time zone).');
+}
 
 /* =========================== 4. AUTH =========================== */
 
@@ -1327,15 +1602,21 @@ function api_saveStudent(token, payload) {
     if (!existing) throw new Error('Student not found.');
     assertArmAllowed_(user, existing.classArmId);
     if (!existing.photoFileId && !(payload.photo && payload.photo.dataUrl)) throw new Error('A passport photo is required.');
-    if (payload.photo && payload.photo.dataUrl) fields.photoFileId = storeFile_(user, 'STUDENT', id, payload.photo).driveFileId;
+    if (payload.photo && payload.photo.dataUrl) {
+      if (existing.photoFileId) trashFile_(existing.photoFileId);
+      fields.photoFileId = storeFile_(user, 'STUDENT', id, payload.photo).driveFileId;
+    }
     fields.updatedAt = nowIso_();
     updateRow_('Students', id, fields);
   } else {
     if (!(payload.photo && payload.photo.dataUrl)) throw new Error('A passport photo is required for a new student.');
     id = uuid_();
-    fields.id = id; fields.admissionNo = nextAdmissionNo_(); fields.createdAt = nowIso_(); fields.updatedAt = fields.createdAt;
+    fields.id = id; fields.createdAt = nowIso_(); fields.updatedAt = fields.createdAt;
     fields.photoFileId = storeFile_(user, 'STUDENT', id, payload.photo).driveFileId;
-    appendRow_('Students', fields);
+    withScriptLock_(function () {                                        
+      fields.admissionNo = nextAdmissionNo_();
+      appendRow_('Students', fields);
+    });
   }
   return decorateStudent_(findById_('Students', id), armsMap_(user));
 }
@@ -1345,6 +1626,7 @@ function api_deleteStudent(token, id) {
   var s = findById_('Students', id);
   if (!s) throw new Error('Student not found.');
   assertArmAllowed_(user, s.classArmId);
+  if (s.photoFileId) trashFile_(s.photoFileId);                           
   deleteRow_('Students', id);
   return true;
 }
@@ -1385,22 +1667,32 @@ function api_saveStaff(token, payload) {
   };
   var id = payload.id;
   if (id) {
-    if (!findById_('Staff', id)) throw new Error('Staff not found.');
-    if (payload.photo && payload.photo.dataUrl) fields.photoFileId = storeFile_(user, 'STAFF', id, payload.photo).driveFileId;
+    var existing = findById_('Staff', id);
+    if (!existing) throw new Error('Staff not found.');
+    if (payload.photo && payload.photo.dataUrl) {
+      if (existing.photoFileId) trashFile_(existing.photoFileId);         
+      fields.photoFileId = storeFile_(user, 'STAFF', id, payload.photo).driveFileId;
+    }
     fields.updatedAt = nowIso_();
     updateRow_('Staff', id, fields);
   } else {
     id = uuid_();
-    fields.id = id; fields.staffNo = nextStaffNo_(); fields.createdAt = nowIso_(); fields.updatedAt = fields.createdAt;
+    fields.id = id; fields.createdAt = nowIso_(); fields.updatedAt = fields.createdAt;
     if (payload.photo && payload.photo.dataUrl) fields.photoFileId = storeFile_(user, 'STAFF', id, payload.photo).driveFileId;
-    appendRow_('Staff', fields);
+    withScriptLock_(function () {                                        
+      fields.staffNo = nextStaffNo_();
+      appendRow_('Staff', fields);
+    });
   }
   return stripRow_(findById_('Staff', id));
 }
 function api_deleteStaff(token, id) {
   var user = requireUser_(token);
   assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'You cannot delete staff.');
-  deleteRow_('Staff', id); return true;
+  var s = findById_('Staff', id);
+  if (s && s.photoFileId) trashFile_(s.photoFileId);                  
+  deleteRow_('Staff', id);
+  return true;
 }
 
 /* =========================== 10. ATTENDANCE =========================== */
@@ -1424,11 +1716,16 @@ function api_saveAttendance(token, classArmId, date, records) {
   assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to record attendance.');
   assertArmAllowed_(user, classArmId);
   if (!date) throw new Error('Select a date.');
+  var allowedStudents = {};                                          
+  readTable_('Students').forEach(function (s) {
+    if (String(s.classArmId) === String(classArmId)) allowedStudents[s.id] = true;
+  });
   var existing = {};
   readTable_('Attendance').forEach(function (a) { if (String(a.classArmId) === String(classArmId) && String(a.date) === String(date)) existing[a.studentId] = a; });
   var saved = 0;
   (records || []).forEach(function (rec) {
     if (!rec.studentId) return;
+    if (!allowedStudents[rec.studentId]) throw new Error('A student in this submission is not in this class.'); 
     var status = CFG.ATTENDANCE_STATUSES.indexOf(rec.status) !== -1 ? rec.status : 'PRESENT';
     if (existing[rec.studentId]) updateRow_('Attendance', existing[rec.studentId].id, { status: status, note: rec.note || '' });
     else appendRow_('Attendance', { id: uuid_(), date: date, classArmId: classArmId, studentId: rec.studentId, status: status, note: rec.note || '', recordedBy: user.id, createdAt: nowIso_() });
@@ -1478,19 +1775,30 @@ function api_saveScores(token, termId, classArmId, subjectId, records) {
   assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to enter scores.');
   assertArmAllowed_(user, classArmId);
   if (!termId || !subjectId) throw new Error('Select a term and subject.');
+  var allowedStudents = {};                                       
+  readTable_('Students').forEach(function (s) {
+    if (String(s.classArmId) === String(classArmId) && String(s.status) !== 'INACTIVE') allowedStudents[s.id] = true;
+  });
+  var allowedSubjects = {};                                     
+  getSubjectsForArm_(classArmId).forEach(function (sub) { allowedSubjects[sub.id] = true; });
+  if (!allowedSubjects[subjectId]) throw new Error('That subject is not part of this class\u2019s curriculum.');   
   var section = studentSection_(classArmId), existing = {};
   readTable_('Scores').forEach(function (s) { if (String(s.termId) === String(termId) && String(s.subjectId) === String(subjectId)) existing[s.studentId] = s; });
   var saved = 0;
   (records || []).forEach(function (rec) {
     if (!rec.studentId) return;
+    if (!allowedStudents[rec.studentId]) throw new Error('A student in this submission is not in this class.'); 
     var ca1 = clampScore_(rec.ca1, CA_MAX), ca2 = clampScore_(rec.ca2, CA_MAX), ca3 = clampScore_(rec.ca3, CA_MAX), exam = clampScore_(rec.exam, EXAM_MAX);
     var total = totalFor_({ ca1: ca1, ca2: ca2, ca3: ca3, exam: exam });
     var g = gradeForScore_(section, total);
     var fields = { termId: termId, classArmId: classArmId, subjectId: subjectId, studentId: rec.studentId, ca1: ca1, ca2: ca2, ca3: ca3, exam: exam, total: total, grade: g.grade, remark: g.remark, recordedBy: user.id, updatedAt: nowIso_() };
-    if (existing[rec.studentId]) updateRow_('Scores', existing[rec.studentId].id, fields);
+    var before = existing[rec.studentId] || null;
+    if (before) updateRow_('Scores', before.id, fields);
     else { fields.id = uuid_(); appendRow_('Scores', fields); }
+    logScoreChange_(user, 'score-entry', termId, classArmId, rec.studentId, subjectId, before, fields);
     saved++;
   });
+  resetResultStatuses_(classArmId, termId);
   return { saved: saved, computed: refreshArmResults_(classArmId, termId).students };
 }
 function api_getStudentGrades(token, studentId, termId) {
@@ -1541,11 +1849,14 @@ function api_saveStudentGrades(token, studentId, termId, records) {
     var total = totalFor_({ ca1: ca1, ca2: ca2, ca3: ca3, exam: exam });
     var g = gradeForScore_(section, total);
     var fields = { termId: termId, classArmId: student.classArmId, subjectId: rec.subjectId, studentId: studentId, ca1: ca1, ca2: ca2, ca3: ca3, exam: exam, total: total, grade: g.grade, remark: g.remark, recordedBy: user.id, updatedAt: nowIso_() };
-    if (existing[rec.subjectId]) updateRow_('Scores', existing[rec.subjectId].id, fields);
+    var before = existing[rec.subjectId] || null;
+    if (before) updateRow_('Scores', before.id, fields);
     else { fields.id = uuid_(); appendRow_('Scores', fields); }
+    logScoreChange_(user, 'per-student', termId, student.classArmId, studentId, rec.subjectId, before, fields);
     saved++;
   });
   refreshArmResults_(student.classArmId, termId);
+  resetResultStatuses_(student.classArmId, termId);
   logAudit_(user, 'SCORES', 'Per-student grades term ' + termId, 'student ' + studentId);
   return api_getStudentGrades(token, studentId, termId);
 }
@@ -1564,6 +1875,7 @@ function computeClassResults_(classArmId, termId) {
   var byId = {}; rows.forEach(function (r) { byId[r.studentId] = { totalScore: r.totalScore, average: r.average, subjectCount: r.subjectCount, position: posById[r.studentId] }; });
   return byId;
 }
+
 function refreshArmResults_(classArmId, termId) {
   var computed = computeClassResults_(classArmId, termId), existing = {};
   readTable_('ResultSheets').forEach(function (r) { if (String(r.termId) === String(termId)) existing[r.studentId] = r; });
@@ -1615,8 +1927,12 @@ function api_getReportCard(token, studentId, termId) {
     if (tFrom && String(a.date) < String(tFrom)) return;
     if (tTo && String(a.date) > String(tTo)) return;
     if (attendance[a.status.toLowerCase()] === undefined) attendance[a.status.toLowerCase()] = 0;
-    attendance[a.status.toLowerCase()]++; attendance.total++;
+    attendance[a.status.toLowerCase()]++; attendance.total++;    
   });
+  if (user.role === 'PARENT') {
+    var st = sheet ? String(sheet.status || '').toUpperCase() : '';
+    if (st !== 'PUBLISHED') throw new Error('This result is not yet available. It will appear here once the school publishes the term results.');
+  }
   return {
     student: decorateStudent_(student, armsById),
     term: { id: term.id, termName: term.termName, sessionName: term.sessionName, label: termLabel_(term) },
@@ -1627,6 +1943,9 @@ function api_getReportCard(token, studentId, termId) {
 function api_saveRemarks(token, studentId, termId, remarks) {
   var user = requireUser_(token);
   assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to save remarks.');
+  if (!termId) throw new Error('Select a valid term before saving remarks.');     
+  var term = findById_('Terms', termId);                                  
+  if (!term || !toBool_(term.active)) throw new Error('Select a valid term before saving remarks.');
   var student = findById_('Students', studentId);
   if (!student) throw new Error('Student not found.');
   assertArmAllowed_(user, student.classArmId);
@@ -1638,16 +1957,317 @@ function api_saveRemarks(token, studentId, termId, remarks) {
   else { fields.id = uuid_(); fields.termId = termId; fields.studentId = studentId; fields.position = ''; fields.totalScore = 0; fields.average = 0; fields.status = 'DRAFT'; appendRow_('ResultSheets', fields); }
   return true;
 }
+
+/* ==================== 11b. RESULT APPROVAL WORKFLOW ==================== */
+var RESULT_STATUS_RANK = { DRAFT: 0, SUBMITTED: 1, APPROVED: 2, PUBLISHED: 3 };
+
+/** Resets every sheet in the class/term to DRAFT — called whenever scores are (re)saved. */
+function resetResultStatuses_(classArmId, termId) {
+  readTable_('ResultSheets').forEach(function (r) {
+    if (String(r.termId) !== String(termId)) return;
+    if (String(r.status || 'DRAFT').toUpperCase() === 'DRAFT') return;
+    var student = findById_('Students', r.studentId);
+    if (!student || String(student.classArmId) !== String(classArmId)) return;
+    updateRow_('ResultSheets', r.id, { status: 'DRAFT', updatedAt: nowIso_() });
+  });
+}
+
+/** Publishes approved results to parents (or reverts to DRAFT). Only sheets in
+ *  APPROVED status can be published; anything else is left untouched. */
 function api_publishResults(token, classArmId, termId, publish) {
   var user = requireUser_(token);
   assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'Only leadership can publish results.');
   assertArmAllowed_(user, classArmId);
-  var status = publish ? 'PUBLISHED' : 'DRAFT', count = 0;
+  var count = 0;
   readTable_('ResultSheets').forEach(function (r) {
+    if (String(r.termId) !== String(termId)) return;
     var student = findById_('Students', r.studentId);
-    if (student && String(student.classArmId) === String(classArmId) && String(r.termId) === String(termId)) { updateRow_('ResultSheets', r.id, { status: status, updatedAt: nowIso_() }); count++; }
+    if (!student || String(student.classArmId) !== String(classArmId)) return;
+    if (publish) {
+      var cur = String(r.status || 'DRAFT').toUpperCase();
+      if (cur !== 'APPROVED' && cur !== 'PUBLISHED') return;
+      updateRow_('ResultSheets', r.id, { status: 'PUBLISHED', updatedAt: nowIso_() });
+    } else {
+      updateRow_('ResultSheets', r.id, { status: 'DRAFT', updatedAt: nowIso_() });
+    }
+    count++;
   });
-  return { updated: count, status: status };
+  logAudit_(user, publish ? 'PUBLISH_RESULTS' : 'UNPUBLISH_RESULTS', classArmId, 'term ' + termId);
+  return { updated: count, status: publish ? 'PUBLISHED' : 'DRAFT' };
+}
+
+/** Teacher finalises the sheet; sends it into the approval queue. */
+function api_submitResults(token, classArmId, termId) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to submit results.');
+  assertArmAllowed_(user, classArmId);
+  var count = 0;
+  readTable_('ResultSheets').forEach(function (r) {
+    if (String(r.termId) !== String(termId)) return;
+    var student = findById_('Students', r.studentId);
+    if (!student || String(student.classArmId) !== String(classArmId)) return;
+    var cur = String(r.status || 'DRAFT').toUpperCase();
+    if (cur === 'APPROVED' || cur === 'PUBLISHED') return; // don't downgrade an approved sheet
+    updateRow_('ResultSheets', r.id, { status: 'SUBMITTED', updatedAt: nowIso_() });
+    count++;
+  });
+  logAudit_(user, 'SUBMIT_RESULTS', classArmId, 'term ' + termId + ', ' + count + ' sheets');
+  return { updated: count, status: 'SUBMITTED' };
+}
+
+/** Principal / Headmaster / Admin sign-off. */
+function api_approveResults(token, classArmId, termId) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'Only leadership can approve results.');
+  assertArmAllowed_(user, classArmId);
+  var count = 0;
+  readTable_('ResultSheets').forEach(function (r) {
+    if (String(r.termId) !== String(termId)) return;
+    var student = findById_('Students', r.studentId);
+    if (!student || String(student.classArmId) !== String(classArmId)) return;
+    var cur = String(r.status || 'DRAFT').toUpperCase();
+    if (cur === 'PUBLISHED' || cur === 'DRAFT') return; // must be SUBMITTED first
+    updateRow_('ResultSheets', r.id, { status: 'APPROVED', updatedAt: nowIso_() });
+    count++;
+  });
+  logAudit_(user, 'APPROVE_RESULTS', classArmId, 'term ' + termId + ', ' + count + ' sheets');
+  return { updated: count, status: 'APPROVED' };
+}
+
+/* ==================== 11a. BULK GRADES (CSV, all subjects for one class) ==================== */
+/**
+ * Teachers download one CSV for a class + term (admission no., name, and CA1/CA2/CA3/Exam columns for
+ * every subject), fill it in, and upload it. The upload is validated first (preview); nothing is saved
+ * until the file has no problems and the teacher confirms.
+ */
+var BULK_COMPONENTS = [
+  { key: 'ca1', label: 'CA1', max: CA_MAX }, { key: 'ca2', label: 'CA2', max: CA_MAX },
+  { key: 'ca3', label: 'CA3', max: CA_MAX }, { key: 'exam', label: 'Exam', max: EXAM_MAX }
+];
+var BULK_MAX_ERRORS = 50;
+
+function csvCell_(v) { return '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"'; }
+function csvParse_(text, delim) {
+  var rows = [], row = [], cell = '', inQ = false, i = 0, n = text.length;
+  while (i < n) {
+    var ch = text.charAt(i);
+    if (inQ) {
+      if (ch === '"') { if (text.charAt(i + 1) === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === delim) { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text.charAt(i + 1) === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+    i++;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+function bulkSubjectLabels_(classArmId) {
+  var seen = {};
+  return getSubjectsForArm_(classArmId).map(function (sub) {
+    var base = String(sub.name).trim(), label = base, k = base.toLowerCase();
+    seen[k] = (seen[k] || 0) + 1;
+    if (seen[k] > 1) label = base + ' (' + seen[k] + ')';
+    return { subject: sub, label: label };
+  });
+}
+function bulkClassStudents_(classArmId) {
+  return readTable_('Students').filter(function (st) { return String(st.classArmId) === String(classArmId) && String(st.status) !== 'INACTIVE'; })
+    .sort(function (a, b) { return String(a.lastName).localeCompare(String(b.lastName)) || String(a.firstName).localeCompare(String(b.firstName)); });
+}
+function bulkContext_(token, classArmId, termId) {
+  var user = requireUser_(token);
+  assertRole_(user, CFG.ENTRY_ROLES, 'You do not have permission to upload grades.');
+  if (!classArmId) throw new Error('Select a class.');
+  assertArmAllowed_(user, classArmId);
+  var arm = getArmById_(classArmId);
+  if (!arm) throw new Error('Class not found.');
+  var term = termId ? findById_('Terms', termId) : null;
+  if (!term || !toBool_(term.active)) throw new Error('Select a valid term.');
+  var labels = bulkSubjectLabels_(classArmId);
+  if (!labels.length) throw new Error('No subjects are set up for this class yet.');
+  return { user: user, arm: arm, term: term, labels: labels };
+}
+function api_gradesTemplate(token, classArmId, termId) {
+  var ctx = bulkContext_(token, classArmId, termId);
+  var students = bulkClassStudents_(classArmId);
+  if (!students.length) throw new Error('There are no students in this class yet.');
+  var existing = {};
+  readTable_('Scores').forEach(function (r) { if (String(r.termId) === String(termId) && String(r.classArmId) === String(classArmId)) existing[r.studentId + '|' + r.subjectId] = r; });
+  var head = ['Admission No', 'Student Name'];
+  ctx.labels.forEach(function (l) { BULK_COMPONENTS.forEach(function (c) { head.push(l.label + ' - ' + c.label); }); });
+  var lines = [head.map(csvCell_).join(',')];
+  students.forEach(function (st) {
+    var line = [st.admissionNo, fullNameOf_(st)];
+    ctx.labels.forEach(function (l) {
+      var ex = existing[st.id + '|' + l.subject.id];
+      BULK_COMPONENTS.forEach(function (c) { line.push(ex && ex[c.key] !== '' && ex[c.key] !== null && ex[c.key] !== undefined ? ex[c.key] : ''); });
+    });
+    lines.push(line.map(csvCell_).join(','));
+  });
+  var slug = (classArmLabel_(classArmId) + '-' + ctx.term.termName + '-' + ctx.term.sessionName).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return { filename: 'grades-' + slug + '.csv', csv: '\uFEFF' + lines.join('\r\n'), students: students.length, subjects: ctx.labels.length };
+}
+/** Validates (and, when commit is true and the file is clean, saves) an uploaded grades CSV. */
+function api_importGrades(token, classArmId, termId, csvText, commit) {
+  var ctx = bulkContext_(token, classArmId, termId);
+  var result = bulkAnalyse_(ctx, classArmId, csvText);
+  result.dryRun = !commit;
+  result.saved = 0;
+  if (!commit || !result.ok) return result;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Another save is in progress. Please try again in a moment.');
+  try {
+    bulkWriteScores_(ctx.user, classArmId, termId, result.entries);
+    bulkRefreshResults_(classArmId, termId);
+    resetResultStatuses_(classArmId, termId);
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+  result.saved = result.entries.length;
+  logAudit_(ctx.user, 'BULK_GRADES_UPLOAD', classArmId, 'term ' + termId + ', ' + result.saved + ' subject scores for ' + result.studentsInFile + ' students');
+  delete result.entries;
+  return result;
+}
+function bulkAnalyse_(ctx, classArmId, csvText) {
+  var text = String(csvText || '').replace(/^\uFEFF/, '');
+  if (!text.trim()) throw new Error('The file is empty.');
+  var first = text.split(/\r?\n/)[0];
+  var delim = first.split(';').length > first.split(',').length ? ';' : ',';
+  var rows = csvParse_(text, delim).filter(function (r) { return r.join('').trim() !== ''; });
+  if (rows.length < 2) throw new Error('The file has no student rows.');
+  var errors = [], errorCount = 0;
+  function err(row, msg) { errorCount++; if (errors.length < BULK_MAX_ERRORS) errors.push({ row: row, message: msg }); }
+
+  var header = rows[0].map(function (h) { return String(h).trim(); });
+  var admCol = -1;
+  header.forEach(function (h, i) { if (admCol < 0 && /admission/i.test(h)) admCol = i; });
+  if (admCol < 0) throw new Error('The first column must be "Admission No". Please use the template downloaded from the portal.');
+
+  var labelMap = {};
+  ctx.labels.forEach(function (l) { labelMap[l.label.toLowerCase()] = l.subject; });
+  var colMap = {}, subjectsSeen = {}, compRe = /^([\s\S]+?)\s+-\s*(ca1|ca2|ca3|exam)\s*(?:\(.*\))?$/i;
+  header.forEach(function (h, i) {
+    var m = compRe.exec(h);
+    if (!m) return;
+    var subj = labelMap[m[1].trim().toLowerCase()], comp = m[2].toLowerCase();
+    if (!subj) { err(1, 'Column "' + h + '": "' + m[1].trim() + '" is not a subject of this class.'); return; }
+    var key = subj.id + '|' + comp;
+    if (colMap[key] !== undefined) { err(1, 'Column "' + h + '" appears more than once.'); return; }
+    colMap[key] = i; subjectsSeen[subj.id] = subj;
+  });
+  var subjectIds = Object.keys(subjectsSeen);
+  if (!subjectIds.length && !errorCount) throw new Error('No score columns were found. Please use the template downloaded from the portal.');
+
+  var students = bulkClassStudents_(classArmId), byAdm = {};
+  students.forEach(function (st) { byAdm[String(st.admissionNo).trim().toLowerCase()] = st; });
+  var entries = [], seenStudents = {}, inFile = 0;
+  for (var r = 1; r < rows.length; r++) {
+    var row = rows[r], lineNo = r + 1, adm = String(row[admCol] || '').trim();
+    if (!adm) { err(lineNo, 'Admission No is blank.'); continue; }
+    var st = byAdm[adm.toLowerCase()];
+    if (!st) { err(lineNo, 'Admission No "' + adm + '" is not in this class.'); continue; }
+    if (seenStudents[st.id]) { err(lineNo, 'Admission No "' + adm + '" appears more than once.'); continue; }
+    seenStudents[st.id] = true; inFile++;
+    subjectIds.forEach(function (sid) {
+      var rec = { studentId: st.id, subjectId: sid }, any = false, bad = false;
+      BULK_COMPONENTS.forEach(function (c) {
+        var idx = colMap[sid + '|' + c.key];
+        var raw = idx === undefined ? '' : String(row[idx] === undefined ? '' : row[idx]).trim();
+        if (raw === '') { rec[c.key] = ''; return; }
+        var num = Number(raw);
+        if (isNaN(num)) { err(lineNo, subjectsSeen[sid].name + ' ' + c.label + ': "' + raw + '" is not a number (' + adm + ').'); bad = true; return; }
+        if (num < 0 || num > c.max) { err(lineNo, subjectsSeen[sid].name + ' ' + c.label + ': ' + raw + ' is outside 0\u2013' + c.max + ' (' + adm + ').'); bad = true; return; }
+        rec[c.key] = num; any = true;
+      });
+      if (any && !bad) entries.push(rec);
+    });
+  }
+  var missing = students.filter(function (st) { return !seenStudents[st.id]; }).map(fullNameOf_);
+  var notInFile = ctx.labels.filter(function (l) { return !subjectsSeen[l.subject.id]; }).map(function (l) { return l.label; });
+  if (!entries.length && !errorCount) errorCount++, errors.push({ row: 0, message: 'The file contains no scores to save.' });
+  return {
+    ok: errorCount === 0, classLabel: classArmLabel_(classArmId), termLabel: termLabel_(ctx.term),
+    studentsInFile: inFile, studentsInClass: students.length, subjectsInFile: subjectIds.length, subjectsInClass: ctx.labels.length,
+    entries: entries, entryCount: entries.length, errors: errors, errorCount: errorCount,
+    missingStudents: missing.slice(0, 10), missingStudentCount: missing.length, subjectsNotInFile: notInFile
+  };
+}
+function writeRowSpan_(sheet, values, width, minR, maxR) {
+  if (minR === null) return;
+  var block = values.slice(minR, maxR + 1).map(function (row) { return row.slice(0, width); });
+  sheet.getRange(minR + 1, 1, block.length, width).setValues(block);
+}
+/** Saves every entry with a handful of sheet calls (typed entry would need hundreds). */
+function bulkWriteScores_(user, classArmId, termId, entries) {
+  var sheet = getSheet_('Scores'), headers = HEADERS.Scores, idx = {};
+  headers.forEach(function (h, i) { idx[h] = i; });
+  var values = sheet.getDataRange().getValues(), map = {};
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][idx.termId]) !== String(termId)) continue;
+    map[values[r][idx.studentId] + '|' + values[r][idx.subjectId]] = r;
+  }
+  var scale = getGradeScale_(studentSection_(classArmId));
+  function gradeOf(total) {
+    for (var i = 0; i < scale.length; i++) if (total >= Number(scale[i].minScore) && total <= Number(scale[i].maxScore)) return scale[i];
+    return { grade: '', remark: '' };
+  }
+  var now = nowIso_(), minR = null, maxR = null, appendRows = [], auditRows = [];
+  var auditNow = nowIso_();
+  entries.forEach(function (e) {
+    var total = totalFor_(e), g = gradeOf(total), key = e.studentId + '|' + e.subjectId;
+    var before = null;
+    if (map[key] !== undefined) {
+      var row = values[map[key]];
+      before = { ca1: row[idx.ca1], ca2: row[idx.ca2], ca3: row[idx.ca3], exam: row[idx.exam] };
+      row[idx.classArmId] = classArmId;
+      row[idx.ca1] = e.ca1; row[idx.ca2] = e.ca2; row[idx.ca3] = e.ca3; row[idx.exam] = e.exam;
+      row[idx.total] = total; row[idx.grade] = g.grade; row[idx.remark] = g.remark; row[idx.recordedBy] = user.id; row[idx.updatedAt] = now;
+      if (minR === null || map[key] < minR) minR = map[key];
+      if (maxR === null || map[key] > maxR) maxR = map[key];
+    } else {
+      appendRows.push({ id: uuid_(), termId: termId, classArmId: classArmId, studentId: e.studentId, subjectId: e.subjectId,
+        ca1: e.ca1, ca2: e.ca2, ca3: e.ca3, exam: e.exam, total: total, grade: g.grade, remark: g.remark, recordedBy: user.id, updatedAt: now });
+    }
+    var changed = !before || ['ca1', 'ca2', 'ca3', 'exam'].some(function (k) {
+      var bv = (before[k] === undefined || before[k] === null) ? '' : String(before[k]);
+      var av = (e[k] === undefined || e[k] === null) ? '' : String(e[k]);
+      return bv !== av;
+    });
+    if (changed) {
+      auditRows.push({ id: uuid_(), at: auditNow, termId: termId, classArmId: classArmId,
+        studentId: e.studentId, subjectId: e.subjectId,
+        ca1: e.ca1, ca2: e.ca2, ca3: e.ca3, exam: e.exam, total: total, grade: g.grade,
+        actorId: user.id, actorUsername: user.username, source: 'bulk-import', note: '' });
+    }
+  });
+  writeRowSpan_(sheet, values, headers.length, minR, maxR);
+  if (appendRows.length) bulkAppend_('Scores', appendRows);
+  if (auditRows.length) { ensureScoreAuditSheet_(); bulkAppend_('ScoreAudit', auditRows); }
+  invalidateTable_('Scores');
+}
+function bulkRefreshResults_(classArmId, termId) {
+  var computed = computeClassResults_(classArmId, termId);
+  var sheet = getSheet_('ResultSheets'), headers = HEADERS.ResultSheets, idx = {};
+  headers.forEach(function (h, i) { idx[h] = i; });
+  var values = sheet.getDataRange().getValues(), map = {};
+  for (var r = 1; r < values.length; r++) if (String(values[r][idx.termId]) === String(termId)) map[values[r][idx.studentId]] = r;
+  var now = nowIso_(), minR = null, maxR = null, appendRows = [];
+  Object.keys(computed).forEach(function (sid) {
+    var c = computed[sid];
+    if (map[sid] !== undefined) {
+      var row = values[map[sid]];
+      row[idx.position] = c.position; row[idx.totalScore] = c.totalScore; row[idx.average] = c.average; row[idx.updatedAt] = now;
+      if (minR === null || map[sid] < minR) minR = map[sid];
+      if (maxR === null || map[sid] > maxR) maxR = map[sid];
+    } else {
+      appendRows.push({ id: uuid_(), termId: termId, studentId: sid, position: c.position, totalScore: c.totalScore, average: c.average, teacherRemark: '', principalRemark: '', status: 'DRAFT', updatedAt: now });
+    }
+  });
+  writeRowSpan_(sheet, values, headers.length, minR, maxR);
+  if (appendRows.length) bulkAppend_('ResultSheets', appendRows);
+  invalidateTable_('ResultSheets');
 }
 
 /* =========================== 12. ANNOUNCEMENTS =========================== */
@@ -1720,7 +2340,7 @@ function getSetting_(key, def) {
 }
 function setSetting_(key, value) {
   var list = readTableSafe_('Settings');
-  for (var i = 0; i < list.length; i++) if (String(list[i].key) === String(key)) { updateRow_('Settings', list[i].key, { value: value, updatedAt: nowIso_() }); return; }
+  for (var i = 0; i < list.length; i++) if (String(list[i].key) === String(key)) { updateRowByKey_('Settings', 'key', list[i].key, { value: value, updatedAt: nowIso_() }); return; }
   appendRow_('Settings', { key: key, value: value, updatedAt: nowIso_() });
 }
 function ensureColumns_(name, headers) {
@@ -1730,6 +2350,7 @@ function ensureColumns_(name, headers) {
   headers.forEach(function (h) {
     if (current.indexOf(h) === -1) { sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h); current.push(h); }
   });
+  invalidateTable_(name);
 }
 function ensureFeeTables() {
   var ss = getSpreadsheet_();
@@ -1771,6 +2392,97 @@ function api_saveSettings(token, payload) {
 
 /* =========================== 13. DRIVE / FILES =========================== */
 
+/* ==================== 13a. AUTHENTICATED FILE ACCESS ==================== */
+/**
+ * Files are stored private. The client asks for a specific file id via
+ * api_getFileDataUrl, which checks the caller's session and scope, then
+ * returns the bytes as a base64 data URL. This keeps children's photos and
+ * certificates out of the "anyone with the link" bucket.
+ */
+function api_getFileDataUrl(token, fileId) {
+  var user = requireUser_(token);
+  fileId = String(fileId || '');
+  if (!fileId) throw new Error('No file specified.');
+  var rec = findWhere_('Files', function (f) { return String(f.driveFileId) === String(fileId); });
+  var ownerType = rec ? String(rec.ownerType) : '';
+  var ownerId = rec ? String(rec.ownerId) : '';
+  var allowed = false;
+
+  if (user.role === 'ADMIN') allowed = true;
+  else if (ownerType && ownerId) {
+    try { assertCanManageOwner_(user, ownerType, ownerId); allowed = true; } catch (e) { allowed = false; }
+  }
+  if (!allowed) {
+    // Fallback: does the id appear on a student/payment the caller can see?
+    var students = readTable_('Students');
+    for (var i = 0; i < students.length && !allowed; i++) {
+      if (String(students[i].photoFileId) !== fileId) continue;
+      try { assertStudentAccess_(user, students[i]); allowed = true; } catch (e) { /* keep looking */ }
+    }
+    if (!allowed) {
+      var pays = readTable_('Payments');
+      for (var j = 0; j < pays.length && !allowed; j++) {
+        if (String(pays[j].evidenceFileId) !== fileId) continue;
+        if (user.role === 'PARENT') { try { assertParentOf_(user, pays[j].studentId); allowed = true; } catch (e) {} }
+        else { try { assertRole_(user, CFG.FINANCE_ROLES); allowed = true; } catch (e) {} }
+      }
+    }
+    if (!allowed) {
+      var apps = readTableSafe_('Applications');
+      for (var k = 0; k < apps.length && !allowed; k++) {
+        var a = apps[k];
+        if (String(a.photoFileId) !== fileId && String(a.primaryCertFileId) !== fileId && String(a.juniorCertFileId) !== fileId && String(a.applicationFeeFileId) !== fileId) continue;
+        try { assertApplicationsAccess_(user); assertApplicationScope_(user, a); allowed = true; } catch (e) { /* keep */ }
+      }
+    }
+    if (!allowed) {
+      // Legacy staff photos uploaded before the Files row existed.
+      var staffRows = readTableSafe_('Staff');
+      for (var m = 0; m < staffRows.length && !allowed; m++) {
+        if (String(staffRows[m].photoFileId) !== fileId) continue;
+        try { assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER']); allowed = true; } catch (e) { /* keep */ }
+      }
+    }
+  }
+  if (!allowed) throw new Error('You cannot view that file.');
+
+  var file = DriveApp.getFileById(fileId);
+  var blob = file.getBlob();
+  var mime = blob.getContentType() || 'application/octet-stream';
+  var b64 = Utilities.base64Encode(blob.getBytes());
+  return { dataUrl: 'data:' + mime + ';base64,' + b64, mimeType: mime, size: blob.getBytes().length };
+}
+
+/* ==================== 13b. SCORE AUDIT ==================== */
+var __scoreAuditReady = false;
+function ensureScoreAuditSheet_() {
+  if (__scoreAuditReady) return;
+  var ss = getSpreadsheet_();
+  if (!ss.getSheetByName('ScoreAudit')) { ensureSheet_(ss, 'ScoreAudit'); invalidateTable_('ScoreAudit'); }
+  __scoreAuditReady = true;
+}
+/**
+ * Records a score change. Called from every write path; only writes when one of
+ * ca1/ca2/ca3/exam actually moved. `before` may be null for a new score.
+ */
+function logScoreChange_(user, source, termId, classArmId, studentId, subjectId, before, after) {
+  try {
+    var b = before || {};
+    var changed = ['ca1', 'ca2', 'ca3', 'exam'].some(function (k) {
+      var bv = (b[k] === undefined || b[k] === null) ? '' : String(b[k]);
+      var av = (after[k] === undefined || after[k] === null) ? '' : String(after[k]);
+      return bv !== av;
+    });
+    if (!changed) return;
+    ensureScoreAuditSheet_();
+    appendRow_('ScoreAudit', {
+      id: uuid_(), at: nowIso_(), termId: termId, classArmId: classArmId || after.classArmId || '',
+      studentId: studentId, subjectId: subjectId,
+      ca1: after.ca1, ca2: after.ca2, ca3: after.ca3, exam: after.exam, total: after.total, grade: after.grade,
+      actorId: user ? user.id : '', actorUsername: user ? user.username : '', source: source, note: ''
+    });
+  } catch (e) { Logger.log('logScoreChange_ failed: ' + (e && e.message ? e.message : e)); }
+}
 function getOrCreateSubfolder_(parent, name) { var it = parent.getFoldersByName(name); return it.hasNext() ? it.next() : parent.createFolder(name); }
 function ownerSegments_(ownerType, ownerId) {
   if (ownerType === 'STUDENT') { var s = findById_('Students', ownerId); return ['Students', s ? (s.admissionNo || s.id) : ownerId]; }
@@ -1798,6 +2510,10 @@ function assertCanManageOwner_(user, ownerType, ownerId) {
     assertRole_(user, CFG.FINANCE_ROLES, 'You cannot manage this file.');
     return;
   }
+  // Anything else (APPLICATION, unknown): refuse. api_getFileDataUrl has a
+  // narrower per-record check for applications; storeFile_ should never be
+  // called with an unrecognised ownerType.
+  throw new Error('You cannot manage this file.');
 }
 function storeFile_(user, ownerType, ownerId, filePayload) {
   if (!filePayload || !filePayload.dataUrl) throw new Error('No file provided.');
@@ -1811,7 +2527,8 @@ function storeFile_(user, ownerType, ownerId, filePayload) {
   var name = filePayload.name || ('file-' + Date.now());
   var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, name);
   var file = folder.createFile(blob);
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* domain may forbid */ }
+  // Files are kept private. The portal serves them through api_getFileDataUrl,
+  // which is session-authenticated, so nothing needs to be world-readable.
   var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
   var rec = { id: uuid_(), ownerType: ownerType, ownerId: ownerId, name: file.getName(), mimeType: mime, size: blob.getBytes().length, driveFileId: file.getId(), url: url, uploadedBy: user.id, createdAt: nowIso_() };
   appendRow_('Files', rec);
@@ -1855,7 +2572,7 @@ function api_listPayments(token, opts) {
     return {
       id: p.id, studentId: p.studentId, studentName: s ? fullNameOf_(s) : '—', admissionNo: s ? s.admissionNo : '',
       category: p.category, amount: p.amount, method: p.method, reference: p.reference, note: p.note, status: p.status,
-      evidenceFileId: p.evidenceFileId, evidenceUrl: p.evidenceUrl, viewfile: p.viewfile || p.evidenceUrl, termId: p.termId,
+      evidenceFileId: p.evidenceFileId, termId: p.termId,
       feePlanId: p.feePlanId, installmentNo: p.installmentNo, amountPaid: p.amountPaid, balanceAfter: p.balanceAfter,
       receiptNo: p.receiptNo, items: p.items, createdAt: p.createdAt, verifiedAt: p.verifiedAt
     };
@@ -1887,10 +2604,12 @@ function api_savePayment(token, payload) {
     termId: termId, category: category, amount: amount, method: payload.method || '', reference: payload.reference || '', note: payload.note || '',
     status: 'PENDING', evidenceFileId: '', evidenceUrl: '', verifiedBy: '', verifiedAt: '', createdAt: nowIso_(), updatedAt: nowIso_(),
     feePlanId: plan ? plan.id : '', installmentNo: termId ? (planCount + 1) : '', amountPaid: amount, balanceAfter: balanceAfter,
-    receiptNo: nextReceiptNo_(), viewfile: '',
     items: sched ? sched.items.filter(function (i) { return i.selected; }).map(function (i) { return i.name; }).join(', ') : ''
   };
-  appendRow_('Payments', fields);
+    withScriptLock_(function () {                   
+      fields.receiptNo = nextReceiptNo_();
+      appendRow_('Payments', fields);
+    });
   if (payload.evidence && payload.evidence.dataUrl) {
     var stored = storeFile_(user, 'PAYMENT', fields.id, payload.evidence);
     updateRow_('Payments', fields.id, { evidenceFileId: stored.driveFileId, evidenceUrl: stored.url, viewfile: stored.url, updatedAt: nowIso_() });
@@ -2084,7 +2803,8 @@ function paymentReceiptView_(p) {
     amountPaid: (p.amountPaid === '' || p.amountPaid === null || p.amountPaid === undefined) ? numOrZero_(p.amount) : numOrZero_(p.amountPaid),
     balanceAfter: (p.balanceAfter === '' || p.balanceAfter === null || p.balanceAfter === undefined) ? '' : numOrZero_(p.balanceAfter),
     installmentNo: p.installmentNo || '', method: p.method, reference: p.reference, note: p.note, items: p.items || '',
-    status: p.status, viewfile: p.viewfile || p.evidenceUrl, evidenceUrl: p.evidenceUrl, createdAt: p.createdAt, verifiedAt: p.verifiedAt
+    evidenceFileId: p.evidenceFileId || '',
+    status: p.status, createdAt: p.createdAt, verifiedAt: p.verifiedAt
   };
 }
 function api_getReceipt(token, paymentId) {
@@ -2099,6 +2819,81 @@ function api_getReceipt(token, paymentId) {
   return { school: brand_(), receipt: paymentReceiptView_(p) };
 }
 
+/* ==================== 14a-bis. PARENT WARD BALANCES ==================== */
+function api_myWardsWithBalance(token) {
+  var user = requireUser_(token);
+  if (user.role !== 'PARENT') return [];
+  var term = getCurrentTerm_();
+  var arms = armsMap_(user);
+  var ids = parentStudentIds_(user);
+  return readTable_('Students').filter(function (s) { return ids.indexOf(String(s.id)) !== -1; }).map(function (s) {
+    var w = decorateStudent_(s, arms);
+    if (!term) { w.balance = 0; w.totalBill = 0; w.amountPaid = 0; w.term = null; return w; }
+    var sched = buildFeeSchedule_(s, term);
+    w.balance = sched.balance;
+    w.totalBill = sched.totalBill;
+    w.amountPaid = sched.amountPaid;
+    w.term = termRef_(term.id);
+    return w;
+  });
+}
+/* ==================== 14c-1. TEACHER WORKLOAD ==================== */
+function api_teacherWorkload(token, termId) {
+  var user = requireUser_(token);
+  assertRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'], 'Workload is for school leadership.');
+  var term = termId ? findById_('Terms', termId) : getCurrentTerm_();
+  if (!term) throw new Error('No term is available.');
+
+  var sections = userSections_(user);
+  var teachers = readTable_('Users').filter(function (u) { return u.role === 'TEACHER' && toBool_(u.active); });
+  if (user.role !== 'ADMIN' && sections.length) {
+    teachers = teachers.filter(function (t) {
+      var secs = userSections_(t);
+      if (!secs.length) return false;
+      for (var i = 0; i < secs.length; i++) if (sections.indexOf(secs[i]) !== -1) return true;
+      return false;
+    });
+  }
+
+  var done = {};
+  readTable_('Scores').forEach(function (s) {
+    if (String(s.termId) !== String(term.id)) return;
+    if (s.total === '' || s.total === null || s.total === undefined) return;
+    var k = s.classArmId + '|' + s.subjectId;
+    done[k] = (done[k] || 0) + 1;
+  });
+
+  var studentCountByArm = {};
+  readTable_('Students').forEach(function (s) {
+    if (String(s.status) === 'INACTIVE') return;
+    studentCountByArm[s.classArmId] = (studentCountByArm[s.classArmId] || 0) + 1;
+  });
+
+  var out = teachers.map(function (t) {
+    var arms = userArmIds_(t);
+    var lines = [], expected = 0, entered = 0;
+    arms.forEach(function (armId) {
+      var count = studentCountByArm[armId] || 0;
+      var subjects = getSubjectsForArm_(armId);
+      subjects.forEach(function (sub) {
+        expected += count;
+        var d = done[armId + '|' + sub.id] || 0;
+        entered += d;
+        if (d < count) lines.push({ classArm: classArmLabel_(armId), subject: sub.name, entered: d, of: count });
+      });
+    });
+    return {
+      id: t.id, username: t.username, fullName: t.fullName || t.username,
+      arms: arms.map(armLabelAll_), classes: arms.length,
+      expected: expected, entered: entered,
+      completion: expected ? Math.round(entered / expected * 100) : 100,
+      missing: lines.sort(function (a, b) { return (a.entered / (a.of || 1)) - (b.entered / (b.of || 1)); }).slice(0, 25)
+    };
+  }).sort(function (a, b) { return a.completion - b.completion; });
+
+  return { term: termRef_(term.id), generatedAt: nowIso_(), teachers: out };
+}
+
 /* =========================== 14b. DASHBOARD / DIRECTORY =========================== */
 
 var SECTION_LABELS = { KG: 'Kindergarten & Creche', PRIMARY: 'Primary', SECONDARY: 'Secondary' };
@@ -2111,6 +2906,12 @@ function sectionsFromArms_(arms) {
 }
 function api_dashboard(token) {
   var user = requireUser_(token);
+  return dashboardSnapshot_(user);
+}
+function dashboardSnapshot_(user) {
+  return snapshot_('dash', user, todayIso_(), function () { return dashboardFor_(user); });
+}
+function dashboardFor_(user) {
   var arms = armsMap_(user);
   var armIds = Object.keys(arms);
   var sections = user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(arms);
@@ -2253,6 +3054,14 @@ function api_getAnalytics(token, opts) {
   opts = opts || {};
   var user = requireUser_(token);
   assertRole_(user, ANALYTICS_ROLES, 'Statistics are for school leadership and finance.');
+  return analyticsSnapshot_(user, opts);
+}
+function analyticsSnapshot_(user, opts) {
+  opts = opts || {};
+  return snapshot_('stats', user, String(opts.termId || ''), function () { return analyticsFor_(user, opts); });
+}
+function analyticsFor_(user, opts) {
+  opts = opts || {};
   var arms = armsMap_(user);
   var sections = user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(arms);
   var levelById = indexById_(readTable_('ClassLevels'));
@@ -2381,6 +3190,134 @@ function api_getAnalytics(token, opts) {
     },
     trends: trends,
     terms: termsList
+  };
+}
+
+/* ==================== 14c-0. DASHBOARD DEMOGRAPHICS (server-side) ==================== */
+/**
+ * Dashboard charts used to download the entire Students + Staff tables just to
+ * bucket them in the browser. These helpers pre-aggregate the same figures on
+ * the server (memoised per execution + cached via snapshot_) so the dashboard
+ * payload is a few KB instead of a few MB on a large school.
+ */
+var DEMO_STUDENT_BANDS = [
+  { label: 'Under 3', min: -1, max: 2 }, { label: '3–5', min: 3, max: 5 },
+  { label: '6–11', min: 6, max: 11 }, { label: '12–17', min: 12, max: 17 }, { label: '18+', min: 18, max: 200 }
+];
+var DEMO_STAFF_BANDS = [
+  { label: 'Under 25', min: -1, max: 24 }, { label: '25–34', min: 25, max: 34 },
+  { label: '35–44', min: 35, max: 44 }, { label: '45–54', min: 45, max: 54 }, { label: '55+', min: 55, max: 200 }
+];
+var DEMO_SERVICE_BANDS = [
+  { label: 'Under 1', min: -1, max: 0 }, { label: '1–4', min: 1, max: 4 },
+  { label: '5–9', min: 5, max: 9 }, { label: '10–14', min: 10, max: 14 }, { label: '15+', min: 15, max: 200 }
+];
+var DEMO_SECTION_LABELS = { KG: 'Kindergarten & Creche', PRIMARY: 'Primary', SECONDARY: 'Secondary' };
+
+function demoYearsFromIso_(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return null;
+  var now = new Date(), years = now.getFullYear() - (+m[1]);
+  if ((now.getMonth() + 1) * 100 + now.getDate() < (+m[2]) * 100 + (+m[3])) years--;
+  return (years < 0 || years > 120) ? null : years;
+}
+function demoBandLabel_(value, bands) {
+  if (value === null || value === undefined) return 'Not recorded';
+  for (var i = 0; i < bands.length; i++) if (value >= bands[i].min && value <= bands[i].max) return bands[i].label;
+  return 'Not recorded';
+}
+function demoGenderLabel_(g) {
+  var v = String(g || '').trim();
+  if (/^m/i.test(v)) return 'Male';
+  if (/^f/i.test(v)) return 'Female';
+  return v || 'Not recorded';
+}
+function demoCountMap_(list, fn) {
+  var m = {};
+  list.forEach(function (x) { var k = fn(x); if (k === '' || k === null || k === undefined) k = 'Not recorded'; m[k] = (m[k] || 0) + 1; });
+  return m;
+}
+function demoSeriesArr_(map, order, includeZero) {
+  order = order || [];
+  var keys = order.slice();
+  Object.keys(map).forEach(function (k) { if (keys.indexOf(k) === -1) keys.push(k); });
+  return keys.filter(function (k) { return includeZero || (map[k] || 0) > 0; }).map(function (k) { return { label: k, count: map[k] || 0 }; });
+}
+function demoBandSeriesArr_(list, bands, getValue) {
+  var order = bands.map(function (b) { return b.label; });
+  var m = demoCountMap_(list, function (x) { return demoBandLabel_(getValue(x), bands); });
+  if ((m['Not recorded'] || 0) > 0) order.push('Not recorded');
+  return demoSeriesArr_(m, order, true);
+}
+
+function api_demographics(token) {
+  var user = requireUser_(token);
+  if (!hasRole_(user, ['ADMIN', 'PRINCIPAL', 'HEADMASTER'])) return { students: null, staff: null };
+  return demographicsSnapshot_(user);
+}
+function demographicsSnapshot_(user) {
+  return snapshot_('demo', user, '', function () { return demographicsFor_(user); });
+}
+function demographicsFor_(user) {
+  var arms = armsMap_(user);
+  var students = readTable_('Students').filter(function (s) { return !!arms[s.classArmId]; });
+  var sections = user.role === 'ADMIN' ? CFG.SECTIONS.slice() : sectionsFromArms_(arms);
+  var staffAll = readTable_('Staff');
+  var staff = user.role === 'ADMIN' ? staffAll : staffAll.filter(function (st) { return sections.indexOf(st.section) !== -1; });
+
+  var studentGender = demoSeriesArr_(demoCountMap_(students, function (s) { return demoGenderLabel_(s.gender); }), ['Male', 'Female', 'Not recorded'], false);
+  var studentAge = demoBandSeriesArr_(students, DEMO_STUDENT_BANDS, function (s) { return demoYearsFromIso_(s.dateOfBirth); });
+  var studentSection = demoSeriesArr_(demoCountMap_(students, function (s) {
+    var arm = arms[s.classArmId], sec = arm && arm.classLevel ? arm.classLevel.section : '';
+    return sec ? (DEMO_SECTION_LABELS[sec] || sec) : 'Unassigned';
+  }), [DEMO_SECTION_LABELS.KG, DEMO_SECTION_LABELS.PRIMARY, DEMO_SECTION_LABELS.SECONDARY, 'Unassigned'], false);
+  var lvlMap = {};
+  students.forEach(function (s) {
+    var arm = arms[s.classArmId], lv = arm && arm.classLevel ? arm.classLevel.name : '', sec = arm && arm.classLevel ? arm.classLevel.section : '';
+    var k = lv || 'Unassigned';
+    if (!lvlMap[k]) lvlMap[k] = { count: 0, section: sec };
+    lvlMap[k].count++;
+  });
+  var classLevel = Object.keys(lvlMap).sort(function (a, b) {
+    if (lvlMap[a].section !== lvlMap[b].section) return CFG.SECTIONS.indexOf(lvlMap[a].section) - CFG.SECTIONS.indexOf(lvlMap[b].section);
+    return a.localeCompare(b, undefined, { numeric: true });
+  }).map(function (k) { return { label: k, count: lvlMap[k].count }; });
+  var studentStatus = demoSeriesArr_(demoCountMap_(students, function (s) {
+    return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
+  }), ['Active', 'Inactive'], false);
+  var admMap = demoCountMap_(students, function (s) { return String(s.createdAt || '').slice(0, 7); });
+  delete admMap['Not recorded'];
+  var admSeries = Object.keys(admMap).sort().slice(-12).map(function (m) { return { label: m, count: admMap[m] }; });
+  var admissionsLabel = 'last 12 months';
+  if (!admSeries.length) {
+    var yrMap = demoCountMap_(students, function (s) { var m = /KMS\/(\d{4})\//.exec(String(s.admissionNo || '')); return m ? m[1] : ''; });
+    delete yrMap['Not recorded'];
+    admSeries = Object.keys(yrMap).sort().map(function (y) { return { label: y, count: yrMap[y] }; });
+    admissionsLabel = 'by year';
+  }
+
+  var staffGender = demoSeriesArr_(demoCountMap_(staff, function (s) { return demoGenderLabel_(s.gender); }), ['Male', 'Female', 'Not recorded'], false);
+  var staffAge = demoBandSeriesArr_(staff, DEMO_STAFF_BANDS, function (s) { return demoYearsFromIso_(s.dateOfBirth); });
+  var staffSection = demoSeriesArr_(demoCountMap_(staff, function (s) {
+    var v = String(s.section || '').trim();
+    return v ? (DEMO_SECTION_LABELS[v] || v) : 'Unassigned';
+  }), [DEMO_SECTION_LABELS.KG, DEMO_SECTION_LABELS.PRIMARY, DEMO_SECTION_LABELS.SECONDARY, 'Unassigned'], false);
+  var staffDesig = demoSeriesArr_(demoCountMap_(staff, function (s) { return String(s.designation || '').trim() || 'Unspecified'; }), [], false)
+    .sort(function (a, b) { return b.count - a.count; });
+  var staffStatus = demoSeriesArr_(demoCountMap_(staff, function (s) {
+    return String(s.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
+  }), ['Active', 'Inactive'], false);
+  var staffService = demoBandSeriesArr_(staff, DEMO_SERVICE_BANDS, function (s) { return demoYearsFromIso_(s.dateJoined); });
+
+  return {
+    students: {
+      total: students.length, gender: studentGender, ageBand: studentAge, section: studentSection,
+      classLevel: classLevel, status: studentStatus, admissions: admSeries, admissionsLabel: admissionsLabel
+    },
+    staff: {
+      total: staff.length, gender: staffGender, ageBand: staffAge, section: staffSection,
+      designation: staffDesig, status: staffStatus, serviceYears: staffService
+    }
   };
 }
 
@@ -3038,6 +3975,45 @@ function api_changeOwnPassword(token, oldPassword, newPassword) {
   logAudit_(caller, 'CHANGE_OWN_PASSWORD', user.username, '');
   return true;
 }
+/* ==================== 15b-1. SELF-SERVICE PASSWORD RESET ==================== */
+var PW_RESET_TTL = 900;   // 15 minutes
+function api_requestPasswordReset(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email || !EMAIL_RE.test(email)) throw new Error('Enter a valid email address.');
+  var user = findWhere_('Users', function (u) { return String(u.email || '').toLowerCase() === email && toBool_(u.active); });
+  // Always reply with the same message to avoid confirming which emails exist.
+  if (user) {
+    var code = '';
+    for (var i = 0; i < 6; i++) code += String(Math.floor(Math.random() * 10));
+    try { CacheService.getScriptCache().put('pwr_' + code, user.id, PW_RESET_TTL); } catch (e) { /* ignore */ }
+    var text = 'You (or someone using your email) asked to reset the password for your ' + CFG.APP_NAME + ' portal account.\n\n' +
+      'Your one-time reset code is: ' + code + '\n\n' +
+      'Enter this code on the sign-in page within 15 minutes to choose a new password. ' +
+      'If you did not request this, you can ignore this email — nothing has changed.\n\n' +
+      CFG.APP_NAME + ' \u00B7 Portal';
+    try { sendPortalMail_({ to: email, subject: 'Password reset code — ' + CFG.APP_NAME, body: text, htmlBody: brandedPlainHtml_(text) }); }
+    catch (e2) { Logger.log('reset email failed: ' + (e2 && e2.message ? e2.message : e2)); }
+  }
+  return { sent: true, message: 'If that email is on file, a reset code has been sent. Check your inbox (and spam) — the code is valid for 15 minutes.' };
+}
+function api_confirmPasswordReset(email, code, newPassword) {
+  email = String(email || '').trim().toLowerCase();
+  code = String(code || '').replace(/[^0-9]/g, '');
+  if (!email) throw new Error('Enter the email address you used to request the reset.');
+  if (!code) throw new Error('Enter the reset code we emailed you.');
+  if (!newPassword || String(newPassword).length < 8) throw new Error('New password must be at least 8 characters.');
+  var uid = CacheService.getScriptCache().get('pwr_' + code);
+  if (!uid) throw new Error('That code is invalid or has expired. Request a new one.');
+  var user = findById_('Users', uid);
+  if (!user || String(user.email || '').toLowerCase() !== email) throw new Error('That code does not match this email address.');
+  var salt = makeSalt_();
+  updateRow_('Users', user.id, { passwordHash: hashPassword_(newPassword, salt), salt: salt });
+  try { CacheService.getScriptCache().remove('pwr_' + code); } catch (e) { /* ignore */ }
+  try { CacheService.getScriptCache().remove('lck_' + String(user.username).toLowerCase()); } catch (e2) { /* ignore */ }
+  bumpSessionEpoch_(user.id);
+  logAudit_(user, 'SELF_RESET_PASSWORD', user.username, '');
+  return { ok: true, message: 'Password reset. You can now sign in with your new password.' };
+}
 function api_listAudit(token) {
   assertAdminUser_(token);
   return readTable_('AuditLog').slice().sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
@@ -3082,21 +4058,29 @@ function teacherViewModel_(u) {
     })
   };
 }
+/** Returns the comma-separated distinct sections for a set of class-arm ids. */
+function sectionsForArms_(armIds) {
+  var armsById = indexById_(readTable_('ClassArms')), levelsById = indexById_(readTable_('ClassLevels'));
+  var seen = {}, out = [];
+  (armIds || []).forEach(function (id) {
+    var a = armsById[String(id)], l = a ? levelsById[a.classLevelId] : null;
+    if (l && !seen[l.section]) { seen[l.section] = 1; out.push(l.section); }
+  });
+  return out.join(',');
+}
 function api_listTeachers(token) {
   var user = assertTeacherAssigner_(token);
   return readTable_('Users').filter(function (u) { return u.role === 'TEACHER' && teacherInScope_(user, u); })
     .map(teacherViewModel_).sort(function (a, b) { return String(a.fullName || a.username).localeCompare(String(b.fullName || b.username)); });
-}
-function firstArmSection_(armIds) {
-  var armsById = indexById_(readTable_('ClassArms')), levelsById = indexById_(readTable_('ClassLevels'));
-  for (var i = 0; i < armIds.length; i++) { var a = armsById[armIds[i]], l = a ? levelsById[a.classLevelId] : null; if (l) return l.section; }
-  return '';
 }
 function api_saveTeacher(token, payload) {
   var user = assertTeacherAssigner_(token);
   payload = payload || {};
   var armIds = (payload.armIds || []).map(String).filter(Boolean);
   assertScopeArms_(user, armIds);
+  if (!armIds.length && user.role !== 'ADMIN') {                         
+    throw new Error('Assign at least one class, otherwise the teacher inherits the whole school.');
+  }  
   var id = payload.id || '', target = null;
   if (id) {
     target = findById_('Users', id);
@@ -3114,7 +4098,7 @@ function api_saveTeacher(token, payload) {
   if (target) {
     updateRow_('Users', target.id, {
       fullName: String(payload.fullName || '').trim() || target.fullName,
-      email: email, sectionScope: armIds.length ? firstArmSection_(armIds) : target.sectionScope,
+      email: email, sectionScope: armIds.length ? sectionsForArms_(armIds) : target.sectionScope,
       classArmScope: armIds.join(',')
     });
     logAudit_(user, 'ASSIGN_TEACHER', target.username, 'classes: ' + armIds.join(','));
@@ -3124,7 +4108,7 @@ function api_saveTeacher(token, payload) {
   var fields = {
     id: uuid_(), username: String(payload.username).trim(), passwordHash: hashPassword_(password, salt), salt: salt,
     role: 'TEACHER', fullName: String(payload.fullName).trim(), email: email,
-    sectionScope: armIds.length ? firstArmSection_(armIds) : String(payload.sectionScope || ''),
+    sectionScope: armIds.length ? sectionsForArms_(armIds) : String(payload.sectionScope || ''),
     classArmScope: armIds.join(','), active: true, createdAt: nowIso_()
   };
   appendRow_('Users', fields);
@@ -3236,11 +4220,51 @@ function storePublicFile_(ownerType, ownerId, filePayload) {
   var mime = filePayload.mimeType || 'application/octet-stream';
   var name = filePayload.name || ('app-' + Date.now());
   var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, name);
+  if (blob.getBytes().length > APP_FILE_MAX_BYTES) throw new Error('Uploaded files must be smaller than 3 MB.');
   var file = folder.createFile(blob);
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* domain may forbid */ }
+  // Files are kept private. The portal serves them through api_getFileDataUrl,
+  // which is session-authenticated, so nothing needs to be world-readable.
   var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
   appendRow_('Files', { id: uuid_(), ownerType: ownerType, ownerId: ownerId, name: file.getName(), mimeType: mime, size: blob.getBytes().length, driveFileId: file.getId(), url: url, uploadedBy: '', createdAt: nowIso_() });
   return { driveFileId: file.getId(), url: url, name: file.getName() };
+}
+var UPLOAD_SESSION_TTL = 21600;
+var UPLOAD_MAX_PER_SESSION = 24;      // uploads (incl. replacements) per form session
+var UPLOAD_MAX_PER_HOUR = 400;        // site-wide guard for this anonymous endpoint
+function cleanUploadSession_(sid) { return String(sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); }
+function stagedUpload_(sid, kind) {
+  sid = cleanUploadSession_(sid);
+  if (sid.length < 16) return null;
+  try { var raw = CacheService.getScriptCache().get('upl_' + sid + '_' + kind); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+/**
+ * Called by the admission form the moment a document is chosen, so the file is already in
+ * Drive when the applicant presses Submit. The file is held under the form's upload session
+ * and attached to the application by api_applyAdmission.
+ */
+function api_uploadApplicationFile(sessionId, kind, filePayload) {
+  var sid = cleanUploadSession_(sessionId);
+  if (sid.length < 16) throw new Error('Your upload session is invalid. Please refresh the page and try again.');
+  var spec = null;
+  APPLICATION_FILES.forEach(function (x) { if (x.kind === kind) spec = x; });
+  if (!spec) throw new Error('Unknown document type.');
+  if (!filePayload || !filePayload.dataUrl) throw new Error('No file received.');
+  var mime = String(filePayload.mimeType || '').toLowerCase();
+  var allowed = kind === 'photo' ? /^image\//.test(mime) : (/^image\//.test(mime) || mime === 'application/pdf');
+  if (!allowed) throw new Error(kind === 'photo' ? 'The passport photograph must be an image.' : 'Documents must be an image or a PDF.');
+  var cache = CacheService.getScriptCache();
+  var cnt = parseInt(cache.get('upl_cnt_' + sid) || '0', 10) + 1;
+  if (cnt > UPLOAD_MAX_PER_SESSION) throw new Error('Too many uploads for this form. Please refresh the page and try again.');
+  var hourKey = 'upl_hour_' + Utilities.formatDate(new Date(), 'Africa/Lagos', 'yyyyMMddHH');
+  var hourCnt = parseInt(cache.get(hourKey) || '0', 10) + 1;
+  if (hourCnt > UPLOAD_MAX_PER_HOUR) throw new Error('The upload service is busy. Please try again in a few minutes.');
+  cache.put('upl_cnt_' + sid, String(cnt), UPLOAD_SESSION_TTL);
+  cache.put(hourKey, String(hourCnt), 3600);
+  var previous = stagedUpload_(sid, kind);
+  var stored = storePublicFile_('APPLICATION', 'staged-' + sid, filePayload);
+  cache.put('upl_' + sid + '_' + kind, JSON.stringify({ driveFileId: stored.driveFileId, url: stored.url, name: stored.name }), UPLOAD_SESSION_TTL);
+  if (previous && previous.driveFileId) { try { DriveApp.getFileById(previous.driveFileId).setTrashed(true); } catch (e) { /* ignore */ } }
+  return { ok: true, kind: kind, name: stored.name };
 }
 function applicationViewModel_(a, links) {
   var l = levelFromApplication_(a);
@@ -3255,18 +4279,26 @@ function applicationViewModel_(a, links) {
     guardianState: a.guardianState || '', guardianLga: a.guardianLga || '',
     address: a.address || '', previousSchool: a.previousSchool || '', notes: a.notes || '',
     photoUrl: files.photo, primaryCertUrl: files.primaryCert, juniorCertUrl: files.juniorCert, applicationFeeUrl: files.applicationFee,
+    photoFileId: a.photoFileId || '', primaryCertFileId: a.primaryCertFileId || '',
+    juniorCertFileId: a.juniorCertFileId || '', applicationFeeFileId: a.applicationFeeFileId || '',
     status: a.status || 'PENDING', timestamp: a.timestamp || '', reviewedAt: a.reviewedAt || '', reviewedBy: a.reviewedBy || '', remarks: a.remarks || '',
     letterSentAt: sent ? sent.sentAt : '', letterSentBy: sent ? sent.sentBy : ''
   };
 }
 function applicationFileUrl_(a, spec, links) {
-  var link = links && links[a._row] ? links[a._row][spec.kind] : '';
-  if (!link && a._row) link = cellLinkUrl_('Applications', a._row, spec.header);
+  var entry = links && links[a._row] ? links[a._row] : null;
+  var link = entry ? entry[spec.kind] : '';
+  // When a pre-read links map is supplied, trust it: a per-cell sheet read for every
+  // missing document made the Applications tab very slow.
+  if (!link && a._row && !entry) link = cellLinkUrl_('Applications', a._row, spec.header);
   if (link) return link;
   var v = String(a[spec.header] || '');
   return /^[A-Za-z0-9_-]{20,}$/.test(v) ? ('https://drive.google.com/uc?export=view&id=' + v) : '';
 }
 function applicationLinks_() {
+  var tag = tableVersion_('Applications');
+  var hit = bigGet_('al_links', tag);
+  if (hit) { try { return JSON.parse(hit); } catch (e0) { /* rebuild */ } }
   var map = {};
   try {
     var values = getSheet_('Applications').getDataRange().getRichTextValues();
@@ -3277,6 +4309,7 @@ function applicationLinks_() {
       cols.forEach(function (c) { entry[c.kind] = (c.col >= 0 && row[c.col]) ? (row[c.col].getLinkUrl() || '') : ''; });
       map[i + 1] = entry;
     }
+    bigPut_('al_links', JSON.stringify(map), TABLE_CACHE_TTL, tag);
   } catch (e) { /* rich text unavailable */ }
   return map;
 }
@@ -3298,6 +4331,7 @@ function setApplicationFileLink_(rowNumber, header, url, label) {
     var rt = SpreadsheetApp.newRichTextValue().setText(label).setLinkUrl(url).build();
     getSheet_('Applications').getRange(rowNumber, col).setRichTextValue(rt);
   } catch (e) { Logger.log('setApplicationFileLink_ failed for ' + header + ': ' + (e && e.message ? e.message : e)); }
+  touchTable_('Applications');
 }
 function linkApplicationFiles() {
   var sheet = getSheet_('Applications'), last = sheet.getLastRow();
@@ -3352,10 +4386,14 @@ function escHtml_(s) {
   return String(s === null || s === undefined ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+// Always notified on every new application (in addition to the applicant).
+var ADMISSION_NOTIFY_DEFAULT_EMAILS = ['cbs4u4me@gmail.com', 'abilitywen@gmail.com', 'malavintable@gmail.com'];
 function admissionRecipients_(guardianEmail) {
   var list = [];
-  function add(e) { e = String(e || '').trim().toLowerCase(); if (e && EMAIL_RE.test(e) && list.indexOf(e) === -1) list.push(e); }
+  // Placeholder addresses on the demo domain (e.g. the old demo admin / principal) are never emailed.
+  function add(e) { e = String(e || '').trim().toLowerCase(); if (e && EMAIL_RE.test(e) && !/@kingsmetro\.example$/.test(e) && list.indexOf(e) === -1) list.push(e); }
   add(guardianEmail);
+  ADMISSION_NOTIFY_DEFAULT_EMAILS.forEach(add);
   readTableSafe_('Users').forEach(function (u) { if ((u.role === 'ADMIN' || u.role === 'PRINCIPAL') && toBool_(u.active)) add(u.email); });
   add(OWNER_ADMIN_EMAIL);
   String(getSetting_('ADMISSION_NOTIFY_EMAILS', '')).split(/[,;\s]+/).forEach(add);
@@ -3524,10 +4562,12 @@ function api_applyAdmission(payload) {
   var email = String(payload.guardianEmail || '').trim().toLowerCase();
   if (!email || EMAIL_RE.test(email) === false) throw new Error('A valid guardian email address is required.');
   var need = applicationDocRequirements_(level);
-  if (need.photo && !(payload.photo && payload.photo.dataUrl)) throw new Error('A passport photograph is required.');
-  if (need.applicationFee && !(payload.applicationFee && payload.applicationFee.dataUrl)) throw new Error('Evidence of the application fee is required.');
-  if (need.primaryCert && !(payload.primaryCert && payload.primaryCert.dataUrl)) throw new Error('A primary school certificate is required for secondary-school applications.');
-  if (need.juniorCert && !(payload.juniorCert && payload.juniorCert.dataUrl)) throw new Error('A junior school certificate is required for SSS applications.');
+  var uploadSid = cleanUploadSession_(payload.uploadSession);
+  function hasDoc_(kind) { return !!((payload[kind] && payload[kind].dataUrl) || stagedUpload_(uploadSid, kind)); }
+  if (need.photo && !hasDoc_('photo')) throw new Error('A passport photograph is required.');
+  if (need.applicationFee && !hasDoc_('applicationFee')) throw new Error('Evidence of the application fee is required.');
+  if (need.primaryCert && !hasDoc_('primaryCert')) throw new Error('A primary school certificate is required for secondary-school applications.');
+  if (need.juniorCert && !hasDoc_('juniorCert')) throw new Error('A junior school certificate is required for SSS applications.');
   var keys = ['app_phone_' + phone.replace(/[^0-9]/g, '')];
   if (email) keys.push('app_email_' + email);
   var cache = CacheService.getScriptCache();
@@ -3535,9 +4575,9 @@ function api_applyAdmission(payload) {
     if (cache.get(key)) throw new Error('Thanks — another application from this contact was just received. Please try again in a few minutes.');
     cache.put(key, '1', APP_SUBMIT_COOLDOWN_SECONDS);
   });
-  var ref = nextApplicationRef_();
+
   var fields = {
-    timestamp: nowLocalStamp_(), ref: ref, childNames: buildChildNames_(firstName, payload.middleName, lastName),
+    timestamp: nowLocalStamp_(), ref: '', childNames: buildChildNames_(firstName, payload.middleName, lastName),
     gender: payload.gender, dateOfBirth: dob, nationality: nationality, state: loc.state, lga: loc.lga, classLevel: level.name,
     guardianName: String(payload.guardianName).trim(), guardianPhone: phone, guardianEmail: email,
     guardianState: guardianLoc.state, guardianLga: guardianLoc.lga,
@@ -3545,17 +4585,98 @@ function api_applyAdmission(payload) {
     photoFileId: '', primaryCertFileId: '', juniorCertFileId: '', applicationFeeFileId: '',
     status: 'PENDING', reviewedAt: '', reviewedBy: '', remarks: ''
   };
-  var saved = {};
-  APPLICATION_FILES.forEach(function (spec) {
-    var stored = storePublicFile_('APPLICATION', ref, payload[spec.kind]);
-    if (stored) { fields[spec.header] = stored.driveFileId; saved[spec.kind] = stored; }
-  });
-  appendRow_('Applications', fields);
-  var rowNumber = getSheet_('Applications').getLastRow();
-  APPLICATION_FILES.forEach(function (spec) { if (saved[spec.kind]) setApplicationFileLink_(rowNumber, spec.header, saved[spec.kind].url, spec.label); });
+
+  // Allocate the reference, store the files (using that reference as the Files
+  // ownerId) and append the row, all inside one lock so two concurrent
+  // submissions cannot collide on the same KMS/APP/… number. The common path
+  // only reads from CacheService here, so the lock is held briefly.
+  var ref = '';
+  withScriptLock_(function () {
+    ref = nextApplicationRef_();
+    fields.ref = ref;
+    APPLICATION_FILES.forEach(function (spec) {
+      var stored = null;
+      if (payload[spec.kind] && payload[spec.kind].dataUrl) stored = storePublicFile_('APPLICATION', ref, payload[spec.kind]);
+      else if (need[spec.kind]) stored = stagedUpload_(uploadSid, spec.kind);
+      if (stored) fields[spec.header] = stored.driveFileId;
+    });
+    appendRow_('Applications', fields);
+  }, 30000);
+
   Logger.log('New admission application ' + ref + ' for ' + fields.childNames);
-  notifyAdmission_(fields, level);
+  // Clickable sheet links, the PDF copy and the e-mails are done just after the response, so Submit returns straight away.
+  queueAdmissionFollowUp_(ref, fields, level);
   return { ref: ref, status: 'PENDING', submitted: true, message: 'Your application has been received. A copy has been sent to your email and to the school office.' };
+}
+/* ---- deferred follow-up (links + notification e-mail) ---- */
+var ADMISSION_QUEUE_PROP = 'ADMISSION_FOLLOWUP_QUEUE';
+function queueAdmissionFollowUp_(ref, fields, level) {
+  var queued = false;
+  try {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      var props = PropertiesService.getScriptProperties();
+      var q = []; try { q = JSON.parse(props.getProperty(ADMISSION_QUEUE_PROP) || '[]'); } catch (e0) { q = []; }
+      q.push(ref);
+      props.setProperty(ADMISSION_QUEUE_PROP, JSON.stringify(q));
+      queued = true;
+    } finally { try { lock.releaseLock(); } catch (e1) {} }
+    if (queued) {
+      var exists = ScriptApp.getProjectTriggers().some(function (t) {
+        return t.getHandlerFunction() === 'processAdmissionQueue';
+      });
+      if (!exists) ScriptApp.newTrigger('processAdmissionQueue').timeBased().after(1000).create();
+    }
+  } catch (e) {
+    Logger.log('Could not queue follow-up for ' + ref + ' (' + (e && e.message ? e.message : e) + '); running it now.');
+    queued = false;
+  }
+  if (!queued) { try { runAdmissionFollowUp_(ref); } catch (e2) { Logger.log('Follow-up failed for ' + ref + ': ' + e2); } }
+}
+function runAdmissionFollowUp_(ref) {
+  var a = findWhere_('Applications', function (x) { return String(x.ref) === String(ref); });
+  if (!a) { Logger.log('Follow-up: application not found ' + ref); return; }
+  APPLICATION_FILES.forEach(function (spec) {
+    var v = String(a[spec.header] || '');
+    if (/^[A-Za-z0-9_-]{20,}$/.test(v)) setApplicationFileLink_(a._row, spec.header, 'https://drive.google.com/uc?export=view&id=' + v, spec.label);
+  });
+  notifyAdmission_(a, levelFromApplication_(a));
+}
+/** Trigger handler: drains the queue, then removes the one-off triggers. */
+function processAdmissionQueue() {
+  var props = PropertiesService.getScriptProperties(), guard = 0;
+  while (guard++ < 5) {
+    var refs = [], lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      try { refs = JSON.parse(props.getProperty(ADMISSION_QUEUE_PROP) || '[]'); } catch (e) { refs = []; }
+      props.setProperty(ADMISSION_QUEUE_PROP, '[]');
+    } finally { try { lock.releaseLock(); } catch (e1) {} }
+    if (!refs.length) break;
+    refs.forEach(function (r) { try { runAdmissionFollowUp_(r); } catch (e2) { Logger.log('Follow-up failed for ' + r + ': ' + (e2 && e2.message ? e2.message : e2)); } });
+  }
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'processAdmissionQueue') { try { ScriptApp.deleteTrigger(t); } catch (e3) {} } });
+}
+/**
+ * One-time helper. Run from the editor to replace the old demo notification addresses stored in the sheet
+ * (demo admin sani.bello1@… and demo principal muhammad.jibril2@… on kingsmetro.example).
+ */
+function updateAdmissionNotifyEmails() {
+  var map = { 'sani.bello1@kingsmetro.example': 'abilitywen@gmail.com', 'muhammad.jibril2@kingsmetro.example': 'malavintable@gmail.com' };
+  var changed = [];
+  readTable_('Users').forEach(function (u) {
+    var e = String(u.email || '').trim().toLowerCase();
+    if (map[e]) { updateRow_('Users', u.id, { email: map[e] }); changed.push(u.username + ' → ' + map[e]); }
+  });
+  var cur = String(getSetting_('ADMISSION_NOTIFY_EMAILS', ''));
+  if (cur) {
+    var next = cur.split(/[,;\s]+/).filter(Boolean).map(function (e) { return map[e.toLowerCase()] || e; });
+    var uniq = next.filter(function (e, i) { return next.indexOf(e) === i; }).join(', ');
+    if (uniq !== cur) { setSetting_('ADMISSION_NOTIFY_EMAILS', uniq); changed.push('Settings.ADMISSION_NOTIFY_EMAILS → ' + uniq); }
+  }
+  Logger.log(changed.length ? ('Updated:\n' + changed.join('\n')) : 'Nothing to update.');
+  return changed;
 }
 function api_listApplications(token) {
   var user = assertApplicationsAccess_(token);
@@ -3568,6 +4689,44 @@ function api_listApplications(token) {
   var links = applicationLinks_();
   return list.map(function (a) { return applicationViewModel_(a, links); });
 }
+
+function notifyApplicationStatusChange_(a, newStatus, user) {
+  var email = String(a.guardianEmail || '').trim();
+  if (!email || !EMAIL_RE.test(email)) return false;
+  var child = admissionChildName_(a);
+  var level = levelFromApplication_(a);
+  var subject = '', bodyText = '';
+  if (newStatus === 'REJECTED') {
+    subject = 'Application update — ' + a.ref;
+    bodyText = 'Dear ' + (a.guardianName || 'Parent/Guardian') + ',\n\n' +
+      'Thank you for your application to ' + CFG.APP_NAME + ' for ' + child + '.\n\n' +
+      'After careful review, we regret that we are unable to offer a place for the current session. This is not a reflection of ' + child + '\u2019s ability, and we would be glad to consider a future application.\n\n' +
+      'If you would like to discuss this decision, please contact the school office.\n\n' +
+      CFG.APP_NAME + ' \u00B7 Admissions Office';
+  } else if (newStatus === 'ADMITTED') {
+    subject = 'Welcome to ' + CFG.APP_NAME + ' — ' + a.ref;
+    bodyText = 'Dear ' + (a.guardianName || 'Parent/Guardian') + ',\n\n' +
+      child + ' has been enrolled into ' + (level ? level.name : 'the offered class') + ' at ' + CFG.APP_NAME + '. We look forward to welcoming your family.\n\n' +
+      'The school office will be in touch with the resumption details.\n\n' +
+      CFG.APP_NAME + ' \u00B7 Admissions Office';
+  } else if (newStatus === 'REVIEWED') {
+    subject = 'Your application is under review — ' + a.ref;
+    bodyText = 'Dear ' + (a.guardianName || 'Parent/Guardian') + ',\n\n' +
+      'Your application for ' + child + ' is now being reviewed by the school office. We will be in touch shortly with the next steps.\n\n' +
+      CFG.APP_NAME + ' \u00B7 Admissions Office';
+  } else {
+    return false;
+  }
+  try {
+    sendPortalMail_({ to: email, subject: subject, body: bodyText, htmlBody: brandedPlainHtml_(bodyText) });
+    logAudit_(user, 'SEND_APPLICATION_STATUS_EMAIL', a.ref, 'status=' + newStatus + ' to ' + email);
+    return true;
+  } catch (e) {
+    Logger.log('notifyApplicationStatusChange_ failed: ' + (e && e.message ? e.message : e));
+    return false;
+  }
+}
+
 function api_updateApplication(token, ref, updates) {
   var user = assertApplicationsAccess_(token);
   updates = updates || {};
@@ -3583,9 +4742,14 @@ function api_updateApplication(token, ref, updates) {
   }
   if (updates.remarks !== undefined) fields.remarks = String(updates.remarks || '');
   if (!Object.keys(fields).length) throw new Error('Nothing to update.');
+  var oldStatus = String(a.status || '');
   updateRowByKey_('Applications', 'ref', a.ref, fields);
   logAudit_(user, 'UPDATE_APPLICATION', a.ref, 'status: ' + (updates.status || a.status));
-  return applicationViewModel_(findWhere_('Applications', function (x) { return String(x.ref) === String(ref); }));
+  var newA = findWhere_('Applications', function (x) { return String(x.ref) === String(ref); });
+  if (updates.status && updates.status !== oldStatus && ['REVIEWED', 'ADMITTED', 'REJECTED'].indexOf(updates.status) !== -1) {
+    notifyApplicationStatusChange_(newA, updates.status, user);
+  }
+  return applicationViewModel_(newA);
 }
 
 /* ==================== 15e. ADMISSION OFFER LETTER ==================== */
@@ -3737,8 +4901,10 @@ function admissionLetterPdfBlob_(a, level, s) {
 }
 function ensureAdmissionLettersSheet_() {
   var ss = getSpreadsheet_();
-  ensureSheet_(ss, 'AdmissionLetters');
-  invalidateTable_('AdmissionLetters');
+  if (!ss.getSheetByName('AdmissionLetters')) {   // only touch the sheet / cache when it is really missing
+    ensureSheet_(ss, 'AdmissionLetters');
+    invalidateTable_('AdmissionLetters');
+  }
   return getSheet_('AdmissionLetters');
 }
 function letterSentInfo_(ref) {
@@ -3848,4 +5014,189 @@ function setUpConfirm() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.alert('Destructive', 'This clears ALL data and re-seeds the admin with a NEW password. Continue?', ui.ButtonSet.YES_NO);
   if (r === ui.Button.YES) { setUp(); ui.alert('Done. A fresh admin password has been emailed (or logged in the execution log).'); }
+}
+/* =========================== 17. ONE-TIME ID MIGRATION =========================== */
+/** Where each FK column points. Skip polymorphic owners (Files.ownerId). */
+var FK_MAP = {
+  ClassArms:       { classLevelId: 'ClassLevels' },
+  SubjectClass:    { subjectId: 'Subjects', classLevelId: 'ClassLevels' },
+  Students:        { classArmId: 'ClassArms' },
+  ParentStudents:  { parentUserId: 'Users', studentId: 'Students' },
+  Attendance:      { classArmId: 'ClassArms', studentId: 'Students', recordedBy: 'Users' },
+  Scores:          { termId: 'Terms', classArmId: 'ClassArms', studentId: 'Students', subjectId: 'Subjects', recordedBy: 'Users' },
+  ResultSheets:    { termId: 'Terms', studentId: 'Students' },
+  Payments:        { studentId: 'Students', parentUserId: 'Users', termId: 'Terms', feePlanId: 'FeePlans', verifiedBy: 'Users' },
+  Fees:            { classLevelId: 'ClassLevels' },
+  FeeSelections:   { studentId: 'Students', parentUserId: 'Users', termId: 'Terms', feeId: 'Fees' },
+  FeePlans:        { studentId: 'Students', parentUserId: 'Users', termId: 'Terms' },
+  StaffAttendance: { staffId: 'Staff', recordedBy: 'Users' },
+  Timetable:       { termId: 'Terms', classArmId: 'ClassArms', subjectId: 'Subjects', createdBy: 'Users' },
+  Announcements:   { createdBy: 'Users' },
+  AuditLog:        { actorId: 'Users' },
+  ScoreAudit:      { termId: 'Terms', classArmId: 'ClassArms', studentId: 'Students', subjectId: 'Subjects', actorId: 'Users' }
+};
+
+function migrateIdsToFriendly() {
+  var order = ['Users','ClassLevels','Subjects','Terms','GradeScale','ClassArms','SubjectClass',
+               'Students','Staff','Fees','FeePlans','ParentStudents','Announcements',
+               'Attendance','Scores','ResultSheets','Payments','FeeSelections',
+               'StaffAttendance','Timetable','Files','AuditLog','AdmissionLetters','ScoreAudit'];
+  var summary = [];
+
+  // Build a reverse index: for each parent table, list every (childTable, childColumn)
+  // that references it. Used to rewrite child FKs the moment we rename the parent.
+  var reverseFks = {};
+  Object.keys(FK_MAP).forEach(function (U) {
+    var fks = FK_MAP[U];
+    Object.keys(fks).forEach(function (col) {
+      var T = fks[col];
+      (reverseFks[T] = reverseFks[T] || []).push({ table: U, column: col });
+    });
+  });
+
+  order.forEach(function (T) {
+    if (!ID_PREFIXES[T]) return;
+    var sheetT = getSpreadsheet_().getSheetByName(T);
+    if (!sheetT) { Logger.log('migrateIdsToFriendly: no tab for ' + T + ' — skipping.'); return; }
+    var headersT = HEADERS[T];
+    var idColT = headersT.indexOf('id') + 1;
+
+    // Step A: rename UUID ids in T, capturing the old->new map for this table.
+    var map = {};
+    var next = maxIdNumber_(T);
+    readTableSafe_(T).forEach(function (r) {
+      if (!UUID_RE.test(String(r.id || ''))) return;
+      next++;
+      var newId = formatId_(T, next);
+      map[String(r.id)] = newId;
+      sheetT.getRange(r._row, idColT).setValue(newId);
+    });
+    if (Object.keys(map).length) summary.push(T + ': ' + Object.keys(map).length + ' id(s)');
+
+    // Step B: apply T's fresh mapping to every FK in every child table that points at T.
+    if (!Object.keys(map).length) return;
+    (reverseFks[T] || []).forEach(function (fk) {
+      var U = fk.table, col = fk.column;
+      var sheetU = getSpreadsheet_().getSheetByName(U);
+      if (!sheetU) return;
+      var headersU = HEADERS[U];
+      var colIdxU = headersU.indexOf(col) + 1;
+      if (colIdxU <= 0) return;
+      readTableSafe_(U).forEach(function (r) {
+        var oldVal = String(r[col] || '');
+        if (!UUID_RE.test(oldVal)) return;
+        var newVal = map[oldVal];
+        if (!newVal) return;
+        sheetU.getRange(r._row, colIdxU).setValue(newVal);
+      });
+    });
+  });
+
+  invalidateTable_();
+  Logger.log('migrateIdsToFriendly complete.\n' + summary.join('\n'));
+  return summary;
+}
+
+/* =========================== 18. FK REPAIR FROM BACKUP =========================== */
+
+/**
+ * Pairs each table's `id` column in the backup with the same row in the live sheet,
+ * builds a UUID -> friendly-id map, and then rewrites every FK column that is still
+ * holding a UUID. Fixes tables left inconsistent by an interrupted migration.
+ * Set `backupId` to the file id returned by backupSpreadsheet().
+ */
+function repairFksFromBackup(backupId) {
+  var backup = SpreadsheetApp.openById(backupId);
+  var live = getSpreadsheet_();
+  var order = ['Users','ClassLevels','Subjects','Terms','GradeScale','ClassArms','SubjectClass',
+               'Students','Staff','Fees','FeePlans','ParentStudents','Announcements',
+               'Attendance','Scores','ResultSheets','Payments','FeeSelections',
+               'StaffAttendance','Timetable','Files','AuditLog','AdmissionLetters','ScoreAudit'];
+
+  // Pass 1: pair rows in the backup and the live sheet to build old->new id maps.
+  var mappings = {};   // table -> { oldUuid: newFriendlyId }
+  var pairs = [];
+  order.forEach(function (name) {
+    if (!ID_PREFIXES[name]) return;
+    var bSheet = backup.getSheetByName(name);
+    var lSheet = live.getSheetByName(name);
+    if (!bSheet || !lSheet) return;
+    var bLast = bSheet.getLastRow(), lLast = lSheet.getLastRow();
+    if (bLast < 2 || lLast < 2) return;
+    var n = Math.min(bLast - 1, lLast - 1);
+    if (n <= 0) return;
+    // `id` is always the first column in every tab.
+    var bIds = bSheet.getRange(2, 1, n, 1).getValues();
+    var lIds = lSheet.getRange(2, 1, n, 1).getValues();
+    var map = {}, matched = 0;
+    for (var i = 0; i < n; i++) {
+      var oldId = String(bIds[i][0] || '');
+      var newId = String(lIds[i][0] || '');
+      if (UUID_RE.test(oldId) && newId && !UUID_RE.test(newId)) { map[oldId] = newId; matched++; }
+    }
+    mappings[name] = map;
+    pairs.push(name + ': ' + matched + ' paired');
+  });
+  Logger.log('Pass 1 pairing:\n' + pairs.join('\n'));
+
+  // Pass 2: rewrite every FK column in the live sheet whose value is still a UUID.
+  var rewrites = 0, perTable = {};
+  order.forEach(function (name) {
+    if (!ID_PREFIXES[name]) return;
+    var fks = FK_MAP[name] || {};
+    if (!Object.keys(fks).length) return;
+    var lSheet = live.getSheetByName(name);
+    if (!lSheet) return;
+    var headers = HEADERS[name];
+    readTableSafe_(name).forEach(function (r) {
+      Object.keys(fks).forEach(function (col) {
+        var refMap = mappings[fks[col]];
+        if (!refMap) return;
+        var oldVal = String(r[col] || '');
+        if (!UUID_RE.test(oldVal)) return;      // already friendly — skip
+        var newVal = refMap[oldVal];
+        if (!newVal) return;
+        lSheet.getRange(r._row, headers.indexOf(col) + 1).setValue(newVal);
+        rewrites++;
+        perTable[name] = (perTable[name] || 0) + 1;
+      });
+    });
+  });
+
+  invalidateTable_();
+  Logger.log('repairFksFromBackup: ' + rewrites + ' FK value(s) rewritten.');
+  Logger.log(JSON.stringify(perTable, null, 2));
+  return rewrites;
+}
+function reformatHistoricalTimestamps() {
+  var tables = ['Users','ClassLevels','ClassArms','Subjects','SubjectClass','Terms','GradeScale',
+                'Students','Staff','ParentStudents','Attendance','Scores','ResultSheets','Payments',
+                'Files','Announcements','Fees','FeeSelections','FeePlans','StaffAttendance','Timetable',
+                'AuditLog','AdmissionLetters','ScoreAudit'];
+  var dateCols = ['createdAt','updatedAt','verifiedAt','at','sentAt'];
+  var tz = Session.getScriptTimeZone(), n = 0;
+  tables.forEach(function (name) {
+    var sheet = getSpreadsheet_().getSheetByName(name);
+    if (!sheet) return;
+    var headers = HEADERS[name];
+    var last = sheet.getLastRow();
+    if (last < 2) return;
+    var range = sheet.getRange(2, 1, last - 1, headers.length);
+    var values = range.getValues();
+    var touched = false;
+    for (var r = 0; r < values.length; r++) {
+      for (var c = 0; c < headers.length; c++) {
+        if (dateCols.indexOf(headers[c]) === -1) continue;
+        var v = values[r][c];
+        if (!v) continue;
+        var d = (v instanceof Date) ? v : (typeof v === 'string' ? new Date(v) : null);
+        if (!d || isNaN(d.getTime())) continue;
+        var out = Utilities.formatDate(d, tz, "yyyy-MM-dd'T'HH:mm:ss");
+        if (String(v) !== out) { values[r][c] = out; touched = true; n++; }
+      }
+    }
+    if (touched) range.setValues(values);
+  });
+  invalidateTable_();
+  Logger.log('reformatHistoricalTimestamps: ' + n + ' cell(s) rewritten.');
 }

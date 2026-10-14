@@ -55,6 +55,11 @@
     .summary .srow .v { text-align: right; font-weight: 600; }
     .summary .srow.review-note { background: var(--green-light); font-weight: 600; color: var(--green-dark); }
     .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .upl { font-size: 12px; margin-top: 5px; min-height: 16px; color: var(--muted); }
+    .upl.busy { color: var(--green); }
+    .upl.ok { color: var(--emerald-dark); font-weight: 600; }
+    .upl.err { color: var(--red); }
+    .upl .mini { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(45,106,79,.3); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; margin-right: 6px; }
     .foot { margin-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
   </style>
 </head>
@@ -103,10 +108,10 @@
           <div class="field full"><label for="notes">Anything the school should know</label><textarea id="notes"></textarea></div>
 
           <div class="field section"><label>Required documents <span class="hint">(passport photo &amp; application fee always; certificates depend on the class)</span></label></div>
-          <div class="field"><label for="photo">Passport photograph *</label><input id="photo" type="file" accept="image/*" required></div>
-          <div class="field"><label for="fee">Evidence of application fee * <span class="hint">(receipt / teller, &lt; 3 MB)</span></label><input id="fee" type="file" accept="image/*,.pdf" required></div>
-          <div class="field" id="primaryCert-field" style="display:none"><label for="primaryCert">Primary school certificate * <span class="hint">(&lt; 3 MB)</span></label><input id="primaryCert" type="file" accept="image/*,.pdf"></div>
-          <div class="field" id="juniorCert-field" style="display:none"><label for="juniorCert">Junior school certificate * <span class="hint">(SSS applications only, &lt; 3 MB)</span></label><input id="juniorCert" type="file" accept="image/*,.pdf"></div>
+          <div class="field"><label for="photo">Passport photograph *</label><input id="photo" type="file" accept="image/*" required><div class="upl" id="photo-status"></div></div>
+          <div class="field"><label for="fee">Evidence of application fee * <span class="hint">(receipt / teller, &lt; 3 MB)</span></label><input id="fee" type="file" accept="image/*,.pdf" required><div class="upl" id="fee-status"></div></div>
+          <div class="field" id="primaryCert-field" style="display:none"><label for="primaryCert">Primary school certificate * <span class="hint">(&lt; 3 MB)</span></label><input id="primaryCert" type="file" accept="image/*,.pdf"><div class="upl" id="primaryCert-status"></div></div>
+          <div class="field" id="juniorCert-field" style="display:none"><label for="juniorCert">Junior school certificate * <span class="hint">(SSS applications only, &lt; 3 MB)</span></label><input id="juniorCert" type="file" accept="image/*,.pdf"><div class="upl" id="juniorCert-status"></div></div>
         </div>
 
         <label class="hp" aria-hidden="true">Leave this empty<input id="website" type="text" tabindex="-1" autocomplete="off"></label>
@@ -143,6 +148,14 @@
     var EMBED = <?!= embedJson ?>;
     var LEVELS = <?!= levelOptionsJson ?>;
     var BRAND = <?!= brandJson ?>;
+
+    var UPLOAD_SESSION = (function () {
+      try { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+      catch (e) { return String(Date.now()) + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2); }
+    })();
+    var DOC_INPUTS = { photo: 'photo', applicationFee: 'fee', primaryCert: 'primaryCert', juniorCert: 'juniorCert' };
+    var uploads = {};      // kind -> { state: 'uploading' | 'done' | 'error', promise }
+    var uploadChain = {};  // kind -> promise, so replacing a file never races the previous upload
 
     var STATE_LGA = { states: [], lgas: {} };
     var NATIONALITIES = ['Nigerian', 'Ghanaian', 'Cameroonian', 'Chadian', 'Nigerien', 'Beninese', 'Togolese', 'Ivorian', 'Senegalese', 'Malian', 'Burkinabé', 'Guinean', 'Liberian', 'Sierra Leonean', 'Gambian', 'Sudanese', 'South Sudanese', 'Egyptian', 'Libyan', 'Tunisian', 'Algerian', 'Moroccan', 'Kenyan', 'Ugandan', 'Tanzanian', 'Rwandan', 'Ethiopian', 'Somali', 'South African', 'Indian', 'Chinese', 'Pakistani', 'Bangladeshi', 'Filipino', 'Indonesian', 'Malaysian', 'British', 'American', 'Canadian', 'French', 'German', 'Italian', 'Spanish', 'Portuguese', 'Dutch', 'Belgian', 'Swiss', 'Russian', 'Ukrainian', 'Turkish', 'Lebanese', 'Syrian', 'Jordanian', 'Saudi Arabian', 'Emirati', 'Brazilian', 'Other'];
@@ -226,9 +239,48 @@
         var show = parts[2] === 'true';
         field.style.display = show ? '' : 'none';
         input.required = show;
-        if (!show) input.value = '';
+        if (!show) { input.value = ''; uploads[parts[1]] = null; setDocStatus(parts[1], '', ''); }
       });
     }
+
+    /* ---- instant uploads: each document is sent to the server the moment it is chosen ---- */
+    function setDocStatus(kind, cls, text) {
+      var el = document.getElementById(DOC_INPUTS[kind] + '-status');
+      if (!el) return;
+      el.className = 'upl' + (cls ? ' ' + cls : '');
+      if (cls === 'busy') { el.innerHTML = '<span class="mini"></span>'; el.appendChild(document.createTextNode(text)); }
+      else el.textContent = text || '';
+    }
+    function startUpload(kind) {
+      var input = document.getElementById(DOC_INPUTS[kind]);
+      var file = input && input.files && input.files[0];
+      if (!file) { uploads[kind] = null; setDocStatus(kind, '', ''); return; }
+      var rec = { state: 'uploading' };
+      uploads[kind] = rec;
+      setDocStatus(kind, 'busy', 'Uploading…');
+      var prev = uploadChain[kind] || Promise.resolve();
+      rec.promise = prev.catch(function () {}).then(function () {
+        if (uploads[kind] !== rec) return null;  // replaced while waiting
+        return (kind === 'photo' ? readImage(file) : readFileRaw(file)).then(function (payload) {
+          return new Promise(function (resolve, reject) {
+            google.script.run.withSuccessHandler(resolve)
+              .withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); })
+              .api_uploadApplicationFile(UPLOAD_SESSION, kind, payload);
+          });
+        });
+      }).then(function () {
+        if (uploads[kind] !== rec) return;
+        rec.state = 'done'; setDocStatus(kind, 'ok', '\u2713 Uploaded');
+      }).catch(function (err) {
+        if (uploads[kind] !== rec) return;
+        rec.state = 'error';
+        setDocStatus(kind, 'err', ((err && err.message) ? err.message : 'Upload failed') + ' It will be retried when you submit.');
+      });
+      uploadChain[kind] = rec.promise;
+    }
+    Object.keys(DOC_INPUTS).forEach(function (kind) {
+      document.getElementById(DOC_INPUTS[kind]).addEventListener('change', function () { startUpload(kind); });
+    });
 
     function readImage(file) {
       return new Promise(function (resolve, reject) {
@@ -301,10 +353,10 @@
       window.scrollTo(0, 0);
     }
 
-    function setSubmitBusy(busy) {
+    function setSubmitBusy(busy, label) {
       var c = document.getElementById('confirm-btn');
       c.disabled = busy;
-      c.innerHTML = busy ? '<span class="spinner"></span> Submitting…' : 'Confirm &amp; submit';
+      c.innerHTML = busy ? '<span class="spinner"></span> ' + (label || 'Submitting…') : 'Confirm &amp; submit';
     }
 
     form.addEventListener('submit', function (e) {
@@ -341,17 +393,23 @@
 
     document.getElementById('confirm-btn').addEventListener('click', function () {
       if (!draft) return;
-      setSubmitBusy(true); msg.innerHTML = '';
-      var photoInput = document.getElementById('photo'), feeInput = document.getElementById('fee');
-      var primaryInput = document.getElementById('primaryCert'), juniorInput = document.getElementById('juniorCert');
+      msg.innerHTML = '';
       var lvl = currentLevel(), secondary = isSecondary(lvl), sss = isSss(lvl);
-      Promise.all([
-        photoInput.files.length ? readImage(photoInput.files[0]) : Promise.resolve(null),
-        feeInput.files.length ? readFileRaw(feeInput.files[0]) : Promise.resolve(null),
-        (secondary && primaryInput.files.length) ? readFileRaw(primaryInput.files[0]) : Promise.resolve(null),
-        (sss && juniorInput.files.length) ? readFileRaw(juniorInput.files[0]) : Promise.resolve(null)
-      ]).then(function (files) {
-        draft.photo = files[0]; draft.applicationFee = files[1]; draft.primaryCert = files[2]; draft.juniorCert = files[3];
+      var needed = ['photo', 'applicationFee'].concat(secondary ? ['primaryCert'] : [], sss ? ['juniorCert'] : []);
+      var pending = needed.some(function (k) { return uploads[k] && uploads[k].state === 'uploading'; });
+      setSubmitBusy(true, pending ? 'Finishing uploads…' : 'Submitting…');
+      Promise.all(needed.map(function (k) { return uploads[k] && uploads[k].promise ? uploads[k].promise : Promise.resolve(); })).then(function () {
+        // Normally every document is already on the server. If one upload failed, send that file with the form instead.
+        ['photo', 'applicationFee', 'primaryCert', 'juniorCert'].forEach(function (k) { delete draft[k]; });
+        var fallback = needed.filter(function (k) { return !(uploads[k] && uploads[k].state === 'done'); });
+        return Promise.all(fallback.map(function (k) {
+          var f = document.getElementById(DOC_INPUTS[k]).files[0];
+          if (!f) return Promise.reject(new Error('Please attach the required document(s) again.'));
+          return (k === 'photo' ? readImage(f) : readFileRaw(f)).then(function (payload) { draft[k] = payload; });
+        }));
+      }).then(function () {
+        setSubmitBusy(true, 'Submitting…');
+        draft.uploadSession = UPLOAD_SESSION;
         return new Promise(function (resolve, reject) {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(function (err) { reject(new Error(err && err.message ? err.message : String(err))); }).api_applyAdmission(draft);
         });
