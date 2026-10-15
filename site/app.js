@@ -329,7 +329,7 @@
     /* ===== Scroll-reveal animations ===== */
     (function reveal() {
       if (!('IntersectionObserver' in window)) return;
-      var els = document.querySelectorAll('.section-head, .card, .feature, .step, .contact-item, .hero .wrap > div:first-child, .hero-card');
+      var els = document.querySelectorAll('.section-head, .card, .feature, .step, .contact-item');
       if (!els.length) return;
       Array.prototype.forEach.call(els, function (el) { el.classList.add('reveal'); });
       var io = new IntersectionObserver(function (entries) {

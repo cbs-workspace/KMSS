@@ -371,4 +371,48 @@
     @media (max-width: 380px) {
       .brand .name { display: none; }
     }
+
+    /* ===================== landing animations ===================== */
+
+    /* animated aurora backdrop behind the hero */
+    .hero::before { content: ""; position: absolute; inset: -30% -10%; pointer-events: none; background: radial-gradient(42% 52% at 18% 28%, rgba(52,211,153,.38), transparent 68%), radial-gradient(38% 48% at 82% 18%, rgba(251,191,36,.16), transparent 68%), radial-gradient(48% 58% at 68% 82%, rgba(16,185,129,.30), transparent 70%); filter: blur(8px); animation: hero-aurora 24s ease-in-out infinite alternate; will-change: transform; }
+    @keyframes hero-aurora { from { transform: translate3d(-2%, -1%, 0) scale(1); } 50% { transform: translate3d(3%, 2%, 0) scale(1.12); } to { transform: translate3d(-1%, 3%, 0) scale(1.04); } }
+
+    /* staggered hero entrance */
+    .hero .kicker, .hero h1, .hero p.lead, .hero .cta, .hero-card { animation: hero-in .7s cubic-bezier(.22,.61,.36,1) both; }
+    .hero .kicker { animation-delay: .04s; }
+    .hero h1 { animation-delay: .12s; }
+    .hero p.lead { animation-delay: .20s; }
+    .hero .cta { animation-delay: .28s; }
+    .hero-card { animation-delay: .20s; }
+    @keyframes hero-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+    /* card hover micro-interactions */
+    .card .ico { transition: transform .3s ease, background-color .3s ease, color .3s ease; }
+    .card:hover .ico { transform: translateY(-3px) scale(1.06) rotate(-4deg); }
+    .card a { display: inline-block; background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat; background-position: 0 100%; background-size: 0% 1px; transition: background-size .3s ease; }
+    .card a:hover { background-size: 100% 1px; }
+
+    /* button sheen + press feedback */
+    .btn { position: relative; overflow: hidden; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary::after, .btn-light::after, .btn-ghost-light::after { content: ""; position: absolute; top: 0; left: -130%; width: 55%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.5), transparent); transform: skewX(-20deg); pointer-events: none; }
+    .btn-primary:hover::after, .btn-light:hover::after, .btn-ghost-light:hover::after { animation: btn-sheen .85s ease; }
+    @keyframes btn-sheen { from { left: -130%; } to { left: 140%; } }
+
+    /* gentle CTA band shimmer */
+    .bg-alt { background: linear-gradient(120deg, var(--slate-50) 0%, #eafbf2 45%, var(--slate-50) 100%); background-size: 200% 100%; animation: band-shimmer 16s ease-in-out infinite; }
+    html.dark .bg-alt { animation: none; }
+    @keyframes band-shimmer { 0%, 100% { background-position: 0% 0; } 50% { background-position: 100% 0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero::before { animation: none; }
+      .hero .kicker, .hero h1, .hero p.lead, .hero .cta, .hero-card { animation: none; opacity: 1; transform: none; }
+      .card:hover .ico { transform: none; }
+      .card a { transition: none; background-image: none; }
+      .card a:hover { text-decoration: underline; }
+      .btn:active { transform: none; }
+      .btn-primary::after, .btn-light::after, .btn-ghost-light::after { display: none; }
+      .bg-alt { animation: none; }
+    }
   
