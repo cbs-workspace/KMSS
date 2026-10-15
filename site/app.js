@@ -57,7 +57,12 @@
       var iframe = document.getElementById('apply-frame');
       var src = GAS_URL + '?admission=1&embed=1';
       if (!box || !iframe) return;
-      function load() { if (!iframe.getAttribute('src')) iframe.setAttribute('src', src); }
+      function load() {
+        if (iframe.getAttribute('src')) return;
+        iframe.addEventListener('load', function () { box.classList.add('loaded'); });
+        setTimeout(function () { box.classList.add('loaded'); }, 15000);
+        iframe.setAttribute('src', src);
+      }
       if (!('IntersectionObserver' in window)) { load(); return; }
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { load(); io.disconnect(); } });
@@ -116,7 +121,14 @@
 
     // Dedicated portal page (login.html): fill the frame and wire the new-tab link
     var pageFrame = document.getElementById('portal-frame');
-    if (pageFrame && !pageFrame.getAttribute('src')) pageFrame.setAttribute('src', portalEmbedUrl());
+    if (pageFrame && !pageFrame.getAttribute('src')) {
+      var pageBox = pageFrame.parentElement;
+      if (pageBox) {
+        pageFrame.addEventListener('load', function () { pageBox.classList.add('loaded'); });
+        setTimeout(function () { pageBox.classList.add('loaded'); }, 15000);
+      }
+      pageFrame.setAttribute('src', portalEmbedUrl());
+    }
     var pageExternal = document.getElementById('portal-external');
     if (pageExternal) pageExternal.setAttribute('href', portalUrl());
 
