@@ -7,6 +7,10 @@
       // 'modal' -> open the portal inside an in-page iframe modal.
       // 'tab'   -> open the portal in a new browser tab.
       loginMode: 'page',
+      // Background music played in order, looping back to the first track.
+      // Add each new file here (e.g. 'music4.mp3'). Default volume is 0.3 (30%).
+      musicTracks: ['music1.mp3', 'music2.mp3', 'music3.mp3'],
+      musicVolume: 0.3,
       // Portal login URL. Used as-is in 'tab' mode; the iframe loads it with
       // ?embed=1 in 'page' and 'modal' modes.
       portalUrl: 'https://script.google.com/macros/s/AKfycbynmP0luv46PyRtxIcv6gNd2UV82l7oEkQuGon8FXPGcV009sfYJppXFYn9r9ldazE2ew/exec',
@@ -176,34 +180,80 @@
       document.head.appendChild(s);
     })();
 
-    /* ===== Background music (site/music.mp3) =====
+    /* ===== Background music (playlist of site/music*.mp3) =====
        Preloads with the page and starts on the user's first interaction
-       (browsers block autoplay with sound). The music button is always shown
-       and acts as the mute / unmute control. Preference is remembered. */
+       (browsers block autoplay with sound). The music button is the mute /
+       unmute control; the slider sets the volume. Tracks play in order and
+       loop back to the first when the last finishes. Mute state and volume
+       are remembered. Edit the track list / volume in CONFIG above. */
     (function music() {
       var audio = document.getElementById('bg-music');
       var btn = document.getElementById('music-btn');
       if (!audio || !btn) return;
+      var controls = document.querySelector('.music-controls');
+      var vol = document.getElementById('music-vol');
       var MUTE_KEY = 'kms_music_muted';
-      var started = false;
+      var VOL_KEY = 'kms_music_volume';
+      var TRACKS = (CONFIG.musicTracks && CONFIG.musicTracks.length) ? CONFIG.musicTracks : ['music1.mp3'];
+      var DEFAULT_VOL = (typeof CONFIG.musicVolume === 'number') ? CONFIG.musicVolume : 0.3;
+      var idx = 0, started = false, consecutiveErrors = 0;
+      function show() { (controls || btn).classList.add('show'); }
+      function hide() { (controls || btn).classList.remove('show'); }
       function reflect() {
         btn.classList.toggle('muted', audio.muted || audio.paused);
         btn.setAttribute('aria-pressed', String(!audio.muted && !audio.paused));
       }
-      function play() {
-        audio.muted = false;
+      function rawPlay() {
         var p = audio.play();
         if (p && p.catch) p.catch(function () {});
+      }
+      function play() {
+        audio.muted = false;
+        rawPlay();
         reflect();
+      }
+      function applyVolume(v) {
+        v = Number(v);
+        if (isNaN(v)) return;
+        v = Math.min(1, Math.max(0, v));
+        audio.volume = v;
+        if (vol && vol.value !== String(v)) vol.value = String(v);
+      }
+      function loadTrack(i) {
+        idx = ((i % TRACKS.length) + TRACKS.length) % TRACKS.length;
+        audio.src = TRACKS[idx];
+      }
+      function advance() {
+        loadTrack(idx + 1);
+        if (started && !audio.muted) rawPlay();
+      }
+      var savedVolRaw = localStorage.getItem(VOL_KEY);
+      var savedVol = savedVolRaw === null ? DEFAULT_VOL : Number(savedVolRaw);
+      applyVolume(isNaN(savedVol) ? DEFAULT_VOL : savedVol);
+      if (vol) {
+        vol.addEventListener('input', function () {
+          applyVolume(vol.value);
+          try { localStorage.setItem(VOL_KEY, vol.value); } catch (err) {}
+          if (started && audio.paused && !audio.muted) rawPlay();   // adjusting a silent player starts it
+        });
       }
       function firstStart() {
         if (started) return; started = true;
         if (localStorage.getItem(MUTE_KEY) === '1') { audio.muted = true; reflect(); return; }
         play();
       }
-      // Offer the mute control immediately; hide it only if the file is missing.
-      btn.classList.add('show');
-      audio.addEventListener('error', function () { btn.classList.remove('show'); }, { once: true });
+      // Play the tracks in order; when one ends, move to the next.
+      audio.addEventListener('ended', advance);
+      // A track that fails to load is skipped; if every track fails, hide the control.
+      audio.addEventListener('playing', function () { consecutiveErrors = 0; });
+      audio.addEventListener('error', function () {
+        if (consecutiveErrors >= TRACKS.length) { hide(); return; }
+        consecutiveErrors++;
+        advance();
+      });
+      // Offer the controls immediately; hide them only if the file is missing.
+      audio.src = TRACKS[0];
+      show();
       ['click', 'touchstart', 'pointerdown', 'keydown'].forEach(function (ev) {
         document.addEventListener(ev, firstStart, { once: true, passive: true });
       });

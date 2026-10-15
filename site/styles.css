@@ -143,8 +143,15 @@
     }
 
     /* background music */
-    .music-btn { position: fixed; right: 18px; bottom: 18px; z-index: 55; display: none; align-items: center; gap: 9px; background: var(--slate-900); color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; padding: 9px 14px; cursor: pointer; box-shadow: 0 8px 22px rgba(15,23,42,.28); font: inherit; font-size: 13px; font-weight: 600; }
-    .music-btn.show { display: inline-flex; }
+    .music-controls { position: fixed; right: 18px; bottom: 18px; z-index: 55; display: none; align-items: center; gap: 8px; }
+    .music-controls.show { display: inline-flex; }
+    .music-btn { display: inline-flex; align-items: center; gap: 9px; background: var(--slate-900); color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; padding: 9px 14px; cursor: pointer; box-shadow: 0 8px 22px rgba(15,23,42,.28); font: inherit; font-size: 13px; font-weight: 600; }
+    .music-vol { width: 92px; height: 32px; margin: 0; padding: 0 8px; background: var(--slate-900); color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; appearance: none; -webkit-appearance: none; cursor: pointer; box-shadow: 0 8px 22px rgba(15,23,42,.28); }
+    .music-vol::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,.35); }
+    .music-vol::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -5px; border: none; border-radius: 50%; background: #fbbf24; cursor: pointer; }
+    .music-vol::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,.35); }
+    .music-vol::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #fbbf24; cursor: pointer; }
+    .music-vol:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
     .music-btn .eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 16px; }
     .music-btn .eq i { width: 3px; border-radius: 999px; background: #fbbf24; animation: eqbar 1s ease-in-out infinite; }
     .music-btn .eq i:nth-child(1) { height: 6px; animation-delay: 0s; }
@@ -188,8 +195,10 @@
       .marquee { height: 36px; }
       .marquee-title { font-size: 14px; }
       .marquee-body { font-size: 13px; }
-      .music-btn { right: 12px; bottom: 12px; padding: 8px 12px; }
+      .music-controls { right: 12px; bottom: 12px; }
+      .music-btn { padding: 8px 12px; }
       .music-btn .label { display: none; }
+      .music-vol { width: 76px; height: 30px; }
     }
 
     /* ===================== dark theme (default) ===================== */
